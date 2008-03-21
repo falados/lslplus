@@ -32,22 +32,21 @@ Export-Package: com.thoughtworks.xstream,
  lslplus,
  lslplus.decorators,
  lslplus.editor,
+ lslplus.editor.imported,
  lslplus.editor.lsl,
+ lslplus.language_metadata,
  lslplus.launching,
- lslplus.util
+ lslplus.lsltest,
+ lslplus.testview,
+ lslplus.util,
+ lslplus.wizards
 Require-Bundle: org.eclipse.core.runtime,
  org.eclipse.ui,
  org.eclipse.jface.text,
  org.eclipse.ui.workbench.texteditor,
  org.eclipse.ui.editors,
- org.eclipse.ui.views,
- org.eclipse.debug.core,
  org.eclipse.debug.ui,
  org.eclipse.core.expressions,
- org.eclipse.ui.ide,
- org.eclipse.ui.navigator,
- org.eclipse.core.resources,
- org.eclipse.ui.forms
+ org.eclipse.ui.ide
 Eclipse-LazyStart: true
-Import-Package: .,
- com.ibm.icu.text;version="3.6.1"
+Import-Package: com.ibm.icu.text;version="3.6.1"
