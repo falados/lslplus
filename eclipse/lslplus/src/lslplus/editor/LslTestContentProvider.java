@@ -282,8 +282,9 @@ public class LslTestContentProvider implements ITreeContentProvider {
             public boolean hasChildren() { return false; }
 
             public boolean isEditable() {
-                String[] choices = getChoices();
-                return choices != null && choices.length > 0;
+//                String[] choices = getChoices();
+//                return choices != null && choices.length > 0;
+                return false;
             }
 
             protected boolean setMyValue(Object o) {
