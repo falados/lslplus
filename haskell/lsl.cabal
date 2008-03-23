@@ -1,7 +1,8 @@
 Name:           Lsl
 Version:        0.1
 Cabal-Version:  >= 1.2
-License:        GPL
+License:        BSD3
+License-file:   LICENSE
 Author:         Robert Greayer
 Synopsis:       Programs supporting compiling/testing LSL code
 Build-Type:     Simple
