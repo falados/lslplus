@@ -27,7 +27,7 @@ lslStyle = javaStyle
                                    "|","||","==","=","!=","<","<=",">=",">",
                                    "<<",">>","!","%","~","@","+=","-=","*=","/=","%="],
                P.reservedNames = ["state","default","string","integer","list","vector","rotation","key","float","if","else",
-                                "while","for","do","jump","return","default", "$import", "$module"],
+                                "while","for","do","jump","return","default", "$import", "$module","quaternion"],
                P.caseSensitive = True }
 lexer :: P.TokenParser ()
 lexer  = P.makeTokenParser lslStyle
@@ -132,18 +132,20 @@ stringEscape = do
                            char '\\' >> return (Just '\\')]
 
 --- EXPRESSION PARSING -------------------------------------------------------
-mtrace s v = return v -- trace (s ++ show v) (return v)
-mtrace1 s v = trace (s ++ show v) (return v)
+--mtrace s v = return v -- trace (s ++ show v) (return v)
+mtrace s v = 
+    -- trace (s ++ show v) 
+    (return v)
 
 combineExprs e [] = e
 combineExprs e0 ((p0,p1,op,e1):rest) = combineExprs (op p0 p1 e0 e1) rest
 
 opmatch s f = (reservedOp s >> return f)
-op0 = (opmatch "*" mulop) <|> (opmatch "/" divop) <|> (opmatch "%" modop)
-op1 = (opmatch "+" addop) <|> (opmatch "-" subop)
-op2 = (opmatch "<<" shiftlop) <|> (opmatch ">>" shiftrop)
-op3 = choice [opmatch "<" ltop, opmatch "<=" leop, opmatch ">" gtop, opmatch ">=" geop] 
-op4 = (opmatch "==" eqop) <|> (opmatch "!=" neop)
+op0 = ((opmatch "*" mulop) <|> (opmatch "/" divop) <|> (opmatch "%" modop)) <?> "operator"
+op1 = ((opmatch "+" addop) <|> (opmatch "-" subop)) <?> "operator"
+op2 = ((opmatch "<<" shiftlop) <|> (opmatch ">>" shiftrop)) <?> "operator"
+op3 = (choice [opmatch "<" ltop, opmatch "<=" leop, opmatch ">" gtop, opmatch ">=" geop]) <?> "operator"
+op4 = ((opmatch "==" eqop) <|> (opmatch "!=" neop)) <?> "operator"
 
 opAndExpr opf ef = do pos0 <- getPosition
                       op <- opf
@@ -159,14 +161,14 @@ mulExpr = exprChain op0 expr2
 addExpr = exprChain op1 mulExpr
 shiftExpr = exprChain op2 addExpr
 relExpr = do e0 <- shiftExpr
-             rest <- (try (many (opAndExpr op3 shiftExpr)) <|> return [])
-             return $ combineExprs e0 rest             
+             rest <- (try (many (try (opAndExpr op3 shiftExpr))) <|> return [])
+             return $ combineExprs e0 rest
 eqExpr = exprChain op4 relExpr
-bandExpr = exprChain (opmatch "&" bandop) eqExpr
-xorExpr = exprChain (opmatch "^" xorop) bandExpr
-borExpr = exprChain (opmatch "|" borop) xorExpr
-andExpr = exprChain (opmatch "&&" andop) borExpr
-orExpr = exprChain (opmatch "||" orop) andExpr
+bandExpr = exprChain (opmatch "&" bandop <?> "operator") eqExpr
+xorExpr = exprChain (opmatch "^" xorop <?> "operator") bandExpr
+borExpr = exprChain (opmatch "|" borop <?> "operator") xorExpr
+andExpr = exprChain (opmatch "&&" andop <?> "operator") borExpr
+orExpr = exprChain (opmatch "||" orop <?> "operator") andExpr
 
 bop op pos0 pos1 e0 e1 = 
     let ctx = combineContexts (srcCtx e0, pos0, pos1, srcCtx e1) in Ctx ctx $ op e0 e1 
@@ -208,7 +210,7 @@ assignment = ctxify $
                               reservedOp "*=" >> (return $ MulBy),
                               reservedOp "/=" >> (return $ DivBy),
                               reservedOp "%=" >> (return $ ModBy),
-                              reservedOp "="  >> (return $ Set)]
+                              reservedOp "="  >> (return $ Set)] <?> "assignment operator"
                 e <- expr
                 return $ op v e
 
@@ -219,11 +221,11 @@ stringToComponent "z" = Z
 stringToComponent "s" = S
 
 listExpr = do whiteSpace
-              exprs <- brackets $ sepBy expr comma
+              exprs <- (brackets $ sepBy expr comma) <?> "list expression"
               return $ ListExpr exprs
               
 structExpr = do  whiteSpace
-                 char '<'
+                 char '<' <?> "vector/rotation expression"
                  whiteSpace
                  e1 <- expr
                  mtrace "structExpr:1 " e1
@@ -237,6 +239,7 @@ structExpr = do  whiteSpace
                  mtrace "structExpr:3 " e3
                  return (e1,e2,e3)
 vecRotExpr = do (x,y,z) <- structExpr
+                mtrace "vec/rot" "hi"
                 (do char '>'
                     whiteSpace
                     return $ VecExpr x y z) <|> 
@@ -263,9 +266,9 @@ ctxify f = do
     pos1 <- getPosition
     return $ Ctx (pos2Loc (pos0,pos1)) v
 
-notExpr = ctxify (char '!' >> whiteSpace >> expr2 >>= return.Not)
-invExpr = ctxify (char '~' >> whiteSpace >> expr2 >>= return.Inv)
-negExpr = ctxify (char '-' >> whiteSpace >> expr2 >>= return.Neg)
+notExpr = ctxify ((char '!' <?> "prefix operator") >> whiteSpace >> expr2 >>= return.Not)
+invExpr = ctxify ((char '~' <?> "prefix operator") >> whiteSpace >> expr2 >>= return.Inv)
+negExpr = ctxify ((char '-' <?> "prefix operator") >> whiteSpace >> expr2 >>= return.Neg)
 
 atomicExpr = (ctxify $
               do n <- naturalOrFloat
@@ -282,10 +285,12 @@ atomicExpr = (ctxify $
 
 postfixExpr = ctxify $
               do v <- var
-                 f <- choice [reservedOp "++" >> return (PostInc),reservedOp "--" >> return PostDec]
+                 f <- choice [reservedOp "++" >> return PostInc,
+                              reservedOp "--" >> return PostDec] <?> "postfix operator"
                  return $ f v
 prefixExpr = ctxify $
-             do f <- choice [reservedOp "--" >> return (PreDec),reservedOp "++" >> return PreInc]
+             do f <- choice [reservedOp "--" >> return (PreDec),
+                             reservedOp "++" >> return PreInc] <?> "prefix operator"
                 v <- var
                 return $ f v
                             
@@ -297,7 +302,9 @@ expr2 = choice [try assignment, try postfixExpr, unaryExpr]
 expr1 = orExpr
 
 expr :: GenParser Char () (Ctx Expr)
-expr = choice [try assignment, expr1]
+expr = 
+    do r <- choice [try assignment, expr1]
+       mtrace "expr: " r
 
 exprParser text = parse expr "" text
 
@@ -331,7 +338,7 @@ floatType       = (reserved "float" >> return LLFloat)
 keyType         = (reserved "key" >> return LLKey)
 vectorType      = (reserved "vector" >> return LLVector)
 stringType      = (reserved "string" >> return LLString)
-rotationType    = (reserved "rotation" >> return LLRot)
+rotationType    = ((reserved "rotation"<|>reserved "quaternion") >> return LLRot)
 listType        = (reserved "list" >> return LLList)
 
 typeName = choice [integerType,floatType,keyType,vectorType,stringType,rotationType,listType]
@@ -444,8 +451,8 @@ param = ctxify $
            return $ Var id t
 params = sepBy param comma
 
-function = do (t,id,ps) <- try $ do t <- option LLVoid typeName
-                                    id <- ctxify identifier
+function = do (t,id,ps) <- try $ do t <- option LLVoid typeName <?> "type name"
+                                    id <- ctxify identifier <?> "function name"
                                     ps <- parens params
                                     return (t,id,ps)
               stmts <- braces statements
@@ -457,7 +464,7 @@ function = do (t,id,ps) <- try $ do t <- option LLVoid typeName
 -- we can allow any expressions though and have semantic analysis catch problems
 
 globvar = do var <- ctxify $ do
-                 t <- typeName
+                 t <- typeName <?> "type name"
                  id <- identifier
                  return (Var id t)
              mexpr <- option Nothing (reservedOp "=" >> expr >>= return.Just)
@@ -466,7 +473,7 @@ globvar = do var <- ctxify $ do
 ----------------------------------------------------------------
 -- IMPORT (meta-lsl directive) parsing
 
-gimport = do reserved "$import"
+gimport = do reserved "$import" <?> "$import keyword"
              ids <- ctxify $ sepBy identifier dot
              let id = fmap (concat . separateWith ".") ids
              let binding = do id0 <- identifier
