@@ -19,7 +19,8 @@ public class TestResultLabelProvider extends LabelProvider implements ITableLabe
     private final Image fErrorIcon = LslPlusPlugin.createImage("icons/error.gif"); //$NON-NLS-1$
     private final Image fFailureIcon = LslPlusPlugin.createImage("icons/failed.gif"); //$NON-NLS-1$
     private final Image fCallIcon = LslPlusPlugin.createImage("icons/call.gif"); //$NON-NLS-1$
-    private final Image fInfoIcon = LslPlusPlugin.createImage("icons/info.gif"); //$NON-NLS-1$
+    private final Image fInfoIcon = LslPlusPlugin.createImage("icons/info_st_obj.gif"); //$NON-NLS-1$
+    private final Image fReturnIcon = LslPlusPlugin.createImage("icons/returns.gif"); //$NON-NLS-1$
    public TestResultLabelProvider() {
     }
 
@@ -42,6 +43,8 @@ public class TestResultLabelProvider extends LabelProvider implements ITableLabe
             LogMessage m = (LogMessage) element;
             if (m.getText().startsWith("call:")) { //$NON-NLS-1$
                 return fCallIcon;
+            } else if (m.getText().startsWith("return:")) {
+                return fReturnIcon;
             } else {
                 return fInfoIcon;
             }

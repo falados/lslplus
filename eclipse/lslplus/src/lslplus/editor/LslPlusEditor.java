@@ -3,8 +3,12 @@ package lslplus.editor;
 import java.util.ResourceBundle;
 
 import lslplus.LslPlusPlugin;
+import lslplus.debug.LslLineBreakpoint;
+import lslplus.util.Util;
 
+import org.eclipse.core.resources.IResource;
 import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.debug.core.DebugException;
 import org.eclipse.jface.action.IAction;
 import org.eclipse.jface.action.IMenuManager;
 import org.eclipse.jface.text.BadLocationException;
@@ -21,6 +25,8 @@ import org.eclipse.jface.text.source.projection.ProjectionAnnotationModel;
 import org.eclipse.jface.text.source.projection.ProjectionSupport;
 import org.eclipse.jface.text.source.projection.ProjectionViewer;
 import org.eclipse.jface.viewers.ISelection;
+import org.eclipse.swt.events.MouseEvent;
+import org.eclipse.swt.events.MouseListener;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.ui.editors.text.TextEditor;
 import org.eclipse.ui.texteditor.ITextEditor;
@@ -104,6 +110,7 @@ public class LslPlusEditor extends TextEditor {
         a = new DefineFoldingRegionAction(Messages.getResourceBundle(),
                 "DefineFoldingRegion.", this); //$NON-NLS-1$
         setAction("DefineFoldingRegion", a); //$NON-NLS-1$
+        
     }
 
     /**
@@ -176,6 +183,30 @@ public class LslPlusEditor extends TextEditor {
         fProjectionSupport.install();
         viewer.doOperation(ProjectionViewer.TOGGLE);
 
+        this.getVerticalRuler().getControl().addMouseListener(new MouseListener() {
+
+            public void mouseDoubleClick(MouseEvent e) {
+                IResource resource = (IResource) getEditorInput().getAdapter(IResource.class);
+                
+                if (resource != null) {
+                    try {
+                        LslLineBreakpoint bp = 
+                            new LslLineBreakpoint(resource, getVerticalRuler().toDocumentLineNumber(e.y + 1));
+                    } catch (DebugException e1) {
+                        Util.log(e1, e1.getLocalizedMessage());
+                    }
+                } else {
+                    Util.log("resource is null, can't create breakpoint");
+                }
+            }
+
+            public void mouseDown(MouseEvent e) {
+            }
+
+            public void mouseUp(MouseEvent e) {
+            }
+            
+        });
         // IAnnotationModel m = viewer.getAnnotationModel();
         //		
         // IDocument d = viewer.getDocument();

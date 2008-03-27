@@ -261,5 +261,15 @@
             name="TestRunner">
       </view>
    </extension>
+   <extension
+         id="lslLineBreakpointMarker"
+         point="org.eclipse.core.resources.markers">
+      <super
+            type="org.eclipse.debug.core.lineBreakpointMarker">
+      </super>
+      <persistent
+            value="true">
+      </persistent>
+   </extension>
 
 </plugin>
