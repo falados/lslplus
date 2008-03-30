@@ -30,6 +30,9 @@ module Lsl.Util (
     trimEnd,
     trim,
     cut,
+    unescape,
+    processLines,
+    processLinesS,
     quaternionToMatrix,
     matrixToQuaternion,
     quaternionMultiply,
@@ -40,9 +43,12 @@ module Lsl.Util (
     generatePermutation,
     fac) where
 
-import Data.List
 import Control.Monad
+import Control.Monad.State hiding (modify)
+import Data.List
 import Debug.Trace
+import IO
+import Network.URI
 
 -- utilities
 
@@ -192,6 +198,40 @@ trimFront s = let (_,s') = span (==' ') s in s'
 trimEnd s = let (_,s') = span (==' ') $ reverse s in reverse s'
 
 trim s = trimEnd $ trimFront s
+
+unescape = unEscapeString
+
+-- interactively process lines, stopping when a terminator value is read
+-- each line is assumed to be URI encoded.  It is decoded and passed to
+-- some string handling function (String -> String).  The result is
+-- reencoded and output.
+processLines term f =
+    do s <- getLine
+       when (term /= s) $ do
+           putStr (escape $ f (unescape s))
+           putStr "\n"
+           processLines term f
+    where escape = escapeURIString isUnescapedInURI
+          
+processLinesS state term f =
+    do s <- getLine
+       hPutStrLn stderr s
+       when (term /= s) $ do
+           let (newState,s') = f state (unescape s)
+           putStrLn (escape s')
+           hFlush stdout
+           processLinesS newState term f
+    where escape = escapeURIString isUnescapedInURI
+
+processLinesST :: a -> String -> (String -> StateT a IO String) -> IO ()
+processLinesST state term f =
+    do s <- getLine
+       when (term /= s) $ do
+           (s',state') <- runStateT (f $ unescape s) state
+           putStr (escape s')
+           putStr "\n"
+           processLinesST state' term f
+    where escape = escapeURIString isUnescapedInURI
 
 -- some random math functions
 

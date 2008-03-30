@@ -490,7 +490,7 @@ processScript oid pid key (sid,(Valid image, _)) =
     do --(w::World) <- queryWorld id
        slice <- getSliceSize
        tick <- getTick
-       result <- executeLsl image oid pid sid key doPredef getTick setTick getNextEvent (tick + slice)
+       result <- executeLsl image oid pid sid key doPredef logAMessage getTick setTick getNextEvent (tick + slice)
        Just q <- getEventQueue key sid
        case result of
            Left s -> do logAMessage ("execution error in script " ++ key ++ "/" ++ sid ++ ":" ++ s)

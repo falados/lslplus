@@ -21,8 +21,15 @@ Executable MetaData
 
 Executable UnitTester
   Build-Depends:  base, haskell98, filepath >= 1.1.0.0, parsec >= 2.1.0.0, HaXml >= 1.19.2, directory, mtl >= 1.1,
-                  network >= 2.1, random >= 1.0
+                  network >= 2.1, random >= 1.0, containers >= 0.1
   Main-Is:        UnitTesterMain.hs
+  Hs-Source-Dirs: .
+  Ghc-Options: -fglasgow-exts
+
+Executable UnitTester2
+  Build-Depends:  base, haskell98, filepath >= 1.1.0.0, parsec >= 2.1.0.0, HaXml >= 1.19.2, directory, mtl >= 1.1,
+                  network >= 2.1, random >= 1.0, containers >= 0.1
+  Main-Is:        UnitTesterMain2.hs
   Hs-Source-Dirs: .
   Ghc-Options: -fglasgow-exts
 

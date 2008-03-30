@@ -1,4 +1,4 @@
-module Lsl.TestResult(TestResult(..),resultToXML) where
+module Lsl.TestResult(TestResult(..),resultToXML, emitTestResult) where
 
 import Lsl.XmlCreate hiding (emit)
 import qualified Lsl.XmlCreate as X
@@ -15,12 +15,12 @@ okResult = 0
 failureResult = 1
 errorResult = 2
 
-resultToXML = flip emitResult ""
+resultToXML = flip emitTestResult ""
 
-emitResult (ErrorResult name msg log) = emitResult' name errorResult msg log
-emitResult (FailureResult name msg log) = emitResult' name failureResult msg log
-emitResult (Timeout name log) = emitResult' name failureResult "timeout" log
-emitResult (SuccessResult name log) = emitResult' name okResult "ok" log
+emitTestResult (ErrorResult name msg log) = emitResult' name errorResult msg log
+emitTestResult (FailureResult name msg log) = emitResult' name failureResult msg log
+emitTestResult (Timeout name log) = emitResult' name failureResult "timeout" log
+emitTestResult (SuccessResult name log) = emitResult' name okResult "ok" log
 
 emitResult' name code msg log =
     emit "test-result" [emit "name" [showString name], emitResultInfo code msg, emitLog log]

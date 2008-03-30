@@ -10,6 +10,7 @@ module Lsl.Type(
     replaceLslValueComponent,
     lslValString,
     lslTypeString,
+    lslShowVal,
     toSVal,
     defaultValue) where
     
@@ -74,6 +75,8 @@ typeOfLSLComponent (VVal _ _ _) _ = LLFloat
 typeOfLSLComponent (RVal _ _ _ _) _ = LLFloat
 typeOfLSLComponent v c = error ("value " ++ (show v) ++ " doesn't have a subcomponents")
 
+-- convert a value to a string 'internally' (TODO: where SHOULD this be used? It's used in internal funcs, but
+-- probably will not work completely correctly when tabs, newlines, or double quotes are involved)
 lslValString (IVal i) = (show i)
 lslValString (FVal f) = (show f)
 lslValString (SVal s) = s
@@ -82,6 +85,19 @@ lslValString (VVal x y z) = "<" ++ (show x) ++ "," ++ (show y) ++ "," ++ (show z
 lslValString (RVal x y z s) = "<" ++ (show x) ++ "," ++ (show y) ++ "," ++ (show z) ++ "," ++ (show s) ++ ">"
 lslValString (LVal l) = concat (("[":(weave (map lslValString l) $ replicate (length l - 1) ",")) ++ ["]"])
 lslValString (VoidVal) = ""
+
+-- convert a value to a string for display
+lslShowVal (SVal s) = ('\"':escape s) ++ "\""
+    where escape ('\n':cs) = '\\':'n':(escape cs)
+          escape ('\\':cs) = '\\':'\\':(escape cs)
+          escape ('\"':cs) = '\\':'\"':(escape cs)
+          escape ('\t':cs) = '\\':'t':(escape cs) -- this one shouldn't happen (tabs should get converted to spaces)
+          escape (c:cs) = c:(escape cs)
+          escape [] = []
+lslShowVal (KVal k) = lslShowVal (SVal k)
+lslShowVal (LVal l) = concat ("[":(separateWith "," (map lslShowVal l))) ++ "]"
+lslShowVal VoidVal = "n/a"
+lslShowVal v = lslValString v
 
 -- TODO: this info is duplicated elsewhere (e.g. parser) (fix)
 lslTypeString LLInteger = "integer"

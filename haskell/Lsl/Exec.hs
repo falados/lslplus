@@ -1,16 +1,26 @@
 module Lsl.Exec(
-    ScriptImage,
+    ScriptImage(..),
+    EvalState,
     MemRegion,
     Binding,
     executeLsl,
     executeLslSimple,
-        initLSLScript,
+    frameInfo,
+    initLSLScript,
+    initStateSimple,
+    setupSimple,
+    evalSimple,
     emptyMemRegion,
+    runEval,
+    scriptImage,
     softReset,
     hardReset) where
 
 import Debug.Trace
 import Data.Bits
+import Data.List
+import Lsl.Breakpoint
+import Lsl.CodeHelper
 import Lsl.Util
 import Lsl.Structure
 import Lsl.Type
@@ -20,7 +30,6 @@ import Lsl.Constants
 import Control.Monad
 import Control.Monad.State hiding (State)
 import Control.Monad.Error
-import Data.List
 
 -- initialize a script for execution
 initLSLScript :: CompiledLSLScript -> ScriptImage
@@ -35,39 +44,43 @@ initLSLScript (globals,fs,ss)  =
         callStack = [],
         globals = globals }
 
+initStateSimple script perfAction log qtick utick =
+    EvalState { scriptImage = initLSLScript script,
+                objectId = nextKey nullKey,
+                primId = 0,
+                scriptName = "script",
+                myPrimKey = nextKey nullKey,
+                performAction = perfAction,
+                logMessage = log,
+                qwtick = qtick,
+                uwtick = utick,
+                nextEvent = undefined }
+
 runEval = (runStateT . runErrorT)
-executeLsl img oid pid sid pkey perfAction qtick utick nxtEvent maxTick =
+executeLsl img oid pid sid pkey perfAction log qtick utick nxtEvent maxTick =
      do let state = (EvalState { scriptImage = img,
                             objectId = oid,
                             primId = pid,
                             scriptName = sid,
                             myPrimKey = pkey,
                             performAction = perfAction,
+                            logMessage = log,
                             qwtick = qtick,
                             uwtick = utick,
                             nextEvent = nxtEvent})
-        result <- (runEval $ evalScript1 maxTick) state
+        result <- (runEval $ evalScript maxTick) state
         case result of
             (Left s,_) -> return $ Left s
             (Right (),evalState) -> return $ Right $ scriptImage evalState 
 
-executeLslSimple img perfAction qtick utick maxTick path globbindings args =
-    do  let state = EvalState { scriptImage = img,
-                               objectId = nextKey nullKey,
-                               primId = 0,
-                               scriptName = "script",
-                               myPrimKey = nextKey nullKey,
-                               performAction = perfAction,
-                               qwtick = qtick,
-                               uwtick = utick,
-                               nextEvent = undefined }
-        result <- (runEval $ evalScriptSimple maxTick path globbindings  args) state
+executeLslSimple script perfAction log qtick utick maxTick path globbindings args =
+    do  result <- (runEval $ evalScriptSimple maxTick path globbindings args)
+                  (initStateSimple script perfAction log qtick utick)
         case result of
             (Left s,_) -> return $ Left s
-            (Right (evResult,val,globmem),_) -> return $ Right $ (evResult,val,globmem)
+            (Right (evResult,val),state) -> return $ Right $ (evResult,val,state)
             
--- The state of evaluation for a script.  Note that this contains the
--- state of the World as well. 
+-- The state of evaluation for a script.
 data EvalState m = EvalState {
      scriptImage :: ScriptImage,
      objectId :: String,
@@ -75,6 +88,7 @@ data EvalState m = EvalState {
      scriptName :: String,
      myPrimKey :: String,
      performAction :: String -> ScriptInfo -> [LSLValue] -> m (EvalResult,LSLValue),
+     logMessage :: String -> m (),
      qwtick :: m Int,
      uwtick :: Int -> m (),
      nextEvent :: String -> String -> m (Maybe Event)  }
@@ -98,6 +112,10 @@ data ScriptImage = ScriptImage {
                      globals :: [Global]
                  } deriving (Show)
 
+frameInfo scriptImage =
+    (map collapseFrame $ callStack  scriptImage) ++ [("glob", UnknownSourceContext, Nothing, glob scriptImage)]
+    where collapseFrame (Frame name ctx line (ss,_)) =
+              (name,ctx,line,concat $ map fst ss)
 -- a soft reset occurs when a script that has been running, but
 -- has been persisted to inventory, is reactivated.  The curState
 -- stays the same, but if the script was running or sleeping, the
@@ -129,7 +147,7 @@ hardReset image =
 type StateName = String
 
 -- a labeled block: a label and all the statements that follow it.
-data LBlock = LBlock String [Statement]
+data LBlock = LBlock String [Ctx Statement]
     deriving (Show)
 
 -- find a block in a list of labeled blocks
@@ -156,9 +174,13 @@ findLBlock name = find (\ (LBlock n _) -> name == n)
 --           if (j == 10) jump foo;
 --  
 labelBlocks [] = []
-labelBlocks ((Label s):stmts) = (LBlock s stmts):(labelBlocks stmts)
-labelBlocks (_:stmts) = (labelBlocks stmts)
-
+-- labelBlocks ((Label s):stmts) = (LBlock s stmts):(labelBlocks stmts)
+-- labelBlocks (_:stmts) = (labelBlocks stmts)
+labelBlocks (ctxStmt:stmts) =
+    case ctxItem ctxStmt of
+        Label s -> (LBlock s stmts):(labelBlocks stmts)
+        _ -> (labelBlocks stmts)
+        
 -- A name/element pair is the basic unit of memory.  Each memory 
 -- location has a name (rather than an address) and can hold a value
 -- which can be of any LSL type.  So 1 memory location can hold a
@@ -238,18 +260,22 @@ bindParmsForgiving vars vals = zipWithM bindParmForgiving vars vals
 
 toBool x = if x == 0 then False else True
 
-type Frame = (ScopeStack,EvalStack)
+--type Frame = (ScopeStack,EvalStack)
+data Frame = Frame { frameName :: String, frameContext :: SourceContext, frameSourceLine :: Maybe Int,
+                     frameStacks :: (ScopeStack, EvalStack) }
+     deriving (Show)
 type LabelSet = [LBlock]
 type Scope = (MemRegion,LabelSet)
 type ScopeStack = [Scope]
 type CallStack = [Frame]
+
 
 readVarScope :: String -> Scope -> Maybe LSLValue
 readVarScope name (mem,_) = readMem name mem
 readVarSStack :: String -> ScopeStack -> Maybe LSLValue
 readVarSStack name ss = foldl mplus Nothing $ map (readVarScope name) ss
 readVarFrame :: String -> Frame -> Maybe LSLValue
-readVarFrame name = (readVarSStack name) . fst
+readVarFrame name = (readVarSStack name) . fst . frameStacks
 readVarCallStack :: String -> CallStack -> Maybe LSLValue
 readVarCallStack name = (readVarFrame name) . head
 
@@ -260,23 +286,25 @@ writeVarSStack rs name val (s:ss) =
     case writeVarScope name val s of
         Nothing -> writeVarSStack (s:rs) name val ss
         Just s' -> Just $ (reverse rs) ++ (s':ss)
-writeVarFrame name val (ss,es) =
+writeVarFrame name val frame =
+    let (ss,es) = frameStacks frame in
     case writeVarSStack [] name val ss of
         Nothing -> Nothing
-        Just ss' -> Just (ss',es)
+        Just ss' -> Just frame { frameStacks = (ss',es) }
 writeVarCallStack name val (frame:cs) = writeVarFrame name val frame >>= return . (flip (:) cs)
 
 type EvalStack = [EvalElement]
 
 type ValueStack = [LSLValue]
 
-data EvalElement = EvBlock [Statement] | EvStatement Statement | EvExpr Expr | EvMexpr (Maybe Expr)
+data EvalElement = EvBlock [Ctx Statement] | EvCtxStatement (Ctx Statement)
+                 | EvStatement Statement | EvExpr Expr | EvMexpr (Maybe Expr)
                  | EvAdd | EvSub | EvMul | EvDiv | EvMod | EvBAnd | EvBOr | EvBXor | EvBInv | EvNeg
                  | EvNot | EvAnd | EvOr  | EvLe  | EvLt  | EvGe   | EvGt  | EvEq | EvNe
                  | EvShiftL | EvShiftR | EvCast LSLType | EvGet (String,Component) | EvSet (String,Component)
                  | EvCons | EvMkVec | EvMkRot | EvPop
                  | EvReturn | EvDiscard | EvBind String LSLType
-                 | EvCond Statement Statement | EvCall [Var] [Statement] Bool
+                 | EvCond Statement Statement | EvCall String SourceContext [Var] [Ctx Statement] Bool
                  | EvPredef String | EvLoop Expr (Maybe Expr) Statement
     deriving (Show)
     
@@ -297,7 +325,9 @@ getNextEvent key name =  do f <- (queryState nextEvent)
                             lift $ lift $  f key name
 doAction name scriptInfo args = do perform <- (queryState performAction)
                                    lift $ lift $ perform name scriptInfo args
-
+logMsg s = do log <- queryState logMessage
+              lift $ lift $ log s
+              
 getGlob :: Monad w => Eval w MemRegion
 getGlob = queryExState glob
 getFuncs :: Monad w => Eval w [Func]
@@ -339,14 +369,17 @@ initStacks =
 
 popScope :: Monad w => Eval w Scope
 popScope =
-    do ((s:ss,es):cs) <- getCallStack
-       setCallStack ((ss,es):cs)
+    do --((s:ss,es):cs) <- getCallStack
+       (frame:frames) <- getCallStack
+       let (s:ss,es) = frameStacks frame
+       setCallStack (frame { frameStacks = (ss,es) }:frames)
        return s
 
 pushScope :: Monad w => MemRegion -> LabelSet -> Eval w ()
 pushScope mem labels =
-    do ((ss,es):cs) <- getCallStack
-       setCallStack (((mem,labels):ss,es):cs)
+    do (frame:frames) <- getCallStack
+       let (ss,es) = frameStacks frame
+       setCallStack (frame { frameStacks = ((mem,labels):ss,es) }:frames)
         
 pushVal value = 
     do vstack <- getVStack
@@ -374,14 +407,15 @@ valStackEmpty = getVStack >>= (return . (==[]))
 elementStackEmpty :: Monad w => Eval w Bool
 elementStackEmpty = 
     do (frame:cs) <- getCallStack
-       case frame of
+       case frameStacks frame of
            (_,[]) -> return True
            _ -> return False
            
 popElement :: Monad w => Eval w EvalElement
 popElement =
-    do ((ss,e:es):cs) <- getCallStack
-       setCallStack ((ss,es):cs)
+    do (frame:frames) <- getCallStack
+       let (ss,e:es) = frameStacks frame
+       setCallStack (frame { frameStacks = (ss,es) }:frames)
        return e
        
 popElements 0 = return ()
@@ -390,29 +424,26 @@ popElements n =
        popElements (n - 1)
 
 pushElement element =
-   do ((ss,es):cs) <- getCallStack
-      setCallStack ((ss,element:es):cs)
+   do (frame:frames) <- getCallStack
+      let (ss,es) = frameStacks frame
+      setCallStack (frame { frameStacks = (ss,element:es) }:frames)
 
 pushElements elements =
   do mapM pushElement elements
      return EvalIncomplete
 
 callStackEmpty :: Monad w => Eval w Bool
-callStackEmpty =
-    do cs <- getCallStack
-       return $ case cs of
-           [] -> True
-           _ -> False
+callStackEmpty = getCallStack >>= return . null
 
 popFrame :: Monad w => Eval w ()           
 popFrame =
     do (f:cs) <- getCallStack
        setCallStack cs
 
-pushFrame :: Monad w => Eval w ()
-pushFrame =
+--pushFrame :: Monad w => Eval w ()
+pushFrame name ctx line =
     do cs <- getCallStack
-       setCallStack (([],[]):cs)
+       setCallStack (Frame { frameName = name, frameContext = ctx, frameSourceLine = line, frameStacks = ([],[])}:cs)
        
 getFunc :: Monad w => String -> Eval w Func
 getFunc name =
@@ -439,8 +470,11 @@ getVar name =
 
 initVar1 :: Monad w => String -> LSLType -> Maybe LSLValue -> Eval w ()
 initVar1 name t mval = 
-    do (((m,l):ss,es):cs) <- getCallStack
-       setCallStack $ ((((initVar name t mval):m,l):ss,es):cs)
+    do --(((m,l):ss,es):cs) <- getCallStack
+       (frame:frames) <- getCallStack
+       let ((m,l):ss,es) = frameStacks frame
+       let frame' = frame { frameStacks = (((initVar name t mval):m,l):ss,es) }
+       setCallStack (frame':frames)
 
 initVars1 :: Monad w => [Var] -> [LSLValue] -> Eval w ()
 initVars1 vars vals =
@@ -448,14 +482,15 @@ initVars1 vars vals =
     
 unwindToLabel name =
     let f n =
-            do ((ss,es):cs) <- getCallStack
+            do (frame:frames) <- getCallStack
+               let (ss,es) = frameStacks frame
                case ss of
                    [] -> fail ("label " ++ name ++ " not found")
                    ((m,l):ss') ->
                        case findLBlock name l of
                            Just (LBlock _ stmts) -> return $ (n,stmts)
                            Nothing ->
-                               do setCallStack ((ss',es):cs)
+                               do setCallStack (frame { frameStacks = (ss',es) }:frames)
                                   f (n + 1)
     in f 1
 
@@ -464,35 +499,40 @@ data ExecutionState = Waiting | Executing | Halted | SleepingTil Int | Erroneous
     deriving (Show,Eq)
 
 matchEvent (Event name _) [] = fail ("no such handler" ++ name)
-matchEvent event@(Event name values) ((Handler (Ctx _ name') parms stmts):hs) 
+matchEvent event@(Event name values) ((Handler (Ctx ctx name') parms stmts):hs) 
         | name == name' = do mem <- bindParms (ctxItems parms) values
-                             return (mem,stmts)
+                             return (mem,stmts,name,ctx)
         | otherwise = matchEvent event hs
 
 findHandler name handlers = ctx ("finding handler " ++ name) $ 
     findM (\ (Handler (Ctx _ name') _ _) -> name' == name) handlers
 
 
-evalScriptSimple :: Monad w => Int -> [String] -> [Binding] -> [LSLValue] -> Eval w (EvalResult,Maybe LSLValue,MemRegion)
+evalScriptSimple :: Monad w => Int -> [String] -> [Binding] -> [LSLValue] -> Eval w (EvalResult,Maybe LSLValue)
 evalScriptSimple maxTick path globbindings args =
-    do  updateGlobals globbindings
-        (params,stmts) <- getEntryPoint path
-        let stmts' = ctxItems stmts
-        mem <- bindParmsForgiving params args
-        initStacks
-        pushFrame
-        pushScope mem $ labelBlocks stmts'
-        pushElement (EvBlock stmts')
-        setExecutionState Executing
-        result <- eval maxTick
+    do  setupSimple path globbindings args
+        evalSimple maxTick
+        
+evalSimple maxTick =
+    do  result <- eval maxTick
         glob <- getGlob
         case result of
             EvalComplete Nothing ->
                 do empty <- valStackEmpty
-                   if empty then return (result,Just VoidVal,glob) else do
+                   if empty then return (result,Just VoidVal) else do
                        val <- popVal
-                       return (result,Just val,glob)
-            _ -> return (result,Nothing,glob)
+                       return (result,Just val)
+            _ -> return (result,Nothing)
+            
+setupSimple path globbindings args =
+    do  updateGlobals globbindings
+        (params,stmts,ctx) <- getEntryPoint path
+        mem <- bindParmsForgiving params args
+        initStacks
+        pushFrame (concat $ separateWith "." path) ctx Nothing
+        pushScope mem $ labelBlocks stmts
+        pushElement (EvBlock stmts)
+        setExecutionState Executing
     where updateGlobals [] = return ()
           updateGlobals ((name,val):bs) =
               do glob <- getGlob
@@ -502,21 +542,20 @@ evalScriptSimple maxTick path globbindings args =
           getEntryPoint [funcName] = 
               do funcs <- getFuncs
                  (Func (FuncDec name _ params) stmts) <- findFunc funcName funcs
-                 return (ctxItems params,stmts)
+                 return (ctxItems params,stmts,srcCtx name)
           getEntryPoint [stateName,handlerName] =
               do states <- getStates
                  (State _ handlers) <- findState stateName states
-                 (Handler _ params stmts) <- findHandler handlerName handlers
-                 return (ctxItems params,stmts)
-
+                 (Handler name params stmts) <- findHandler handlerName handlers
+                 return (ctxItems params,stmts, srcCtx name)
 
 incontext s f =
     case f of
         Left s -> fail s
         Right v -> return v                             
 
-evalScript1 :: Monad w => Int -> Eval w ()
-evalScript1 maxTick =
+evalScript :: Monad w => Int -> Eval w ()
+evalScript maxTick =
     do executionState <- getExecutionState
        case executionState of
            Erroneous _ -> return ()
@@ -534,14 +573,13 @@ evalScript1 maxTick =
                             (State _ handlers) <- incontext ("state " ++ curState ++ ":") $ findState curState states
                             case matchEvent event handlers of
                                 Nothing -> return ()
-                                Just (mem,stmts) ->
+                                Just (mem,stmts,name,ctx) ->
                                     do  initStacks
-                                        pushFrame
-                                        pushScope mem $ labelBlocks stmts'
-                                        pushElement (EvBlock stmts')
+                                        pushFrame name ctx Nothing
+                                        pushScope mem $ labelBlocks stmts
+                                        pushElement (EvBlock stmts)
                                         setExecutionState Executing
-                                        evalScript1 maxTick
-                                    where stmts' = ctxItems stmts
+                                        evalScript maxTick
            Executing -> do result <- eval maxTick
                            case result of
                                EvalComplete (Just newState) -> 
@@ -553,7 +591,7 @@ evalScript1 maxTick =
            SleepingTil i -> do tick <- getTick
                                when (tick >= i) $
                                    do setExecutionState Executing
-                                      evalScript1 maxTick
+                                      evalScript maxTick
            Halted -> return ()
 
 eval :: Monad w => Int -> Eval w EvalResult
@@ -581,16 +619,22 @@ eval' =
     in
     do cs <- getCallStack
        vs <- getVStack
---        when (show cs /= (trace ("CS ---> " ++ show cs) (show cs))) (fail "")
---        when (show vs /= (trace ("VS ---> " ++ show vs) (show vs))) (fail "")
        noMoreElements <- elementStackEmpty
        if noMoreElements then popAndCheck
          else do
            element <- popElement
            case element of
-               EvReturn -> popAndCheck
+               EvReturn -> do
+                   val <- peekVal
+                   logMsg  ("return: " ++ lslShowVal val)
+                   popAndCheck
                EvBlock [] -> popScope >> eval'
-               EvBlock (s:ss) -> pushElements [EvBlock ss,EvStatement s]
+               EvBlock (s:ss) -> pushElements [EvBlock ss,EvCtxStatement s]
+               EvCtxStatement s -> do
+                   pushElements [EvStatement $ ctxItem s]
+                   if ((isTextLocation $ srcCtx s) && (textLine0 $ srcCtx s) `mod` 7 == 0) 
+                       then (return $ BrokeAt (mkBreakpoint (textName $ srcCtx s) (textLine0 $ srcCtx s) (textColumn0 $ srcCtx s)))
+                       else continue
                EvStatement (Return mexpr) -> pushElements [EvReturn,EvMexpr $ fromMCtx mexpr]
                EvStatement (NullStmt) -> eval'
                EvStatement (StateChange s) -> return $ EvalComplete $ Just s
@@ -614,8 +658,8 @@ eval' =
                           Just expr1 -> pushElement (EvExpr $ ctxItem expr1)
                       continue
                EvStatement (Compound ss) ->
-                   do pushScope [] $ labelBlocks (ctxItems ss)
-                      pushElement (EvBlock $ ctxItems ss)
+                   do pushScope [] $ labelBlocks ss
+                      pushElement (EvBlock ss)
                       continue
                EvStatement (Label _) -> eval'
                EvStatement (Jump name) ->
@@ -699,27 +743,13 @@ eval' =
                        pushModBy var EvSub (IntLit 1)
                        pushElement (EvGet $ ctxVr2Vr var) -- put the current value on the stack
                        continue
---             EvExpr (PreInc var) ->
---                 do  -- after all operations, top of stack should be var value prior to increment
---                     pushElement (EvSet $ ctxVr2Vr var) -- pop top of stack into var
---                     pushElement (EvAdd)
---                     pushElement (EvExpr (IntLit 1))
---                     pushElement (EvGet $ ctxVr2Vr var) -- put the current value on the stack
---                     continue
---             EvExpr (PreDec var) ->
---                 do  -- after all operations, top of stack should be var value prior to increment
---                     pushElement (EvSet $ ctxVr2Vr var) -- pop top of stack into var
---                     pushElement (EvSub)
---                     pushElement (EvExpr (IntLit 1))
---                     pushElement (EvGet $ ctxVr2Vr var) -- put the current value on the stack
---                     continue
                EvExpr (Call (Ctx _ name) exprs) ->
                    case findFuncDec name predefFuncs of
                        Just (FuncDec _ t parms) -> pushElements [EvPredef name, EvExpr (ListExpr exprs)]
                        Nothing ->
                            do 
-                              (Func (FuncDec _ t parms) stmts) <- getFunc name
-                              pushElement (EvCall (ctxItems parms) (ctxItems stmts) (t == LLVoid))
+                              (Func (FuncDec ctxName t parms) stmts) <- getFunc name
+                              pushElement (EvCall (ctxItem ctxName) (srcCtx ctxName) (ctxItems parms) stmts (t == LLVoid))
                               pushElement (EvExpr (ListExpr exprs))  -- first evaluate the arguments
                               continue
                EvCons ->
@@ -727,9 +757,10 @@ eval' =
                       val <- popVal
                       pushVal (LVal (val:l))
                       continue
-               EvCall parms stmts voidFunc ->
+               EvCall name ctx parms stmts voidFunc ->
                    do (LVal val) <- popVal -- should be the list of arguments
-                      pushFrame
+                      logMsg ("call: " ++ renderCall name val)
+                      pushFrame name ctx Nothing
                       pushScope [] $ labelBlocks stmts
                       initVars1 parms val
                       -- a void function may not have an explicit return; if it does, this

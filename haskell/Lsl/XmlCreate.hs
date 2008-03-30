@@ -1,4 +1,4 @@
-module Lsl.XmlCreate(emit,xmlEscape) where
+module Lsl.XmlCreate(emit,emitSimple,xmlEscape) where
 
 emit :: String -> [(String,String)] -> [(String -> String)] -> String -> String
 emit name attrs body = 
@@ -11,6 +11,10 @@ x = emit "root" [("id","one")] [
         emit "child" [] [showString "world"]
     ]
 
+emitSimple :: String -> [(String,String)] -> String -> String -> String
+emitSimple name attrs body =
+    emit name attrs [showString (xmlEscape body)]
+    
 xmlEscape [] = []
 xmlEscape ('<':cs) = ('&':'l':'t':';':(xmlEscape cs))
 xmlEscape ('>':cs) = ('&':'g':'t':';':(xmlEscape cs))

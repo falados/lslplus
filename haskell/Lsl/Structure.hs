@@ -31,7 +31,8 @@ module Lsl.Structure (
     predefFuncs,
     findFuncDec,
     goodHandlers,
-    libFromAugLib) where
+    libFromAugLib,
+    isTextLocation) where
 
 import Lsl.Type
 import Lsl.Constants
@@ -618,7 +619,7 @@ validExpression (ListExpr es) fs vs ls = do
     return LLList
 validExpression (VecExpr _ _ _) _ _ _ = return LLVector
 validExpression (RotExpr _ _ _ _) _ _ _ = return LLRot
-validExpression x funcs vars locals = error ("what to do with " ++ (show x))
+--validExpression x funcs vars locals = error ("what to do with " ++ (show x))
 
 validListExprElement (Ctx ctx e) funcs vars locals = do
     t <- validExpression e funcs vars locals
@@ -920,6 +921,9 @@ rewriteMExpression bindings = fmap (rewriteCtxExpr bindings)
 data SourceContext = TextLocation { textLine0 :: Int, textColumn0 :: Int, textLine1 :: Int, textColumn1 :: Int, textName :: String } |
                      UnknownSourceContext
                      deriving (Show)
+
+isTextLocation (TextLocation _ _ _ _ _) = True
+isTextLocation _ = False
 
 data Ctx a = Ctx { srcCtx :: SourceContext, ctxItem :: a } deriving Show
 instance Functor Ctx where

@@ -1,7 +1,10 @@
 module Lsl.UnitTestWorld(
     runUnitTests,
-    runUnitTests',
-    renderTestResults) where
+    simStep,
+    SimpleWorld,
+    TestEvent(..),
+    ExecutionInfo(..),
+    ExecCommand(..)) where
 
 import Control.Exception
 import Control.Monad
@@ -10,6 +13,8 @@ import Control.Monad.Error
 import Data.List
 import Data.Bits
 import Debug.Trace
+import Lsl.Breakpoint
+import Lsl.CodeHelper
 import Lsl.FuncSigs
 import Lsl.InternalLLFuncs
 import Lsl.Load
@@ -34,7 +39,6 @@ data SimpleWorld = SimpleWorld {
         maxTick :: Int,
         tick :: Int,
         msgLog :: [(Int,String)],
-        randGen :: StdGen,
         wScripts :: [(String,Validity CompiledLSLScript)],
         wLibrary :: [(String,Validity LModule)],
         expectations :: FuncCallExpectations
@@ -48,8 +52,6 @@ getMaxTick :: SimpleWorldM Int
 getMaxTick = get >>= return . maxTick
 getMsgLog :: SimpleWorldM [(Int,String)]
 getMsgLog = get >>= return . msgLog
-getRandGen :: SimpleWorldM StdGen
-getRandGen = get >>= return . randGen
 getWScripts :: SimpleWorldM [(String, Validity CompiledLSLScript)]
 getWScripts = get >>= return . wScripts
 getWLibrary :: SimpleWorldM [(String, Validity LModule)]
@@ -66,19 +68,20 @@ logMsg s = do
     tick <- getTick
     modifyMsgLog ((tick,s):)
 
-renderCall n a = concat ([n, "("] ++ (separateWith "," $ map lslValString a) ++ [")"])
-
 doPredef n i a = 
     do  logMsg $ "call: "  ++ renderCall n a
         case lookup n internalLLFuncs of
-            Just f -> f i a
+            Just f -> do
+                result@(m, v) <- f i a
+                logMsg ("return: " ++ lslShowVal v)
+                return result
             Nothing -> do
                 fce <- getExpectations
                 let allowed = Nice == expectationMode fce
                 case expectedReturns n a fce of
                     Nothing -> handleUnexpected allowed
                     Just (m, v) -> do
-                        when (v /= VoidVal) $ logMsg ("return: " ++ lslValString v)
+                        logMsg ("return: " ++ lslShowVal v)
                         setExpectations $ removeExpectation m fce
                         return (EvalIncomplete,v)
     where handleUnexpected allowed =
@@ -88,98 +91,91 @@ doPredef n i a =
                      return $ (EvalIncomplete, defaultValue rt)
               else fail ("unexpected call: " ++ renderCall n a)
               
-simulate (ModuleFunc moduleName funcName) globs args =
-    do lib <- getWLibrary
-       case lookup moduleName lib of
-           Nothing -> return (Left $ "No such module: " ++ moduleName)
-           Just (Invalid s) -> return (Left $ "Invalid module: " ++ moduleName)
-           Just (Valid lmodule) ->
-               let script = mkScript lmodule in
-                   sim' moduleName (validLSLScript lib script) [funcName] globs args
-simulate (ScriptFunc scriptName funcName) globs args = simScript scriptName [funcName] globs args
-simulate (ScriptHandler scriptName stateName handlerName) globs args = simScript scriptName [stateName,handlerName] globs args
+-- simulate (ModuleFunc moduleName funcName) globs args =
+--     do lib <- getWLibrary
+--        case lookup moduleName lib of
+--            Nothing -> return (Left $ "No such module: " ++ moduleName)
+--            Just (Invalid s) -> return (Left $ "Invalid module: " ++ moduleName)
+--            Just (Valid lmodule) ->
+--                let script = mkScript lmodule in
+--                    sim moduleName (validLSLScript lib script) [funcName] globs args
+-- simulate (ScriptFunc scriptName funcName) globs args = simScript scriptName [funcName] globs args
+-- simulate (ScriptHandler scriptName stateName handlerName) globs args = simScript scriptName [stateName,handlerName] globs args
+-- simScript name path globs args =
+--     do scripts <- getWScripts
+--        case lookup name scripts of
+--            Nothing -> return (Left $ "No such script: " ++ name)
+--            Just vscript -> sim name vscript path globs args
 
-simScript name path globs args =
-    do scripts <- getWScripts
-       case lookup name scripts of
-           Nothing -> return (Left $ "No such script: " ++ name)
-           Just vscript -> sim' name vscript path globs args
+-- sim name vscript path globs args =
+--     case vscript of
+--         Invalid s -> return (Left ("Invalid script: " ++ name))
+--         Valid script -> 
+--             do  maxTick <- getMaxTick
+--                 result <- executeLslSimple script doPredef logMsg getTick setTick maxTick path globs args 
+--                 return result
 
-sim' name vscript path globs args =
-    case vscript of
-        Invalid s -> return (Left ("Invalid script: " ++ name))
-        Valid script -> 
-            do  maxTick <- getMaxTick
-                result <- executeLslSimple (initLSLScript script) doPredef getTick setTick maxTick path globs args 
-                return result
-             
+simulate entryPoint globs args =
+    do scriptAndPath <- convertEntryPoint entryPoint
+       case scriptAndPath of
+           Left s -> return (Left s)
+           Right (script,path) -> 
+               do maxTick <- getMaxTick
+                  executeLslSimple script doPredef logMsg getTick setTick maxTick path globs args
+        
+sim2 ep globs args =
+    do scriptAndPath <- convertEntryPoint ep
+       case scriptAndPath of
+           Right (script,path) ->
+               do  maxTick <- getMaxTick
+                   runEval (setupSimple path globs args >> evalSimple maxTick) execState
+               where execState = initStateSimple script doPredef logMsg getTick setTick
+               
 mkScript (LModule globdefs vars) =
     LSLScript (varsToGlobdefs ++ globdefs) [L.State (nullCtx "default") []]
     where varsToGlobdefs = map (\ v -> GV v Nothing) vars
-    
 
-nl = showChar '\n'
-padInt i =
-  let s = show i
-      padding = 7 - length s in showString (replicate padding ' ') . showString s
-renderIndent n = showString (replicate n ' ')
-renderSequence r = (foldl (.) (showString "")) . (map r)
-renderLogMsg n (i,s) = renderIndent n . padInt i . showString ": " . showString s . nl
-renderMsgLog n l = renderSequence (renderLogMsg n) l
-renderTestResult (ErrorResult n s l) =
-    showString "Error " . shows s . nl . renderMsgLog 4 l
-renderTestResult (Timeout n l) =
-     showString "Timeout" . nl . renderMsgLog 4 l
-renderTestResult (FailureResult n s l) =
-     showString "Failure " . shows s . nl . renderMsgLog 4 l
-renderTestResult (SuccessResult n l) =
-    showString "Success" . nl . renderMsgLog 4 l
-    
-renderTestResults = renderSequence renderTestResult
-
-runTests unitTests =
-    do results <- runErrorT $
-           do augLib <- loadLibrary
-              let library = libFromAugLib augLib
-              scripts <- loadScripts library
-              runUnitTests library scripts unitTests
-       case results of
-           Left s -> fail s -- error s
-           Right results' -> putStr $ renderTestResults results' ""
+getValidScript name =
+    do  scripts <- getWScripts
+        case lookup name scripts of
+            Nothing -> return (Left $ "No such script: " ++ name)
+            Just (Invalid s) -> return $ Left $ "Invalid script: " ++ name    
+            Just (Valid script) -> return $ Right script
+        
+convertEntryPoint (ScriptFunc scriptName funcName) =
+    do  script <- getValidScript scriptName
+        return $ liftM2 (,) script (Right [funcName])
+convertEntryPoint (ScriptHandler scriptName stateName handlerName) =
+    do  script <- getValidScript scriptName
+        return $ liftM2 (,) script (Right [stateName,handlerName])
+convertEntryPoint (ModuleFunc moduleName funcName) =
+    do  lib <- getWLibrary
+        case lookup moduleName lib of
+            Nothing -> return (Left $ "No such module: " ++ moduleName)
+            Just (Invalid s) -> return (Left $ "Invalid module: " ++ moduleName)
+            Just (Valid lmodule) -> 
+                case validLSLScript lib (mkScript lmodule) of
+                    Invalid _ -> return $ Left "Invalid entry point (internal error?)"
+                    Valid script -> return $ Right (script,[funcName])
 
 runUnitTests library scripts unitTests = do
     flip mapM unitTests $ \ unitTest -> do
         let name = unitTestName unitTest
         let result = (runState $ runErrorT $ simulate (entryPoint unitTest) (initialGlobs unitTest) (arguments unitTest))
-                     (SimpleWorld { maxTick = 10000, tick = 0, msgLog = [], randGen = mkStdGen 0,
-                                    wScripts = scripts, wLibrary = library, expectations = (expectedCalls unitTest)})
-        return $ case result of
-            (Left s, w) -> ErrorResult name s (msgLog w)
-            (Right res1, w) ->
-                case res1 of
-                    Left s -> ErrorResult name s (msgLog w)
-                    Right (EvalIncomplete,_,_) -> Timeout name (msgLog w)
-                    Right (EvalComplete newstate, Just val, globs) ->
-                        checkResults (newstate, val,globs,w) unitTest
-
-runUnitTests' library scripts unitTests = do
-    flip mapM unitTests $ \ unitTest -> do
-        let name = unitTestName unitTest
-        let result = (runState $ runErrorT $ simulate (entryPoint unitTest) (initialGlobs unitTest) (arguments unitTest))
-                     (SimpleWorld { maxTick = 10000, tick = 0, msgLog = [], randGen = mkStdGen 0,
+                     (SimpleWorld { maxTick = 10000, tick = 0, msgLog = [], 
                                     wScripts = scripts, wLibrary = library, expectations = (expectedCalls unitTest)})
         let resultDescriptor = case result of
                 (Left s, w) -> ErrorResult name s (msgLog w)
                 (Right res1, w) ->
                     case res1 of
                         Left s -> ErrorResult name s (msgLog w)
-                        Right (EvalIncomplete,_,_) -> Timeout name (msgLog w)
-                        Right (EvalComplete newstate, Just val, globs) ->
-                            checkResults (newstate, val, globs, w) unitTest
+                        Right (EvalIncomplete,_,execState) -> Timeout name (msgLog w)
+                        Right (EvalComplete newstate, Just val, execState) ->
+                            checkResults (newstate, val, glob $ scriptImage execState, w) unitTest
         putStr $ resultToXML resultDescriptor
         putStr "\n"
     return ()
-            
+
 checkResults (ms1, val, globs, w) unitTest =
     let name = unitTestName unitTest
         ms0 = expectedNewState unitTest 
@@ -215,12 +211,57 @@ checkResults (ms1, val, globs, w) unitTest =
                                                 (lslValString val) ++ ", but actually had value of " ++
                                                 (lslValString val')) (msgLog w)
                       Nothing -> SuccessResult name (msgLog w)
-         
 
-                           
-tryElse defaultVal action = liftIO $ tryJust (const $ Just defaultVal) action >>= return . (either id id)
+--------------------------------------------------
+-- 'Interactive' testing
 
-main =
-    do args <- getArgs
-       tests <- mapM parseUnitTestFile args
-       runTests $ concat tests
+data ExecutionInfo = ExecutionInfo String Int [(String,SourceContext,Maybe Int,MemRegion)]
+
+data TestEvent = TestComplete TestResult | TestSuspended  ExecutionInfo | AllComplete
+
+data ExecCommand = ExecContinue | ExecStep | ExecStepOver | ExecStepOut
+
+simSome exec world = runState (runErrorT (
+    do maxTick <- getMaxTick
+       (runStateT $ runErrorT $ evalSimple maxTick) exec)) world
+  
+-- no more tests, not currently executing     
+simStep _ _ ([], Nothing) _ = (AllComplete,([],Nothing))     
+--  not currently executing, more tests
+simStep scripts lib (unitTest:tests, Nothing) command =
+    let world = (SimpleWorld { maxTick = 10000, tick = 0, msgLog = [], 
+                                wScripts = scripts, wLibrary = lib, expectations = (expectedCalls unitTest)})
+        ep = entryPoint unitTest
+        globs = initialGlobs unitTest
+        args = arguments unitTest
+        name = unitTestName unitTest
+        init = runState (runErrorT (
+            do converted <- convertEntryPoint ep
+               case converted of
+                   Left s -> fail s
+                   Right (script,path) ->
+                       do  result <- runEval (setupSimple path globs args) exec
+                           case result of
+                               (Left s, _) -> fail s
+                               (Right (),exec') -> return exec'
+                       where exec = initStateSimple script doPredef logMsg getTick setTick)) world
+    in case init of
+        (Left s,world') -> (TestComplete $ ErrorResult name s [],(tests, Nothing))
+        (Right exec,world') -> simStep scripts lib (unitTest:tests, Just (world',exec)) command
+-- currently executing
+simStep _ _ (unitTest:tests, Just (world,exec)) _ =
+    let name = unitTestName unitTest in
+    case simSome exec world of
+        (Left s,world') -> (TestComplete $ ErrorResult name s (msgLog world'),(tests,Nothing))
+        (Right res,world') -> 
+            case res of
+                (Left s,_) -> (TestComplete $ ErrorResult name s (msgLog world'),(tests,Nothing))
+                (Right (EvalComplete newState,Just val), exec') ->  (TestComplete checkedResult, (tests,Nothing))
+                    where checkedResult = checkResults (newState, val, glob $ scriptImage exec', world') unitTest
+                (Right (EvalIncomplete,_),_) -> (TestComplete $ Timeout name (msgLog world'),(tests,Nothing))
+                (Right (BrokeAt bp,_),exec') -> 
+                    (TestSuspended (ExecutionInfo file line frames),(unitTest:tests,Just (world',exec')))
+                    where file = breakpointFile bp
+                          line = breakpointLine bp
+                          frames = frameInfo (scriptImage exec')
+            
