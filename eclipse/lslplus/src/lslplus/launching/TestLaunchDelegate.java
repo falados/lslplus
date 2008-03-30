@@ -10,6 +10,7 @@ import lslplus.LslPlusPlugin;
 import lslplus.LslProjectNature;
 import lslplus.debug.LslDebugTarget;
 import lslplus.debug.LslProcess;
+import lslplus.debug.LslSourceLocator;
 import lslplus.lsltest.LslTestSuite;
 import lslplus.lsltest.TestManager;
 import lslplus.lsltest.TestResult;
@@ -30,7 +31,7 @@ import org.eclipse.jface.dialogs.MessageDialog;
 public class TestLaunchDelegate implements ILaunchConfigurationDelegate {
 
 	static final String BLANK = ""; //$NON-NLS-1$
-    private static final String UNIT_TESTER_EXE = "UnitTester.exe"; //$NON-NLS-1$
+    private static final String UNIT_TESTER_EXE = "UnitTester2.exe"; //$NON-NLS-1$
 
     public static class LineReaderMonitor extends Thread {
         private BufferedReader reader;
@@ -129,10 +130,13 @@ public class TestLaunchDelegate implements ILaunchConfigurationDelegate {
 		Util.log(testDescriptor);
 		TestManager testManager = LslPlusPlugin.getDefault().getTestManager();
 		testManager.testLaunched(configuration, launch, suite.getTests().length);
-		LslProcess p = new LslProcess(LslPlusPlugin.runExecutable(UNIT_TESTER_EXE, testDescriptor, false), launch, testManager);
-		
-		LslDebugTarget target = new LslDebugTarget("lslplus-test", launch, p);
+		LslProcess p = // new LslProcess(LslPlusPlugin.runExecutable(UNIT_TESTER_EXE, testDescriptor, false), launch, testManager);
+		                new LslProcess(LslPlusPlugin.launchExecutable(UNIT_TESTER_EXE, false), 
+		                        testDescriptor, launch, testManager);
+		LslDebugTarget target = new LslDebugTarget("lslplus-test", launch, p); //$NON-NLS-1$
 		launch.addDebugTarget(target);
         launch.addProcess(p);
+        launch.setSourceLocator(new LslSourceLocator());
+        p.go();
 	}
 }

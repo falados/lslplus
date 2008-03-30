@@ -3,6 +3,7 @@ package lslplus.util;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Array;
 import java.net.URL;
 import java.util.ArrayList;
@@ -272,5 +273,66 @@ public class Util {
     
     public static boolean safeEquals(Object o0, Object o1) {
         return o0 == o1 || (o0 != null && o0.equals(o1));
+    }
+    
+    private final static char[] DIGITS =
+        { '0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F' };
+    public static String URIEncode(String s) {
+        StringBuilder buf = new StringBuilder();
+        StringBuilder tmp = new StringBuilder();
+        char[] cs = s.toCharArray();
+        
+        for (int i = 0; i < cs.length; i++) {
+           if (shouldEncode(cs[i])) {
+               tmp.append(cs[i]);
+               byte[] b;
+               try {
+                    b = tmp.toString().getBytes("UTF-8"); //$NON-NLS-1$
+                    tmp.setLength(0);
+                    for (int j = 0; j <  b.length; j++) {
+                        buf.append('%');
+                        buf.append(DIGITS[0x0f & (b[j]>>4)]);
+                        buf.append(DIGITS[0x0f & b[j]]);
+                    }
+               } catch (UnsupportedEncodingException e) {
+                   throw new RuntimeException(e);
+               }
+           } else buf.append(cs[i]);
+        }
+        return buf.toString();
+    }
+
+    public static String URIDecode(String s) {
+        StringBuilder buf = new StringBuilder();
+        
+        char[] cs = s.toCharArray();
+        
+        for (int i = 0; i < cs.length; i++) {
+            if (cs[i] == '%') {
+                char c1 = cs[++i];
+                char c2 = cs[++i];
+                
+                char c3 = Character.toLowerCase(c1);
+                char c4 = Character.toLowerCase(c2);
+                
+                if ((c3 >= 0 && c3 <= '9' || c3 >= 'a' && c3 <= 'f') &&
+                        (c4 >= 0 && c4 <= '9' || c4 >= 'a' && c4 <= 'f')) {
+                    char c = (char)(
+                         (((c3 <= '9') ? (c3 - '0') : 10 + c3 - 'a') << 4) |
+                         (((c4 <= '9') ? (c4 - '0') : 10 + c4 - 'a')));
+                    buf.append(c);
+                } else {
+                    buf.append('%').append(c1).append(c2);
+                }
+            } else buf.append(cs[i]);
+        }
+        
+        return buf.toString();
+    }
+    private static boolean shouldEncode(char c) {
+        return !((c >= 'a' && c <= 'z') ||
+                 (c >= 'A' && c <= 'Z') ||
+                 (c >= '0' && c <= '9') ||
+                 c == '-' || c == '_' || c == '.' || c == '~');
     }
 }

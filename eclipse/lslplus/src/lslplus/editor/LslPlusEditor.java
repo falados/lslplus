@@ -38,7 +38,7 @@ import org.eclipse.ui.texteditor.TextOperationAction;
  * LSL (plus) text editor.
  */
 public class LslPlusEditor extends TextEditor {
-
+    public static final String ID = "lslplus.editor.LslPlusEditor"; //$NON-NLS-1$
     // borrowed from the Java editor example... should setup folding
     // regions for states, functions and handlers (instead).
     private class DefineFoldingRegionAction extends TextEditorAction {
@@ -190,8 +190,8 @@ public class LslPlusEditor extends TextEditor {
                 
                 if (resource != null) {
                     try {
-                        LslLineBreakpoint bp = 
-                            new LslLineBreakpoint(resource, getVerticalRuler().toDocumentLineNumber(e.y + 1));
+                        new LslLineBreakpoint(resource, 
+                                getVerticalRuler().toDocumentLineNumber(e.y) + 1);
                     } catch (DebugException e1) {
                         Util.log(e1, e1.getLocalizedMessage());
                     }

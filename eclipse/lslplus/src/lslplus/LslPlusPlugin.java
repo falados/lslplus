@@ -102,25 +102,19 @@ public class LslPlusPlugin extends AbstractUIPlugin {
             }
         }
     }
+    
+    /**
+     * Run executable with an input string.  Return a process so that the output can be monitored
+     * as it is produced.
+     * @param executablePath the path to the executable
+     * @param input the input string
+     * @param redir an indicator as to whether stderr should be redirected to stdout
+     * @return the process to monitor
+     */
     public static Process runExecutable(String executablePath, String input, boolean redir) {
-        URL url = FileLocator.find(getDefault().getBundle(), new Path("$os$/" + executablePath), null); //$NON-NLS-1$
-
-        if (url == null) {
-            Util.error("no such executable: " + executablePath); //$NON-NLS-1$
-            return null;
-        }
-
         try {
-            File f = new File(FileLocator.toFileURL(url).getFile());
-
-            if (f == null) {
-                Util.error("couldn't find executable: " + executablePath); //$NON-NLS-1$
-                return null;
-            }
-
-            ProcessBuilder builder = new ProcessBuilder(new String[] { f.getPath() });
-            builder.redirectErrorStream(redir);
-            Process process = builder.start();
+            Process process = launchExecutable(executablePath, redir);
+            if (process == null) return null;
 
             OutputStream out = process.getOutputStream();
             OutputStreamWriter writer = new OutputStreamWriter(out);
@@ -132,6 +126,45 @@ public class LslPlusPlugin extends AbstractUIPlugin {
             Util.log(e, e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * Find and launch an executable.
+     * @param executablePath the path to the executable
+     * @param redir an indicator as to whether stderr should be redirected to stdout
+     * @return the process to monitor
+     */
+    public static Process launchExecutable(String executablePath, boolean redir) {
+        try {
+            File f = findExecutable(executablePath);
+            if (f == null) return null;
+            
+            ProcessBuilder builder = new ProcessBuilder(new String[] { f.getPath() });
+            builder.redirectErrorStream(redir);
+            Process process = builder.start();
+
+            return process;
+        } catch (IOException e) {
+            Util.log(e, e.getLocalizedMessage());
+            return null;
+        }
+    }
+    
+    private static File findExecutable(String executablePath) throws IOException {
+        URL url = FileLocator.find(getDefault().getBundle(), new Path("$os$/" + executablePath), null); //$NON-NLS-1$
+   
+        if (url == null) {
+            Util.error("no such executable: " + executablePath); //$NON-NLS-1$
+            return null;
+        }
+
+        File f = new File(FileLocator.toFileURL(url).getFile());
+
+        if (f == null) {
+            Util.error("couldn't find executable: " + executablePath); //$NON-NLS-1$
+            return null;
+        }
+        return f;
     }
     
     public static String runTask(String executablePath, String input) {

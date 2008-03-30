@@ -3,7 +3,6 @@
  */
 package lslplus.debug;
 
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
@@ -35,7 +34,8 @@ public class LslProcess extends Thread implements IProcess {
 	private Process p = null;
     private boolean terminated = false;
     private LineReaderMonitor inputMonitor;
-	public LslProcess(Process p, ILaunch launch, TestManager testManager) {
+    private LslTestInteractor interactor;
+	public LslProcess(Process p, String descriptor, ILaunch launch, TestManager testManager) {
 	    this.p = p;
 	    processMonitor = new Thread() {
             public void run() {
@@ -57,11 +57,19 @@ public class LslProcess extends Thread implements IProcess {
 		this.reader1 = new StringReader(""); //$NON-NLS-1$
 		this.reader2 = new InputStreamReader(p.getErrorStream());
 		this.launch = launch;
-		inputMonitor = new LineReaderMonitor(new BufferedReader(new InputStreamReader(p.getInputStream())), testManager);
-		inputMonitor.start();
-		processMonitor.start();
+//		inputMonitor = new LineReaderMonitor(new BufferedReader(new InputStreamReader(p.getInputStream())), testManager);
+//		inputMonitor.start();
+		interactor = new LslTestInteractor(testManager,descriptor, p.getInputStream(), p.getOutputStream());
+//		interactor.start();
+//		processMonitor.start();
 	}
-	public String getAttribute(String key) {
+
+	public void go() {
+	    interactor.start();
+	    processMonitor.start();
+	}
+	
+    public String getAttribute(String key) {
 		return null;
 	}
 
@@ -121,5 +129,10 @@ public class LslProcess extends Thread implements IProcess {
 	public void terminate() throws DebugException {
 	    processMonitor.interrupt();
 	}
+
+    public void setThread(LslThread thread) {
+        interactor.addListener(thread);
+        thread.setInteractor(interactor);
+    }
 	
 }

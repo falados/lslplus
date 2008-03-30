@@ -93,15 +93,14 @@ public class TestResult {
     
     static {
         xstream = new XStream(new DomDriver());
+        configureXStream(xstream);
+    }
+    
+    public static void configureXStream(XStream xstream) {
         xstream.alias("test-result", TestResult.class); //$NON-NLS-1$
         xstream.alias("message", LogMessage.class); //$NON-NLS-1$
     }
     
-    public static void main(String[] args) {
-        TestResult result = (TestResult) xstream.fromXML("<test-result><name>tmp</name><resultInfo><resultCode>1</resultCode><resultMessage>timeout</resultMessage></resultInfo><messages><message><time>1</time><text>hello</text></message><message><time>2</time><text>world</text></message></messages></test-result>"); //$NON-NLS-1$
-        System.out.println(result);
-    }
-
     public static TestResult fromXML(String line) {
         return (TestResult)xstream.fromXML(line);
     }

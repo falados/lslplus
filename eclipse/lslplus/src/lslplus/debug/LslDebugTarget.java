@@ -5,7 +5,9 @@ import lslplus.LslPlusPlugin;
 import org.eclipse.core.resources.IMarkerDelta;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
+import org.eclipse.debug.core.DebugEvent;
 import org.eclipse.debug.core.DebugException;
+import org.eclipse.debug.core.DebugPlugin;
 import org.eclipse.debug.core.ILaunch;
 import org.eclipse.debug.core.model.IBreakpoint;
 import org.eclipse.debug.core.model.IDebugTarget;
@@ -17,16 +19,19 @@ import org.eclipse.debug.core.model.IThread;
 public class LslDebugTarget implements IDebugTarget {
     public static final String LSLPLUS = "lslplus"; //$NON-NLS-1$
     private String name;
-    private IProcess process;
+    private LslProcess process;
     private LslThread thread;
     private IThread[] threads;
     private ILaunch launch;
-    public LslDebugTarget(String name, ILaunch launch, IProcess process) {
+    private boolean suspended = false;
+    private boolean terminated;
+    public LslDebugTarget(String name, ILaunch launch, LslProcess process) {
         this.name = name;
         this.process = process;
         this.launch = launch;
         thread = new LslThread(this);
         threads = new LslThread[] { thread };
+        process.setThread(thread);
     }
 
     public String getName() throws DebugException {
@@ -54,23 +59,26 @@ public class LslDebugTarget implements IDebugTarget {
     }
 
     public boolean canTerminate() {
-        // TODO Auto-generated method stub
-        return !isTerminated();
+        return false;
     }
 
     public boolean isTerminated() {
-        // TODO Auto-generated method stub
-        return false;
+        return terminated;
     }
 
+    public void setTerminated() {
+        this.terminated = true;
+        DebugPlugin.getDefault().fireDebugEventSet(
+                new DebugEvent[] {
+                        new DebugEvent(this, DebugEvent.TERMINATE)
+                });
+    }
+    
     public void terminate() throws DebugException {
-        // TODO Auto-generated method stub
-
     }
 
     public boolean canResume() {
-        // TODO Auto-generated method stub
-        return false;
+        return suspended;
     }
 
     public boolean canSuspend() {
@@ -78,18 +86,19 @@ public class LslDebugTarget implements IDebugTarget {
     }
 
     public boolean isSuspended() {
-        // TODO Auto-generated method stub
-        return false;
+        return suspended;
     }
 
     public void resume() throws DebugException {
-        // TODO Auto-generated method stub
-
     }
 
-    public void suspend() throws DebugException {
-        // TODO Auto-generated method stub
-
+    public void suspend() throws DebugException { }
+    void setSuspended() {
+        suspended = true;
+        DebugPlugin.getDefault().fireDebugEventSet(
+            new DebugEvent[] {
+                    new DebugEvent(this, DebugEvent.SUSPEND, DebugEvent.BREAKPOINT)
+            });
     }
 
     public void breakpointAdded(IBreakpoint breakpoint) {

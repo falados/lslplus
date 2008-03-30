@@ -15,7 +15,7 @@
             extensions="lslp,lslm"
             contributorClass="lslplus.editor.LslPlusActionContributor"
             class="lslplus.editor.LslPlusEditor"
-            id="org.eclipse.ui.JavaEditor">
+            id="lslplus.editor.LslPlusEditor">
       </editor>
       <editor
             class="lslplus.editor.LslTestEditor"

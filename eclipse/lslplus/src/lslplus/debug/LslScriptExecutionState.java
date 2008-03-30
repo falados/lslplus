@@ -1,7 +1,5 @@
 package lslplus.debug;
 
-import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 
 import com.thoughtworks.xstream.XStream;
@@ -12,7 +10,9 @@ import com.thoughtworks.xstream.io.xml.DomDriver;
 
 public class LslScriptExecutionState {
 
-    public static class Value { }
+    public static abstract class Value { 
+        public abstract String typeString();
+    }
     public static class IntegerValue extends Value {
         private int val;
         public IntegerValue(int i) {
@@ -20,6 +20,7 @@ public class LslScriptExecutionState {
         }
         public int getVal() { return val; }
         public String toString() { return Integer.toString(val); }
+        public String typeString() { return "integer"; }
     }
     
     public static class FloatValue extends Value {
@@ -29,6 +30,7 @@ public class LslScriptExecutionState {
         }
         public float getVal() { return val; }
         public String toString() { return Float.toString(val); }
+        public String typeString() { return "float"; }
     }
     
     public static class StringValue extends Value {
@@ -37,14 +39,21 @@ public class LslScriptExecutionState {
             val = s;
         }
         public String getVal() { return val; }
+        
+        // TODO FIX!!!
+        public String toString() { return val; } 
+        public String typeString() { return "string"; }
     }
-    
+   
     public static class KeyValue extends Value {
         private String val;
         public KeyValue(String s) {
             val = s;
         }
         public String getVal() { return val; }
+        // TODO FIX!!!
+        public String toString() { return val; } 
+        public String typeString() { return "key"; }
     }
     
     public static class VectorValue extends Value {
@@ -58,6 +67,11 @@ public class LslScriptExecutionState {
         public float getX() { return x;}
         public float getY() { return y;}
         public float getZ() { return z;}
+        
+        public String toString() {
+            return "<" + x + "," + y + "," + z + ">";
+        }
+        public String typeString() { return "vector"; }
     }
 
     public static class RotationValue extends Value {
@@ -73,18 +87,35 @@ public class LslScriptExecutionState {
         public float getY() { return y;}
         public float getZ() { return z;}
         public float getS() { return s;}
+        
+        public String toString() {
+            return "<" + x + "," + y + "," + z + "," + s + ">";
+        }
+        public String typeString() { return "rotation"; }
     }
     
     public static class ListValue extends Value {
-        private ArrayList val = new ArrayList();
+        private Value[] elements = null;
         public ListValue(List l) {
-            val.clear();
-            for (Iterator i =l.iterator(); i.hasNext(); ) {
-                val.add(i.next());
-            }
+            elements = (Value[]) l.toArray(new Value[0]);
         }
         
-        public List getVal() { return val; }
+        public Value[] getElements() { return elements; }
+        
+        public String toString() {
+            StringBuilder buf = new StringBuilder("[");
+            String sep = "";
+            if (elements == null) return "[]";
+            for (int i = 0; i < elements.length; i++) {
+                buf.append(sep);
+                buf.append(elements[i].toString());
+                sep = ",";
+            }
+            
+            buf.append("]");
+            return buf.toString();
+        }
+        public String typeString() { return "list"; }
     }
     
     public static class Binding {
@@ -100,12 +131,18 @@ public class LslScriptExecutionState {
     }
     
     public static class Frame {
+        private String name = null;
+        private String file = null;
+        private Integer line = null;
         private Binding[] bindings;
         public Frame(Binding[] bindings) {
             this.bindings = bindings;
         }
         
         public Binding[] getBindings() { return bindings; }
+        public String getFile() { return file; }
+        public Integer getLine() { return line; }
+        public String getName() { return name; }
     }
     
     private String sourceElement;
@@ -159,7 +196,7 @@ public class LslScriptExecutionState {
             }
 
             public boolean canConvert(Class arg0) {
-                return StringValue.class.equals(arg0);
+                return IntegerValue.class.equals(arg0);
             }
             
         });
@@ -199,27 +236,4 @@ public class LslScriptExecutionState {
         return (LslScriptExecutionState) xstream.fromXML(xml);
     }
     
-    public static void main(String[] args) {
-        System.out.println(
-                xstream.fromXML(
-                        "<script-state>" +
-                        "<sourceElement>foo.lslm</sourceElement>" +
-                        "<currentLine>10</currentLine>" +
-                        "<frames>" +
-                            "<frame>" +
-                                "<bindings>" +
-                                "<binding>" +
-                                    "<name>foo</name>" +
-                                    "<value class=\"integer-value\">5</value>"+
-                                "</binding>" +
-                                "<binding>" +
-                                    "<name>bar</name>" +
-                                    "<value class=\"vector-value\"><x>5</x><y>5</y></value>"+
-                                "</binding>" +
-                                "</bindings>" +
-                            "</frame>" +
-                        "</frames>" +
-                        "</script-state>"));
-        
-    }
 }

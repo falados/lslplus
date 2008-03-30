@@ -1,5 +1,7 @@
 package lslplus.debug;
 
+import lslplus.util.Util;
+
 import org.eclipse.debug.core.DebugException;
 import org.eclipse.debug.core.ILaunch;
 import org.eclipse.debug.core.model.IDebugTarget;
@@ -13,17 +15,23 @@ public class LslStackFrame implements IStackFrame{
         new IRegisterGroup[0];
 
     private String name;
+    private String file;
     private IThread thread;
     private IVariable[] variables;
     private boolean stepping;
+    private int line;
     public LslStackFrame(
             String name, 
+            String file,
             IThread thread,
             IDebugTarget debugTarget,
-            IVariable[] variables) {
+            IVariable[] variables,
+            int line) {
         this.name = name;
         this.thread = thread;
+        this.file = file;
         this.variables = variables;
+        this.line = line;
     }
     
     public int getCharEnd() throws DebugException {
@@ -32,13 +40,11 @@ public class LslStackFrame implements IStackFrame{
     }
 
     public int getCharStart() throws DebugException {
-        // TODO Auto-generated method stub
-        return 0;
+        return -1;
     }
 
     public int getLineNumber() throws DebugException {
-        // TODO Auto-generated method stub
-        return 0;
+        return line;
     }
 
     public String getName() throws DebugException {
@@ -78,7 +84,7 @@ public class LslStackFrame implements IStackFrame{
     }
 
     public Object getAdapter(Class adapter) {
-        // TODO Auto-generated method stub
+        Util.log("lslStackFrame - asked to adapt to: " + adapter);
         return null;
     }
 
@@ -114,28 +120,22 @@ public class LslStackFrame implements IStackFrame{
     }
 
     public boolean canResume() {
-        // TODO Auto-generated method stub
-        return false;
+        return thread.canResume();
     }
 
     public boolean canSuspend() {
-        // TODO Auto-generated method stub
         return false;
     }
 
     public boolean isSuspended() {
-        // TODO Auto-generated method stub
-        return false;
+        return thread.isSuspended();
     }
 
     public void resume() throws DebugException {
-        // TODO Auto-generated method stub
-        
+        thread.resume();
     }
 
     public void suspend() throws DebugException {
-        // TODO Auto-generated method stub
-        
     }
 
     public boolean canTerminate() {
@@ -151,6 +151,10 @@ public class LslStackFrame implements IStackFrame{
     public void terminate() throws DebugException {
         // TODO Auto-generated method stub
         
+    }
+
+    public String getFile() {
+        return file;
     }
 
 }
