@@ -149,32 +149,33 @@ public class LslTest {
 	}
 	
 	public static class LslVector extends LslValue {
-		public float x,y,z;
-		public LslVector(float x, float y, float z) {
-			this.x = x;
-			this.y = y;
-			this.z = z;
+		String val;
+		public LslVector(String val) {
+		    this.val = val;
 		}
 		
+		public String getVal() {
+		    return val;
+		}
 		public String toString() {
-			return "<" + x + "," + y + "," + z + ">";  //$NON-NLS-1$//$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+			return val;
 		}
 	}
 	
-	public static class LslRotation extends LslValue {
-		public float x,y,z,s;
-		public LslRotation(float x, float y, float z, float s) {
-			this.x = x;
-			this.y = y;
-			this.z = z;
-			this.s = s;
-		}
-		
-		public String toString() {
-			return "<" + x + "," + y + "," + z + "," + s + ">";  //$NON-NLS-1$//$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$
-		}
-	}
-
+    public static class LslRotation extends LslValue {
+        String val;
+        public LslRotation(String val) {
+            this.val = val;
+        }
+        
+        public String getVal() {
+            return val;
+        }
+        public String toString() {
+            return val;
+        }
+    }
+	
 	public static class EntryPoint {
 		private String fileName;
 		private String path;
@@ -324,9 +325,9 @@ public class LslTest {
 		} else if (LslList.class.equals(argType)) {
 			return new LslList(null);
 		} else if (LslVector.class.equals(argType)) {
-			return new LslVector(0,0,0);
+			return new LslVector("<0,0,0>"); //$NON-NLS-1$
 		} else if (LslRotation.class.equals(argType)) {
-			return new LslRotation(0,0,0,1);
+			return new LslRotation("<0,0,0,1>"); //$NON-NLS-1$
 		} else return new LslVoid();
 	}
 	

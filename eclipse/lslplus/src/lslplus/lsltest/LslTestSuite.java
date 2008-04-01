@@ -137,6 +137,36 @@ public class LslTestSuite implements IAdaptable {
             }
             
         });
+        xstream.registerConverter(new SingleValueConverter() {
+            public Object fromString(String arg0) {
+                
+                return new LslVector(arg0);
+            }
+
+            public String toString(Object arg0) {
+                return ((LslVector)arg0).val;
+            }
+
+            public boolean canConvert(Class arg0) {
+                return LslVector.class.equals(arg0);
+            }
+            
+        });
+        xstream.registerConverter(new SingleValueConverter() {
+            public Object fromString(String arg0) {
+                
+                return new LslRotation(arg0);
+            }
+
+            public String toString(Object arg0) {
+                return ((LslRotation)arg0).val;
+            }
+
+            public boolean canConvert(Class arg0) {
+                return LslRotation.class.equals(arg0);
+            }
+            
+        });
         return xstream;
     }
 	

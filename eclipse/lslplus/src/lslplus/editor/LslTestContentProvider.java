@@ -6,6 +6,8 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.SortedSet;
+
+import lslplus.LslExpressionValidator;
 import lslplus.LslPlusPlugin;
 import lslplus.LslProjectNature;
 import lslplus.language_metadata.LslFunction;
@@ -814,96 +816,72 @@ public class LslTestContentProvider implements ITreeContentProvider {
         }
 	}
 	
-	public class LslFloatNode extends LslValueNode {
+	public abstract class LslExpressionNode extends LslValueNode {
+
+        public LslExpressionNode(String name, Node parent, Object value, Class c, boolean clearable,
+                ParentSetter setter) {
+            super(name, parent, value, LslFloat.class, clearable, setter);
+        }
+
+        public Node[] getChildren() {
+            return null;
+        }
+
+        public abstract String getTypeName();
+
+        public boolean hasChildren() {
+            return false;
+        }
+        
+        public boolean isEditable() {
+            return true;
+        }
+        
+        public String isValid(Object o) {
+            return LslExpressionValidator.validateExpression(getTypeName(),o.toString());
+        }
+
+        protected abstract boolean setMyValue(Object o);
+	}
+	public class LslFloatNode extends LslExpressionNode {
 
 		public LslFloatNode(String name, Node parent, Object value, boolean clearable,
 				ParentSetter setter) {
 			super(name, parent, value, LslFloat.class, clearable, setter);
 		}
 
-		public Node[] getChildren() {
-			return null;
-		}
-
 		public String getTypeName() { return "float"; } //$NON-NLS-1$
 
-		public boolean hasChildren() {
-			return false;
-		}
-		
-		public boolean isEditable() {
-			return true;
-		}
-		
-        public String isValid(Object o) {
-            return LslPlusPlugin.validateExpression("<expression><type>float</type><text>" + //$NON-NLS-1$
-                    o.toString() + "</text></expression>"); //$NON-NLS-1$
-        }
-
-		
 		protected boolean setMyValue(Object o) {
 			setValue(new LslFloat(o.toString()));
 			return true;
 		}
 	}
 	
-	public class LslIntegerNode extends LslValueNode {
+	public class LslIntegerNode extends LslExpressionNode {
 
 		public LslIntegerNode(String name, Node parent, Object value, boolean clearable,
 				ParentSetter setter) {
 			super(name, parent, value, LslInteger.class, clearable, setter);
 		}
 
-		public Node[] getChildren() {
-			return null;
-		}
-
 		public String getTypeName() { return "integer"; } //$NON-NLS-1$
 
-		public boolean hasChildren() {
-			return false;
-		}
-		
-		public boolean isEditable() {
-			return true;
-		}
-		public String isValid(Object o) {
-		    return LslPlusPlugin.validateExpression("<expression><type>integer</type><text>" + //$NON-NLS-1$
-		            o.toString() + "</text></expression>"); //$NON-NLS-1$
-		}
-		
 		protected boolean setMyValue(Object o) {
 			setValue(new LslInteger(o.toString()));
 			return true;
 		}
 	}
 	
-	public class LslKeyNode extends LslValueNode {
+	public class LslKeyNode extends LslExpressionNode {
 		public LslKeyNode(String name, Node parent, Object value, boolean clearable,
 		        ParentSetter setter) {
 			super(name, parent, value, LslString.class, clearable, setter);
 		}
 
-		public Node[] getChildren() {
-			return null;
-		}
-
 		public String getTypeName() {
 			return "key"; //$NON-NLS-1$
 		}
-
-		public boolean hasChildren() {
-			return false;
-		}
-
-		public boolean isEditable() {
-			return true;
-		}
-		
-        public String isValid(Object o) {
-            return LslPlusPlugin.validateExpression("<expression><type>key</type><text>" + //$NON-NLS-1$
-                    o.toString() + "</text></expression>"); //$NON-NLS-1$
-        }
 
         protected boolean setMyValue(Object o) {
 			setValue(new LslKey(o.toString()));
@@ -984,103 +962,33 @@ public class LslTestContentProvider implements ITreeContentProvider {
 
 	}
 
-	public class LslRotationNode extends LslValueNode {
+	public class LslRotationNode extends LslExpressionNode {
 		public LslRotationNode(String name, Node parent, Object value, boolean clearable,
 		        ParentSetter setter) {
 			super(name, parent, value, LslRotation.class, clearable, setter);
-		}
-		
-		public Node[] getChildren() {
-			Float xval = null, yval = null, zval = null, sval = null;
-			LslRotation rotation = (LslRotation) getValue();
-			if (rotation != null) {
-				xval = new Float(rotation.x);
-				yval = new Float(rotation.y);
-				zval = new Float(rotation.z);
-				sval = new Float(rotation.s);
-			}
-			
-			FloatComponentNode[] children = new FloatComponentNode[3];
-			
-			children[0] = new FloatComponentNode("x", this, xval, new ParentSetter() { //$NON-NLS-1$
-				public void set(Object o) {
-					getOrInitValue().x = ((Float)o).floatValue();
-				}
-			});
-			children[1] = new FloatComponentNode("y", this, yval, new ParentSetter() { //$NON-NLS-1$
-				public void set(Object o) {
-					getOrInitValue().y = ((Float)o).floatValue();
-				}
-			});
-			children[2] = new FloatComponentNode("z", this, zval, new ParentSetter() { //$NON-NLS-1$
-				public void set(Object o) {
-					getOrInitValue().z = ((Float)o).floatValue();
-				}
-			});
-			children[3] = new FloatComponentNode("s", this, sval, new ParentSetter() { //$NON-NLS-1$
-				public void set(Object o) {
-					getOrInitValue().s = ((Float)o).floatValue();
-				}
-			});
-			return children;
-		}
-		
-		private LslRotation getOrInitValue() {
-			if (getValue() == null) {
-				set(new LslRotation(0,0,0,0));
-			}
-			return (LslRotation) getValue();
 		}
 		
 		public String getTypeName() {
 			return "rotation"; //$NON-NLS-1$
 		}
 
-		public boolean hasChildren() { return true; }
-
-		public boolean isEditable() {
-			return false;
-		}
-		
 		protected boolean setMyValue(Object o) {
-		    this.setValue(o);
+		    this.setValue(new LslRotation(o.toString()));
 		    return true;
 		}
 	}
 	
-	public class LslStringNode extends LslValueNode {
+	public class LslStringNode extends LslExpressionNode {
 
 		public LslStringNode(String name, Node parent, Object value, boolean clearable, 
 		        ParentSetter setter) {
 			super(name, parent, value, LslString.class, clearable, setter);
 		}
 
-		public Node[] getChildren() {
-			return null;
-		}
-
-		public Object getEditableValue() {
-			if (getValue() == null) return BLANK;
-			else return ((LslString)getValue()).val;
-		}
-
 		public String getTypeName() {
 			return "string"; //$NON-NLS-1$
 		}
 		
-		public boolean hasChildren() {
-			return false;
-		}
-		
-		public boolean isEditable() {
-			return true;
-		}
-
-        public String isValid(Object o) {
-            return LslPlusPlugin.validateExpression("<expression><type>string</type><text>" + //$NON-NLS-1$
-                    o.toString() + "</text></expression>"); //$NON-NLS-1$
-        }
-
 		protected boolean setMyValue(Object o) {
 			setValue(new LslString(o.toString()));
 			return true;
@@ -1163,58 +1071,20 @@ public class LslTestContentProvider implements ITreeContentProvider {
 		}
 	}
 	
-	public class LslVectorNode extends LslValueNode {
+	public class LslVectorNode extends LslExpressionNode {
 		public LslVectorNode(String name, Node parent, Object value, boolean clearable,
 		        ParentSetter setter) {
 			super(name, parent, value, LslVector.class, clearable, setter);
-		}
-		
-		public Node[] getChildren() {
-			Float xval = null, yval = null, zval = null;
-			LslVector vector = (LslVector) getValue();
-			if (vector != null) {
-				xval = new Float(vector.x);
-				yval = new Float(vector.y);
-				zval = new Float(vector.z);
-			}
-			
-			FloatComponentNode[] children = new FloatComponentNode[3];
-			
-			children[0] = new FloatComponentNode("x", this, xval, new ParentSetter() { //$NON-NLS-1$
-				public void set(Object o) {
-					getOrInitVectorValue().x = ((Float)o).floatValue();
-				}
-			});
-			children[1] = new FloatComponentNode("y", this, yval, new ParentSetter() { //$NON-NLS-1$
-				public void set(Object o) {
-					getOrInitVectorValue().y = ((Float)o).floatValue();
-				}
-			});
-			children[2] = new FloatComponentNode("z", this, zval, new ParentSetter() { //$NON-NLS-1$
-				public void set(Object o) {
-					getOrInitVectorValue().z = ((Float)o).floatValue();
-				}
-			});
-			return children;
-		}
-		
-		private LslVector getOrInitVectorValue() {
-			if (getValue() == null) {
-				set(new LslVector(0,0,0));
-			}
-			return (LslVector) getValue();
 		}
 		
 		public String getTypeName() {
 			return "vector"; //$NON-NLS-1$
 		}
 
-		public boolean hasChildren() { return true; }
-
-		public boolean isEditable() {
-			return false;
+		protected boolean setMyValue(Object o) {
+		    setValue(new LslVector(o.toString()));
+		    return true;
 		}
-		
 	}
 	
 	public class LslVoidNode extends LslValueNode {

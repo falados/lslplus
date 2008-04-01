@@ -196,8 +196,10 @@ public class LslPlusPlugin extends AbstractUIPlugin {
         }
     }
     
-    public static String validateExpression(String expression) {
+    static String validateExpression(String expression) {
+        if (DEBUG) Util.log("expression: " + expression);
         String result = runTask("ExpressionHandler.exe", expression); //$NON-NLS-1$
+        if (DEBUG) Util.log("result: " + result);
         XStream xstream = new XStream(new DomDriver());
         xstream.alias("result", ValidationResult.class); //$NON-NLS-1$
         ValidationResult e = (ValidationResult) xstream.fromXML(result);

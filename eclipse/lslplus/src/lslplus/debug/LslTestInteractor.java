@@ -281,6 +281,12 @@ public class LslTestInteractor implements Runnable, Interactor {
             }
         } catch (IOException e) {
             Util.log(e, e.getLocalizedMessage());
+        } catch (RuntimeException e) {
+            Util.log(e, e.getLocalizedMessage());
+            try {
+                endSession();
+            } catch (Exception e1) {
+            }
         }
     }
     
