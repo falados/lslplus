@@ -6,7 +6,9 @@ module Lsl.Parse(
         parseScript',
         parseModule',
         exprParser,
-        parseType
+        parseType,
+        parseScriptFromString,
+        parseModuleFromString
     ) where
 
 import Data.Char
@@ -517,7 +519,14 @@ parseFile' p file =
            Left err -> return $ Left (show err)
            Right x -> return  $ Right x
     where parser = parse p ""
-    
+
+parseFromString parser string =
+    case parse parser "" string of
+        Left err -> fail (snd (fromParseError err))
+        Right x -> return x
+parseScriptFromString s = parseFromString lslParser s
+parseModuleFromString s = parseFromString moduleParser s
+
 parseScript file = parseFile' lslParser file
 parseModule file = parseFile' moduleParser file
 
