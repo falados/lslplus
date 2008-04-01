@@ -3,6 +3,7 @@ module Lsl.UnitTester where
 import Control.Exception
 import Control.Monad
 import IO
+import Lsl.BreakpointsDeserialize
 import Lsl.Compiler
 import Lsl.DOMProcessing
 import Lsl.DOMSourceDescriptor
@@ -66,11 +67,18 @@ execCommandFromXML xml =
 
 testEventToXML e = emitTestEvent e ""
 
-execCommand e = (execContinue e) `mplus` (execStep e)
+execCommand e = (execContinue e) `mplus` (execStep e) `mplus` (execStepOver e) `mplus` (execStepOut e)
 
-execContinue e = match (ElemAcceptor "exec-continue" simple) e >> return ExecContinue
-execStep e = match (ElemAcceptor "exec-step" simple) e >> return ExecStep
+execContinue e = match (ElemAcceptor "exec-continue" commandContent) e >>= return . ExecContinue
+execStep e = match (ElemAcceptor "exec-step" commandContent) e >>= return . ExecStep
+execStepOver e = execCmd "exec-step-over" ExecStepOver e
+execStepOut e = execCmd "exec-step-out" ExecStepOut e
 
+execCmd s f e = match (ElemAcceptor s commandContent) e >>= return . f
+commandContent (Elem _ _ contents) = do
+    (breakpoints,[]) <- findOptionalElement  breakpointsElement [ e | e@(CElem _ _) <- contents]
+    return $ maybe [] id breakpoints
+    
 emitTestEvent (TestComplete testResult) = emit "test-complete" [] [emitTestResult testResult]
 emitTestEvent (AllComplete) = emit "all-complete" [] []
 emitTestEvent (TestSuspended info) = emit "test-suspended" [] [emitExecutionInfo info]

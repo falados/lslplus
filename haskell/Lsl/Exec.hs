@@ -19,7 +19,7 @@ module Lsl.Exec(
 import Debug.Trace
 import Data.Bits
 import Data.List
-import Lsl.Breakpoint
+import Lsl.Breakpoint hiding (checkBreakpoint)
 import Lsl.CodeHelper
 import Lsl.Util
 import Lsl.Structure
@@ -42,9 +42,10 @@ initLSLScript (globals,fs,ss)  =
         states = ss,
         valueStack = [],
         callStack = [],
+        stepManager = emptyStepManager,
         globals = globals }
 
-initStateSimple script perfAction log qtick utick =
+initStateSimple script perfAction log qtick utick chkBp =
     EvalState { scriptImage = initLSLScript script,
                 objectId = nextKey nullKey,
                 primId = 0,
@@ -54,10 +55,11 @@ initStateSimple script perfAction log qtick utick =
                 logMessage = log,
                 qwtick = qtick,
                 uwtick = utick,
+                checkBreakpoint = chkBp,
                 nextEvent = undefined }
 
 runEval = (runStateT . runErrorT)
-executeLsl img oid pid sid pkey perfAction log qtick utick nxtEvent maxTick =
+executeLsl img oid pid sid pkey perfAction log qtick utick chkBp nxtEvent maxTick =
      do let state = (EvalState { scriptImage = img,
                             objectId = oid,
                             primId = pid,
@@ -67,15 +69,16 @@ executeLsl img oid pid sid pkey perfAction log qtick utick nxtEvent maxTick =
                             logMessage = log,
                             qwtick = qtick,
                             uwtick = utick,
+                            checkBreakpoint = chkBp,
                             nextEvent = nxtEvent})
         result <- (runEval $ evalScript maxTick) state
         case result of
             (Left s,_) -> return $ Left s
             (Right (),evalState) -> return $ Right $ scriptImage evalState 
 
-executeLslSimple script perfAction log qtick utick maxTick path globbindings args =
+executeLslSimple script perfAction log qtick utick chkBp maxTick path globbindings args =
     do  result <- (runEval $ evalScriptSimple maxTick path globbindings args)
-                  (initStateSimple script perfAction log qtick utick)
+                  (initStateSimple script perfAction log qtick utick chkBp)
         case result of
             (Left s,_) -> return $ Left s
             (Right (evResult,val),state) -> return $ Right $ (evResult,val,state)
@@ -91,6 +94,7 @@ data EvalState m = EvalState {
      logMessage :: String -> m (),
      qwtick :: m Int,
      uwtick :: Int -> m (),
+     checkBreakpoint :: Breakpoint -> StepManager -> m (Bool, StepManager),
      nextEvent :: String -> String -> m (Maybe Event)  }
 
 type Eval m = ErrorT String (StateT (EvalState m) m)
@@ -109,12 +113,17 @@ data ScriptImage = ScriptImage {
                      states :: [State],
                      valueStack :: ValueStack,
                      callStack :: CallStack,
+                     stepManager :: StepManager,
                      globals :: [Global]
                  } deriving (Show)
 
 frameInfo scriptImage =
-    (map collapseFrame $ callStack  scriptImage) ++ [("glob", UnknownSourceContext, Nothing, glob scriptImage)]
-    where collapseFrame (Frame name ctx line (ss,_)) =
+    frames ++ [("glob", bottomContext, Nothing, glob scriptImage)]
+    where frames = (map collapseFrame $ callStack scriptImage)
+          (bottomContext,bottomLine) = case frames of
+              [] -> (UnknownSourceContext,Nothing)
+              _ -> let (_,ctx,_,_) = last frames in (ctx,Just 1)
+          collapseFrame (Frame name ctx line (ss,_)) =
               (name,ctx,line,concat $ map fst ss)
 -- a soft reset occurs when a script that has been running, but
 -- has been persisted to inventory, is reactivated.  The curState
@@ -327,7 +336,13 @@ doAction name scriptInfo args = do perform <- (queryState performAction)
                                    lift $ lift $ perform name scriptInfo args
 logMsg s = do log <- queryState logMessage
               lift $ lift $ log s
-              
+
+checkBp bp = do sm <- getStepManager
+                chk <- queryState checkBreakpoint
+                (result,sm') <- lift $ lift $ chk bp sm
+                setStepManager sm'
+                return result
+               
 getGlob :: Monad w => Eval w MemRegion
 getGlob = queryExState glob
 getFuncs :: Monad w => Eval w [Func]
@@ -354,10 +369,13 @@ getScriptName = queryState scriptName
 -- getWorld = queryState world
 getMyPrimKey :: Monad w => Eval w String
 getMyPrimKey = queryState myPrimKey
+getStepManager :: Monad w => Eval w StepManager
+getStepManager = queryExState stepManager
 
 setGlob g = updateExState (\e -> e { glob = g })
 setVStack v = updateExState (\e -> e { valueStack = v })
 setCallStack c = updateExState (\e -> e { callStack = c })
+setStepManager m = updateExState (\e -> e { stepManager = m })
 setExecutionState state = updateExState (\e -> e { executionState = state })
 setCurState state = updateExState (\e -> e { curState = state })
 --setWorld w = updateState (\s -> s { world = w })
@@ -438,11 +456,17 @@ callStackEmpty = getCallStack >>= return . null
 popFrame :: Monad w => Eval w ()           
 popFrame =
     do (f:cs) <- getCallStack
+       stepMgr <- getStepManager
+       let stepMgr' = popStepManagerFrame stepMgr
+       setStepManager stepMgr'
        setCallStack cs
 
 --pushFrame :: Monad w => Eval w ()
 pushFrame name ctx line =
-    do cs <- getCallStack
+    do stepMgr <- getStepManager
+       let stepMgr' = pushStepManagerFrame stepMgr
+       setStepManager stepMgr'
+       cs <- getCallStack
        setCallStack (Frame { frameName = name, frameContext = ctx, frameSourceLine = line, frameStacks = ([],[])}:cs)
        
 getFunc :: Monad w => String -> Eval w Func
@@ -632,8 +656,11 @@ eval' =
                EvBlock (s:ss) -> pushElements [EvBlock ss,EvCtxStatement s]
                EvCtxStatement s -> do
                    pushElements [EvStatement $ ctxItem s]
-                   if ((isTextLocation $ srcCtx s) && (textLine0 $ srcCtx s) `mod` 7 == 0) 
-                       then (return $ BrokeAt (mkBreakpoint (textName $ srcCtx s) (textLine0 $ srcCtx s) (textColumn0 $ srcCtx s)))
+                   if (isTextLocation $ srcCtx s) then
+                       let bp = mkBreakpoint (textName $ srcCtx s) (textLine0 $ srcCtx s) 0 in
+                               do  brk <- checkBp bp
+                                   if brk then return $ BrokeAt bp
+                                          else continue
                        else continue
                EvStatement (Return mexpr) -> pushElements [EvReturn,EvMexpr $ fromMCtx mexpr]
                EvStatement (NullStmt) -> eval'

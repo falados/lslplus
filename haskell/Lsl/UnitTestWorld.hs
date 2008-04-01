@@ -41,8 +41,9 @@ data SimpleWorld = SimpleWorld {
         msgLog :: [(Int,String)],
         wScripts :: [(String,Validity CompiledLSLScript)],
         wLibrary :: [(String,Validity LModule)],
-        expectations :: FuncCallExpectations
-    } deriving (Show)
+        expectations :: FuncCallExpectations,
+        breakpointManager :: BreakpointManager
+    }
 
 type SimpleWorldM = ErrorT String (State SimpleWorld)
 simpleWorldM = ErrorT . State
@@ -58,12 +59,21 @@ getWLibrary :: SimpleWorldM [(String, Validity LModule)]
 getWLibrary = get >>= return . wLibrary
 getExpectations :: SimpleWorldM FuncCallExpectations
 getExpectations = get >>= return . expectations
+getBreakpointManager :: SimpleWorldM BreakpointManager
+getBreakpointManager = get >>= return . breakpointManager
 
 setTick t = do w <- get; put (w { tick = t })
 setMsgLog l = do w <- get; put (w { msgLog = l })
 setExpectations e = do w <- get; put (w { expectations = e })
+setBreakpointManager bpm = do w <- get; put (w { breakpointManager = bpm })
 modifyMsgLog f = do w <- get; put (w { msgLog = f (msgLog w) })
 
+checkBp bp sm =
+    do  bpm <- getBreakpointManager
+        let (result,bpm',sm') = checkBreakpoint bp bpm sm
+        setBreakpointManager bpm'
+        return (result,sm')
+        
 logMsg s = do
     tick <- getTick
     modifyMsgLog ((tick,s):)
@@ -121,16 +131,8 @@ simulate entryPoint globs args =
            Left s -> return (Left s)
            Right (script,path) -> 
                do maxTick <- getMaxTick
-                  executeLslSimple script doPredef logMsg getTick setTick maxTick path globs args
+                  executeLslSimple script doPredef logMsg getTick setTick checkBp maxTick path globs args
         
-sim2 ep globs args =
-    do scriptAndPath <- convertEntryPoint ep
-       case scriptAndPath of
-           Right (script,path) ->
-               do  maxTick <- getMaxTick
-                   runEval (setupSimple path globs args >> evalSimple maxTick) execState
-               where execState = initStateSimple script doPredef logMsg getTick setTick
-               
 mkScript (LModule globdefs vars) =
     LSLScript (varsToGlobdefs ++ globdefs) [L.State (nullCtx "default") []]
     where varsToGlobdefs = map (\ v -> GV v Nothing) vars
@@ -163,7 +165,8 @@ runUnitTests library scripts unitTests = do
         let name = unitTestName unitTest
         let result = (runState $ runErrorT $ simulate (entryPoint unitTest) (initialGlobs unitTest) (arguments unitTest))
                      (SimpleWorld { maxTick = 10000, tick = 0, msgLog = [], 
-                                    wScripts = scripts, wLibrary = library, expectations = (expectedCalls unitTest)})
+                                    wScripts = scripts, wLibrary = library, expectations = (expectedCalls unitTest),
+                                    breakpointManager = emptyBreakpointManager})
         let resultDescriptor = case result of
                 (Left s, w) -> ErrorResult name s (msgLog w)
                 (Right res1, w) ->
@@ -219,7 +222,13 @@ data ExecutionInfo = ExecutionInfo String Int [(String,SourceContext,Maybe Int,M
 
 data TestEvent = TestComplete TestResult | TestSuspended  ExecutionInfo | AllComplete
 
-data ExecCommand = ExecContinue | ExecStep | ExecStepOver | ExecStepOut
+data ExecCommand = ExecContinue [Breakpoint] | ExecStep [Breakpoint] | ExecStepOver [Breakpoint] | 
+                   ExecStepOut [Breakpoint]
+
+breakpointsFromCommand (ExecContinue bps) = bps
+breakpointsFromCommand (ExecStep bps) = bps
+breakpointsFromCommand (ExecStepOver bps) = bps
+breakpointsFromCommand (ExecStepOut bps) = bps
 
 simSome exec world = runState (runErrorT (
     do maxTick <- getMaxTick
@@ -230,7 +239,8 @@ simStep _ _ ([], Nothing) _ = (AllComplete,([],Nothing))
 --  not currently executing, more tests
 simStep scripts lib (unitTest:tests, Nothing) command =
     let world = (SimpleWorld { maxTick = 10000, tick = 0, msgLog = [], 
-                                wScripts = scripts, wLibrary = lib, expectations = (expectedCalls unitTest)})
+                               wScripts = scripts, wLibrary = lib, expectations = (expectedCalls unitTest),
+                               breakpointManager = emptyBreakpointManager})
         ep = entryPoint unitTest
         globs = initialGlobs unitTest
         args = arguments unitTest
@@ -244,23 +254,33 @@ simStep scripts lib (unitTest:tests, Nothing) command =
                            case result of
                                (Left s, _) -> fail s
                                (Right (),exec') -> return exec'
-                       where exec = initStateSimple script doPredef logMsg getTick setTick)) world
+                       where exec = initStateSimple script doPredef logMsg getTick setTick checkBp)) world
     in case init of
         (Left s,world') -> (TestComplete $ ErrorResult name s [],(tests, Nothing))
         (Right exec,world') -> simStep scripts lib (unitTest:tests, Just (world',exec)) command
 -- currently executing
-simStep _ _ (unitTest:tests, Just (world,exec)) _ =
-    let name = unitTestName unitTest in
-    case simSome exec world of
-        (Left s,world') -> (TestComplete $ ErrorResult name s (msgLog world'),(tests,Nothing))
-        (Right res,world') -> 
+simStep _ _ (unitTest:tests, Just (world,exec)) command =
+    let name = unitTestName unitTest 
+        breakpoints = breakpointsFromCommand command
+        world' = world { breakpointManager = replaceBreakpoints breakpoints (breakpointManager world) }
+        updateStepManager f ex = let img = scriptImage ex
+                                     stepMgr = stepManager img in ex { scriptImage = img { stepManager = f stepMgr } }
+        execNew = case command of
+            ExecStep _ -> updateStepManager setStepBreakpoint exec
+            ExecStepOver _ -> updateStepManager setStepOverBreakpoint exec
+            ExecStepOut _ -> updateStepManager setStepOutBreakpoint exec
+            _ -> exec
+    in
+    case simSome execNew world' of
+        (Left s,world'') -> (TestComplete $ ErrorResult name s (msgLog world''),(tests,Nothing))
+        (Right res,world'') -> 
             case res of
-                (Left s,_) -> (TestComplete $ ErrorResult name s (msgLog world'),(tests,Nothing))
+                (Left s,_) -> (TestComplete $ ErrorResult name s (msgLog world''),(tests,Nothing))
                 (Right (EvalComplete newState,Just val), exec') ->  (TestComplete checkedResult, (tests,Nothing))
-                    where checkedResult = checkResults (newState, val, glob $ scriptImage exec', world') unitTest
-                (Right (EvalIncomplete,_),_) -> (TestComplete $ Timeout name (msgLog world'),(tests,Nothing))
+                    where checkedResult = checkResults (newState, val, glob $ scriptImage exec', world'') unitTest
+                (Right (EvalIncomplete,_),_) -> (TestComplete $ Timeout name (msgLog world''),(tests,Nothing))
                 (Right (BrokeAt bp,_),exec') -> 
-                    (TestSuspended (ExecutionInfo file line frames),(unitTest:tests,Just (world',exec')))
+                    (TestSuspended (ExecutionInfo file line frames),(unitTest:tests,Just (world'',exec')))
                     where file = breakpointFile bp
                           line = breakpointLine bp
                           frames = frameInfo (scriptImage exec')
