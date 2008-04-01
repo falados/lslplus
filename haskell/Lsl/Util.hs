@@ -215,7 +215,7 @@ processLines term f =
           
 processLinesS state term f =
     do s <- getLine
-       hPutStrLn stderr s
+       --hPutStrLn stderr s
        when (term /= s) $ do
            let (newState,s') = f state (unescape s)
            putStrLn (escape s')

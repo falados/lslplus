@@ -617,8 +617,19 @@ validExpression (KeyLit _) _ _ _ = return LLKey
 validExpression (ListExpr es) fs vs ls = do
     mapM (\ e -> validListExprElement e fs vs ls) es
     return LLList
-validExpression (VecExpr _ _ _) _ _ _ = return LLVector
-validExpression (RotExpr _ _ _ _) _ _ _ = return LLRot
+validExpression (VecExpr xExpr yExpr zExpr) funcs vars locals = 
+    do  xt <- validCtxExpr xExpr funcs vars locals
+        yt <- validCtxExpr yExpr funcs vars locals
+        zt <- validCtxExpr zExpr funcs vars locals
+        when (not (all (`elem` [LLInteger,LLFloat]) [xt,yt,zt])) $ fail "invalid components for vector"
+        return LLVector
+validExpression (RotExpr xExpr yExpr zExpr sExpr) funcs vars locals = 
+    do  xt <- validCtxExpr xExpr funcs vars locals
+        yt <- validCtxExpr yExpr funcs vars locals
+        zt <- validCtxExpr zExpr funcs vars locals
+        st <- validCtxExpr sExpr funcs vars locals
+        when (not (all (`elem` [LLInteger,LLFloat]) [xt,yt,zt,st])) $ fail "invalid components for rotation"
+        return LLRot
 --validExpression x funcs vars locals = error ("what to do with " ++ (show x))
 
 validListExprElement (Ctx ctx e) funcs vars locals = do

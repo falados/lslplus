@@ -50,7 +50,7 @@ main1 = do
 main2 :: IO ()
 main2 = 
     do  input <- getLine
-        hPutStrLn stderr input
+        --hPutStrLn stderr input
         (src,unitTests) <- testExecutionDescriptionFromXML  (unescape input)
         (augLib,scripts) <- compile src
         let runStep state s =

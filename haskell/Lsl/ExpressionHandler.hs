@@ -23,7 +23,7 @@ validPrimitiveCtxExpr (Ctx _ expr) = validPrimitiveExpr expr
 validPrimitiveExpr (Get (Ctx _ name,All)) = findConstType name
 validPrimitiveExpr (Neg expr) = 
     do t <- validPrimitiveCtxExpr expr
-       when (t `notElem` [LLFloat,LLInteger]) $ fail "operator only valid for integer and float expressions"
+       when (t `notElem` [LLFloat,LLInteger,LLVector,LLRot]) $ fail "operator only valid for integer, float, vector, and rotation expressions"
        return t
 validPrimitiveExpr (Inv expr) =
     do t <- validPrimitiveCtxExpr expr
@@ -37,6 +37,19 @@ validPrimitiveExpr (IntLit i) = return LLInteger
 validPrimitiveExpr (FloatLit f) = return LLFloat
 validPrimitiveExpr (StringLit s) = return LLString
 validPrimitiveExpr (KeyLit k) = return LLKey
+validPrimitiveExpr (VecExpr x y z) = do
+     t0 <- validPrimitiveCtxExpr x
+     t1 <- validPrimitiveCtxExpr y
+     t2 <- validPrimitiveCtxExpr z
+     when (not (all (`elem` [LLInteger,LLFloat]) [t0,t1,t2])) $ fail "vector expression must contain only integer or float components"
+     return LLVector
+validPrimitiveExpr (RotExpr x y z s) = do
+     t0 <- validPrimitiveCtxExpr x
+     t1 <- validPrimitiveCtxExpr y
+     t2 <- validPrimitiveCtxExpr z
+     t3 <- validPrimitiveCtxExpr s
+     when (not (all (`elem` [LLInteger,LLFloat]) [t0,t1,t2,t3])) $ fail "vector expression must contain only integer or float components"
+     return LLRot
 validPrimitiveExpr (Add e0 e1) =
     do (t0,t1) <- validPrimEach e0 e1
        case (t0,t1) of
@@ -44,12 +57,52 @@ validPrimitiveExpr (Add e0 e1) =
            (LLFloat,LLInteger) -> return LLFloat
            (LLFloat,LLFloat) -> return LLFloat
            (LLInteger,LLInteger) -> return LLInteger
+           (LLVector,LLVector) -> return LLVector
+           (LLRot,LLRot) -> return LLVector
            (LLString,LLString) -> return LLString
            _ -> fail "incompatible operands"
-validPrimitiveExpr (Sub e0 e1) = validArithExpr e0 e1
-validPrimitiveExpr (Mul e0 e1) = validArithExpr e0 e1
-validPrimitiveExpr (Div e0 e1) = validArithExpr e0 e1
-validPrimitiveExpr (Mod e0 e1) = validIntegerExpr e0 e1
+validPrimitiveExpr (Sub e0 e1) = 
+    do (t0,t1) <- validPrimEach e0 e1
+       case (t0,t1) of
+           (LLInteger,LLFloat) -> return LLFloat
+           (LLInteger,LLInteger) -> return LLInteger
+           (LLFloat,LLInteger) -> return LLFloat
+           (LLFloat,LLFloat) -> return LLFloat
+           (LLVector,LLVector) -> return LLVector
+           (LLRot,LLRot) -> return LLRot
+           _ -> fail "incompatible operands"
+validPrimitiveExpr (Mul e0 e1) = 
+    do (t0,t1) <- validPrimEach e0 e1
+       case (t0,t1) of
+           (LLInteger,LLFloat) -> return LLFloat
+           (LLFloat,LLFloat) -> return LLFloat
+           (LLInteger,LLInteger) -> return LLInteger
+           (LLFloat,LLInteger) -> return LLFloat
+           (LLFloat,LLVector) -> return LLVector
+           (LLVector,LLFloat) -> return LLVector
+           (LLInteger,LLVector) -> return LLVector
+           (LLVector,LLInteger) -> return LLVector
+           (LLVector,LLRot) -> return LLVector
+           (LLRot,LLRot) -> return LLRot
+           _ -> fail "incompatible operands"
+validPrimitiveExpr (Div e0 e1) =
+    do (t0,t1) <- validPrimEach e0 e1
+       case (t0,t1) of
+           (LLInteger,LLInteger) -> return LLInteger
+           (LLInteger,LLFloat) -> return LLFloat
+           (LLFloat,LLInteger) -> return LLFloat
+           (LLFloat,LLFloat) -> return LLFloat
+           (LLVector,LLInteger) -> return LLVector
+           (LLVector,LLFloat) -> return LLVector
+           (LLVector,LLRot) -> return LLVector
+           (LLRot,LLRot) -> return LLRot
+           _ -> fail "incompatible operands"
+validPrimitiveExpr (Mod e0 e1) =
+    do (t0,t1) <- validPrimEach e0 e1
+       case (t0,t1) of
+           (LLInteger,LLInteger) -> return LLInteger
+           (LLVector,LLVector) -> return LLVector
+           _ -> fail "incompatible operands"
 validPrimitiveExpr (BAnd e0 e1) = validIntegerExpr e0 e1
 validPrimitiveExpr (BOr e0 e1) = validIntegerExpr e0 e1
 validPrimitiveExpr (Xor e0 e1) = validIntegerExpr e0 e1
@@ -73,15 +126,6 @@ validPrimEach e0 e1 =
 validIntegerExpr e0 e1 =
     do (t0,t1) <- validPrimEach e0 e1
        case (t0,t1) of
-           (LLInteger,LLInteger) -> return LLInteger
-           _ -> fail "incompatible operands"
-           
-validArithExpr e0 e1 =
-    do (t0,t1) <- validPrimEach e0 e1
-       case (t0,t1) of
-           (LLInteger,LLFloat) -> return LLFloat
-           (LLFloat,LLInteger) -> return LLFloat
-           (LLFloat,LLFloat) -> return LLFloat
            (LLInteger,LLInteger) -> return LLInteger
            _ -> fail "incompatible operands"
            
@@ -155,6 +199,17 @@ evalExpr (IntLit i) = return (IVal i)
 evalExpr (FloatLit f) = return (FVal f)
 evalExpr (StringLit s) = return (SVal s)
 evalExpr (KeyLit k) = return (KVal k)
+evalExpr (VecExpr xExpr yExpr zExpr) = 
+    do x <- evalCtxExpr xExpr
+       y <- evalCtxExpr yExpr
+       z <- evalCtxExpr zExpr
+       return (VVal (toFloat x) (toFloat y) (toFloat z))
+evalExpr (RotExpr xExpr yExpr zExpr sExpr) =
+    do x <- evalCtxExpr xExpr
+       y <- evalCtxExpr yExpr
+       z <- evalCtxExpr zExpr
+       s <- evalCtxExpr sExpr
+       return (RVal (toFloat x) (toFloat y) (toFloat z) (toFloat s))
 evalExpr (Add e0 e1) =
     do (v0,v1) <- evalEach e0 e1
        case (v0,v1) of
@@ -163,11 +218,50 @@ evalExpr (Add e0 e1) =
            (FVal f0,FVal f1) -> return $ FVal (f0 + f1)
            (IVal i0,IVal i1) -> return $ IVal (i0 + i1)
            (SVal s0,SVal s1) -> return $ SVal (s0 ++ s1)
+           (VVal x y z,VVal x' y' z') -> return $ VVal (x + x') (y + y') (z + z')
+           (RVal x1 y1 z1 s1,RVal x2 y2 z2 s2) -> return $ RVal (x1 + x2) (y1 + y2) (z1 + z2) (s1 + s2)
            _ -> fail "incompatible operands"
-evalExpr (Sub e0 e1) = evalArithExpr (-) (-) e0 e1
-evalExpr (Mul e0 e1) = evalArithExpr (*) (*) e0 e1
-evalExpr (Div e0 e1) = evalArithExpr (div) (/) e0 e1
-evalExpr (Mod e0 e1) = evalIntExpr (mod) e0 e1
+evalExpr (Sub e0 e1) = 
+    do (v0,v1) <- evalEach e0 e1
+       case (v0,v1) of
+           (IVal i1,IVal i2) -> return $ IVal (i1 - i2)
+           (IVal i1,FVal f2) -> return $ FVal (fromInt i1 - f2)
+           (FVal f1,IVal i2) -> return $ FVal (f1 - fromInt i2)
+           (FVal f1,FVal f2) -> return $ FVal (f1 - f2)
+           (VVal x1 y1 z1,VVal x2 y2 z2) -> return $ VVal (x1 - x2) (y1 - y2) (z1 - z2)
+           (RVal x1 y1 z1 s1,RVal x2 y2 z2 s2) -> return $ RVal (x1 - x2) (y1 - y2) (z1 - z2) (s1 - s2)
+           _ -> fail "incompatible operands"
+evalExpr (Mul e0 e1) =
+    do (v0,v1) <- evalEach e0 e1
+       case (v0,v1) of
+            (IVal i1,IVal i2) -> return $ IVal (i1*i2)
+            (IVal i1,FVal f2) -> return $ FVal (fromInt i1 * f2)
+            (FVal f1,IVal i2) -> return $ FVal (f1 * fromInt i2)
+            (FVal f1,FVal f2) -> return $ FVal (f1 * f2)
+            (v@(VVal _ _ _),IVal i) -> let f = fromInt i in return $ vecMulScalar v f
+            (v@(VVal _ _ _),FVal f) -> return $ vecMulScalar v f
+            ((VVal x1 y1 z1),(VVal x2 y2 z2)) -> return $ FVal $ x1 * x2 + y1 * y2 + z1 * z2
+            (v@(VVal _ _ _),r@(RVal _ _ _ _)) -> return $ rotMulVec r v
+            (r1@(RVal _ _ _ _),r2@(RVal _ _ _ _)) -> return $ rotMul r1 r2
+            _ -> fail "incompatible operands"
+evalExpr (Div e0 e1) =
+    do (v0,v1) <- evalEach e0 e1
+       case (v0,v1) of
+            (IVal i1,IVal i2) -> return $ IVal (i1 `div` i2) -- TODO: how does SL handle divide by zero?
+            (IVal i1,FVal f2) -> return $ FVal (fromInt i1 / f2)
+            (FVal f1,IVal i2) -> return $ FVal (f1 / fromInt i2)
+            (FVal f1,FVal f2) -> return $ FVal (f1/f2)
+            (v@(VVal _ _ _),IVal i) -> let f = 1.0 / fromInt i in return $ vecMulScalar v f
+            (v@(VVal _ _ _),FVal f) -> return $ vecMulScalar v f
+            (v@(VVal _ _ _),r@(RVal _ _ _ _)) -> return $ rotMulVec (invRot r) v
+            (r1@(RVal _ _ _ _),r2@(RVal _ _ _ _)) -> return $ rotMul r1 $ invRot r2
+            _ -> fail "incompatible operands"
+evalExpr (Mod e0 e1) = 
+    do (v0,v1) <- evalEach e0 e1
+       case (v0,v1) of
+           (IVal i1,IVal i2) -> return $ IVal (i1 `mod` i2)
+           (v1@(VVal _ _ _),v2@(VVal _ _ _)) ->return $ v1 `vcross` v2
+           _ -> fail "incompatible operands"
 evalExpr (BAnd e0 e1) = evalIntExpr (.&.) e0 e1
 evalExpr (BOr e0 e1) = evalIntExpr (.|.) e0 e1
 evalExpr (Xor e0 e1) = evalIntExpr xor e0 e1

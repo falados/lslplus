@@ -91,23 +91,17 @@ lslFloat = ElemAcceptor "lsl-float" (\ e -> do
                    Nothing -> fail "invalid content for lsl-float")
 
 lslVector :: Monad m => ElemAcceptor m LSLValue    
-lslVector = 
-    let f (Elem _ _ contents) = 
-            do (x,contents1) <- findElement xcomponent (elementsOnly contents)
-               (y,contents2) <- findElement ycomponent contents1
-               (z,[]) <- findElement zcomponent contents2
-               return $ VVal x y z
-    in ElemAcceptor "lsl-vector" f
-
+lslVector = ElemAcceptor "lsl-vector" (\ e -> do
+               s <- simple e
+               case evaluateExpression LLVector s of
+                   Just f -> return f
+                   Nothing -> fail "invalid content for lsl-vector")
 lslRotation :: Monad m => ElemAcceptor m LSLValue    
-lslRotation =
-    let f (Elem _ _ contents) = 
-          do (x,contents1) <- findElement xcomponent (elementsOnly contents)
-             (y,contents2) <- findElement ycomponent contents1
-             (z,contents3) <- findElement zcomponent contents2
-             (s,[]) <- findElement scomponent contents3
-             return $ RVal x y z s
-    in ElemAcceptor "lsl-rotation" f
+lslRotation = ElemAcceptor "lsl-rotation" (\ e -> do
+               s <- simple e
+               case evaluateExpression LLRot s of
+                   Just f -> return f
+                   Nothing -> fail "invalid content for lsl-rotation")
 
 lslList :: Monad m => ElemAcceptor m LSLValue    
 lslList =

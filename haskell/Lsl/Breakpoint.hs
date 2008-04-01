@@ -45,7 +45,7 @@ replaceBreakpoints bps bpm =
     foldl (flip addFixedBreakpoint) (bpm { fixedBreakpoints = M.empty }) bps
     
 checkBreakpoint bp bpm sm@(StepManager dynBreakpts) = 
-    case trace1 dynBreakpts of
+    case dynBreakpts of
         (NextStatement:frames) -> (True,bpm, StepManager (NoDynamicBreakpoint : frames))
         (NextStatementInFrame:frames) -> (True,bpm, StepManager (NoDynamicBreakpoint : frames))
         _ -> let (result,bpm') = hasFixedBreakpoint bp bpm in (result,bpm',sm)
