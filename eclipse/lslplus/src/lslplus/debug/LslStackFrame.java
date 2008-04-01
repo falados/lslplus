@@ -1,7 +1,5 @@
 package lslplus.debug;
 
-import lslplus.util.Util;
-
 import org.eclipse.debug.core.DebugException;
 import org.eclipse.debug.core.ILaunch;
 import org.eclipse.debug.core.model.IDebugTarget;
@@ -14,6 +12,7 @@ public class LslStackFrame implements IStackFrame{
     private static final IRegisterGroup[] EMPTY_REGISTER_GROUP =
         new IRegisterGroup[0];
 
+    private boolean top;
     private String name;
     private String file;
     private IThread thread;
@@ -26,12 +25,14 @@ public class LslStackFrame implements IStackFrame{
             IThread thread,
             IDebugTarget debugTarget,
             IVariable[] variables,
-            int line) {
+            int line,
+            boolean top) {
         this.name = name;
         this.thread = thread;
         this.file = file;
         this.variables = variables;
         this.line = line;
+        this.top = top;
     }
     
     public int getCharEnd() throws DebugException {
@@ -84,39 +85,36 @@ public class LslStackFrame implements IStackFrame{
     }
 
     public Object getAdapter(Class adapter) {
-        Util.log("lslStackFrame - asked to adapt to: " + adapter);
+        //Util.log("lslStackFrame - asked to adapt to: " + adapter);
         return null;
     }
 
     public boolean canStepInto() {
-        return !isStepping();
+        return top && isSuspended();
     }
 
     public boolean canStepOver() {
-        return !isStepping();
+        return top && isSuspended();
     }
 
     public boolean canStepReturn() {
-        return !isStepping();
+        return top && isSuspended();
     }
 
     public boolean isStepping() {
-        return stepping;
+        return !isSuspended();
     }
 
     public void stepInto() throws DebugException {
-        // TODO Auto-generated method stub
-        
+        thread.stepInto();
     }
 
     public void stepOver() throws DebugException {
-        // TODO Auto-generated method stub
-        
+        thread.stepOver();
     }
 
     public void stepReturn() throws DebugException {
-        // TODO Auto-generated method stub
-        
+        thread.stepReturn();
     }
 
     public boolean canResume() {

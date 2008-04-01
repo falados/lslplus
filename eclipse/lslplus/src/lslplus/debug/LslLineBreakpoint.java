@@ -17,6 +17,7 @@ public class LslLineBreakpoint extends LineBreakpoint {
 
     public static final String MARKER_ID = "lslplus.lslLineBreakpointMarker"; //$NON-NLS-1$
 
+    public LslLineBreakpoint() { }
     public LslLineBreakpoint(final IResource resource, final int line) throws DebugException {
         IWorkspaceRunnable wr= new IWorkspaceRunnable() {
             public void run(IProgressMonitor monitor) throws CoreException {

@@ -6,9 +6,13 @@ import lslplus.LslPlusPlugin;
 import lslplus.debug.LslLineBreakpoint;
 import lslplus.util.Util;
 
+import org.eclipse.core.resources.IMarker;
 import org.eclipse.core.resources.IResource;
+import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
-import org.eclipse.debug.core.DebugException;
+import org.eclipse.debug.core.DebugPlugin;
+import org.eclipse.debug.core.IBreakpointManager;
+import org.eclipse.debug.core.model.IBreakpoint;
 import org.eclipse.jface.action.IAction;
 import org.eclipse.jface.action.IMenuManager;
 import org.eclipse.jface.text.BadLocationException;
@@ -189,15 +193,32 @@ public class LslPlusEditor extends TextEditor {
                 IResource resource = (IResource) getEditorInput().getAdapter(IResource.class);
                 
                 if (resource != null) {
+                    Integer line = new Integer(getVerticalRuler().toDocumentLineNumber(e.y) + 1);
                     try {
-                        new LslLineBreakpoint(resource, 
-                                getVerticalRuler().toDocumentLineNumber(e.y) + 1);
-                    } catch (DebugException e1) {
-                        Util.log(e1, e1.getLocalizedMessage());
+                        IMarker m = null;
+                        IMarker[] markers = resource.findMarkers(LslLineBreakpoint.MARKER_ID, true, 0);
+                        for (int i = 0; i < markers.length; i++) {
+                            if (line.equals(markers[i].getAttribute(IMarker.LINE_NUMBER))) {
+                                m = markers[i];
+                            }
+                        }
+                        if (m == null) {
+                            new LslLineBreakpoint(resource,line.intValue());
+                        } else {
+                            IBreakpoint bp = breakpointManager().getBreakpoint(m);
+                            breakpointManager().removeBreakpoint(bp, true);
+                        }
+                    } catch (CoreException e1) {
+                        Util.log(e1,e1.getLocalizedMessage());
                     }
+                        
                 } else {
                     Util.log("resource is null, can't create breakpoint");
                 }
+            }
+
+            private IBreakpointManager breakpointManager() {
+                return DebugPlugin.getDefault().getBreakpointManager();
             }
 
             public void mouseDown(MouseEvent e) {

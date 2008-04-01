@@ -271,5 +271,20 @@
             value="true">
       </persistent>
    </extension>
+   <extension
+         point="org.eclipse.debug.core.breakpoints">
+      <breakpoint
+            class="lslplus.debug.LslLineBreakpoint"
+            id="lslplus.LslLineBreakpoint"
+            markerType="lslplus.lslLineBreakpointMarker">
+      </breakpoint>
+   </extension>
+   <extension
+         point="org.eclipse.debug.ui.debugModelPresentations">
+      <debugModelPresentation
+            class="lslplus.debug.LslDebugModelPresentation"
+            id="lslplus">
+      </debugModelPresentation>
+   </extension>
 
 </plugin>

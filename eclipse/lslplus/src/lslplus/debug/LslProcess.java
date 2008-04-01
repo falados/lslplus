@@ -57,9 +57,10 @@ public class LslProcess extends Thread implements IProcess {
 		this.reader1 = new StringReader(""); //$NON-NLS-1$
 		this.reader2 = new InputStreamReader(p.getErrorStream());
 		this.launch = launch;
+		
 //		inputMonitor = new LineReaderMonitor(new BufferedReader(new InputStreamReader(p.getInputStream())), testManager);
 //		inputMonitor.start();
-		interactor = new LslTestInteractor(testManager,descriptor, p.getInputStream(), p.getOutputStream());
+		interactor = new LslTestInteractor(launch.getLaunchMode(),testManager,descriptor, p.getInputStream(), p.getOutputStream());
 //		interactor.start();
 //		processMonitor.start();
 	}

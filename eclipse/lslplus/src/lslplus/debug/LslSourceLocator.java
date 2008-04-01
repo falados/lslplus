@@ -18,6 +18,7 @@ public class LslSourceLocator implements ISourceLocator, ISourcePresentation {
         if (stackFrame instanceof LslStackFrame) {
             LslStackFrame frame = (LslStackFrame) stackFrame;
             
+            if (frame.getFile() == null) return null;
             Path p = new Path(frame.getFile());
             
             IWorkspace w = ResourcesPlugin.getWorkspace();

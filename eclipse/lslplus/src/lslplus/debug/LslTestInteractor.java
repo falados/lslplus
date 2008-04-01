@@ -9,6 +9,20 @@ import java.io.PrintStream;
 import java.util.Iterator;
 import java.util.LinkedList;
 
+import org.eclipse.core.resources.IFile;
+import org.eclipse.core.resources.IMarker;
+import org.eclipse.core.resources.IResource;
+import org.eclipse.core.runtime.CoreException;
+import org.eclipse.core.runtime.IPath;
+import org.eclipse.debug.core.DebugPlugin;
+import org.eclipse.debug.core.IBreakpointManager;
+import org.eclipse.debug.core.ILaunchManager;
+import org.eclipse.debug.core.model.IBreakpoint;
+
+import com.thoughtworks.xstream.XStream;
+import com.thoughtworks.xstream.io.xml.DomDriver;
+
+import lslplus.LslPlusPlugin;
 import lslplus.lsltest.TestEvents;
 import lslplus.lsltest.TestManager;
 import lslplus.lsltest.TestEvents.AllCompleteEvent;
@@ -21,6 +35,96 @@ import lslplus.util.Util;
  * Interact with a running test session.
  */
 public class LslTestInteractor implements Runnable, Interactor {
+    private static class BreakpointData {
+        private static XStream xstream = new XStream(new DomDriver());
+        public String file;
+        public int line;
+        public BreakpointData(String file, int line) {
+            this.file = file;
+            this.line = line;
+        }
+        
+        public static void configureXStream(XStream xstream) {
+            xstream.alias("breakpoint", BreakpointData.class); //$NON-NLS-1$
+        }
+        
+        static {
+            configureXStream(xstream);
+        }
+    }
+
+    private abstract static class ExecCommand {
+        protected BreakpointData[] breakpoints = null;
+        protected ExecCommand(BreakpointData[] breakpoints) {
+            this.breakpoints = breakpoints;
+        }
+    }
+    
+    private static class ContinueCommand extends ExecCommand {
+        private static XStream xstream = new XStream(new DomDriver());
+        public ContinueCommand(BreakpointData[] breakpoints) {
+            super(breakpoints);
+        }
+        
+        static {
+            xstream.alias("exec-continue", ContinueCommand.class); //$NON-NLS-1$
+            BreakpointData.configureXStream(xstream);
+        }
+        
+        public static String toXML(ContinueCommand cmd) {
+            return xstream.toXML(cmd);
+        }
+    }
+    
+    private static class StepCommand extends ExecCommand {
+        private static XStream xstream = new XStream(new DomDriver());
+        public StepCommand(BreakpointData[] breakpoints) {
+            super(breakpoints);
+        }
+        
+        static {
+            xstream.alias("exec-step", StepCommand.class); //$NON-NLS-1$
+            BreakpointData.configureXStream(xstream);
+        }
+        
+        public static String toXML(StepCommand cmd) {
+            return xstream.toXML(cmd);
+        }
+    }
+    
+    private static class StepOverCommand extends ExecCommand {
+        private static XStream xstream = new XStream(new DomDriver());
+        public StepOverCommand(BreakpointData[] breakpoints) {
+            super(breakpoints);
+        }
+        
+        static {
+            xstream.alias("exec-step-over", StepOverCommand.class); //$NON-NLS-1$
+            BreakpointData.configureXStream(xstream);
+        }
+        
+        public static String toXML(StepOverCommand cmd) {
+            return xstream.toXML(cmd);
+        }
+    }
+    
+    private static class StepOutCommand extends ExecCommand {
+        private static XStream xstream = new XStream(new DomDriver());
+        public StepOutCommand(BreakpointData[] breakpoints) {
+            super(breakpoints);
+        }
+        
+        static {
+            xstream.alias("exec-step-out", StepOutCommand.class); //$NON-NLS-1$
+            BreakpointData.configureXStream(xstream);
+        }
+        
+        public static String toXML(StepOutCommand cmd) {
+            return xstream.toXML(cmd);
+        }
+    }
+    
+    
     private LinkedList listeners = new LinkedList();
     private BufferedReader reader;
     private PrintStream writer;
@@ -28,31 +132,107 @@ public class LslTestInteractor implements Runnable, Interactor {
     private TestManager manager;
     private Thread thread;
     private boolean done = false;
-    public LslTestInteractor(TestManager manager, String testDescriptor, InputStream in, 
+    private boolean debugMode;
+    public LslTestInteractor(String launchMode, TestManager manager, String testDescriptor, InputStream in, 
             OutputStream out) {
         reader = new BufferedReader(new InputStreamReader(in));
         writer = new PrintStream(out);
         
         this.testDescriptor = testDescriptor;
         this.manager =  manager;
+        this.debugMode = ILaunchManager.DEBUG_MODE.equals(launchMode);
     }
     
     public void start() {
         if (done || thread != null && thread.isAlive()) return;
-        writer.println(Util.URIEncode(testDescriptor));
-        writer.flush();
-        writer.println(Util.URIEncode("<exec-continue/>")); //$NON-NLS-1$
-        writer.flush();
+        writeOut(testDescriptor);
+        writeOut(continueText());
+        thread = new Thread(this);
+        thread.start();
+    }
+ 
+    private String continueText() {
+        BreakpointData[] bpData = null;
+        if (debugMode) {
+            bpData = createBreakpointData();
+        }
+        ContinueCommand cmd = new ContinueCommand(bpData);
+        return ContinueCommand.toXML(cmd);
+    }
+    
+    private String stepText() {
+        BreakpointData[] bpData = null;
+        if (debugMode) {
+            bpData = createBreakpointData();
+        }
+        StepCommand cmd = new StepCommand(bpData);
+        return StepCommand.toXML(cmd);
+    }
+
+    private String stepOverText() {
+        BreakpointData[] bpData = null;
+        if (debugMode) {
+            bpData = createBreakpointData();
+        }
+        StepOverCommand cmd = new StepOverCommand(bpData);
+        return StepOverCommand.toXML(cmd);
+    }
+
+    private String stepOutText() {
+        BreakpointData[] bpData = null;
+        if (debugMode) {
+            bpData = createBreakpointData();
+        }
+        StepOutCommand cmd = new StepOutCommand(bpData);
+        return StepOutCommand.toXML(cmd);
+    }
+
+    private BreakpointData[] createBreakpointData() {
+        IBreakpointManager bpm = getBreakpointManager();
+        IBreakpoint[] breakpoints = bpm.getBreakpoints(LslDebugTarget.LSLPLUS);
+        LinkedList list = new LinkedList();
+        for (int i = 0; i < breakpoints.length; i++) {
+            try {
+                if (breakpoints[i] instanceof LslLineBreakpoint) {
+                    LslLineBreakpoint bp = (LslLineBreakpoint) breakpoints[i];
+                    int line = bp.getLineNumber();
+                    IMarker marker = bp.getMarker();
+                    IResource resource = marker.getResource();
+                    IFile file = (IFile) resource.getAdapter(IFile.class);
+                    if (file == null)
+                        continue;
+                    if (!marker.getAttribute(IBreakpoint.ENABLED,false)) continue;
+                    IPath fullPath = file.getLocation();
+                    list.add(new BreakpointData(fullPath.toOSString(), line));
+                }
+            } catch (CoreException e) {
+                Util.log(e, e.getLocalizedMessage());
+            }
+        }
+        return (BreakpointData[]) list.toArray(new BreakpointData[list.size()]);
+    }
+    
+    public void continueExecution() {
+        sendCommand(continueText());
+    }
+
+    private void sendCommand(String commandText) {
+        if (done || thread != null && thread.isAlive()) return;
+        writeOut(commandText);
         thread = new Thread(this);
         thread.start();
     }
     
-    public void continueExecution() {
-        if (done || thread != null && thread.isAlive()) return;
-        writer.println("<exec-continue/>");
-        writer.flush();
-        thread = new Thread(this);
-        thread.start();
+    public void step() {
+        sendCommand(stepText());
+    }
+    
+    public void stepOver() {
+        sendCommand(stepOverText());
+    }
+    
+    public void stepOut() {
+        sendCommand(stepOutText());
     }
     
     public void addListener(InteractorListener listener) { listeners.add(listener); }
@@ -74,35 +254,27 @@ public class LslTestInteractor implements Runnable, Interactor {
         }
     }
     public void run() {
-//        writer.println(Util.URIEncode(testDescriptor));
-//        writer.flush();
-//        writer.println(Util.URIEncode("<exec-continue/>")); //$NON-NLS-1$
-//        writer.flush();
         String line = null;
         
         try {
             while ((line = reader.readLine()) != null) {
-                Util.log("read:" + line);
+                if (LslPlusPlugin.DEBUG) Util.log("read:" + Util.URIDecode(line)); //$NON-NLS-1$
                 TestEvent event = TestEvents.fromXML(Util.URIDecode(line));
                 
                 // kludge for the mo'
                 if (event instanceof TestCompleteEvent) {
                     manager.postTestResult(((TestCompleteEvent)event).getTestResult());
-                    Util.log("writing: " + Util.URIEncode("<exec-continue/>"));
-                    writer.println("<exec-continue/>");
-                    writer.flush();
+                    String cmd = continueText();
+                    if (LslPlusPlugin.DEBUG) Util.log("writing: " + cmd); //$NON-NLS-1$
+                    writeOut(cmd);
                 } else if (event instanceof AllCompleteEvent) {
-                    writer.println("quit");
-                    writer.flush();
-                    writer.close();
+                    endSession();
                     fireComplete();
                     // TODO: this is a place where a debug event would happen
                     return;
                 } else if (event instanceof TestSuspendedEvent) {
                     // TODO: this is where we'd extract the debug info...
-                    Util.log("hit a breakpoint... suspending!");
-//                    writer.println("<exec-continue/>");
-//                    writer.flush();
+                    if (LslPlusPlugin.DEBUG) Util.log("hit a breakpoint... suspending!"); //$NON-NLS-1$
                     fireSuspended(((TestSuspendedEvent)event).getScriptState());
                     return;
                 }
@@ -110,5 +282,19 @@ public class LslTestInteractor implements Runnable, Interactor {
         } catch (IOException e) {
             Util.log(e, e.getLocalizedMessage());
         }
+    }
+    
+    private DebugPlugin getDebugPlugin() { return DebugPlugin.getDefault(); }
+    private IBreakpointManager getBreakpointManager() { return getDebugPlugin().getBreakpointManager(); }
+
+    private void writeOut(String cmd) {
+        writer.println(Util.URIEncode(cmd));
+        writer.flush();
+    }
+    
+    private void endSession() {
+        writer.println("quit"); //$NON-NLS-1$
+        writer.flush();
+        writer.close();
     }
 }

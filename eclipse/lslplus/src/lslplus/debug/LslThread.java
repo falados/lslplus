@@ -79,12 +79,10 @@ public class LslThread implements IThread, InteractorListener {
     }
 
     public boolean canResume() {
-        // TODO Auto-generated method stub
         return active && suspended;
     }
 
     public boolean canSuspend() {
-        // TODO Auto-generated method stub
         return active && !suspended;
     }
 
@@ -93,6 +91,7 @@ public class LslThread implements IThread, InteractorListener {
     }
 
     public void resume() throws DebugException {
+        doResume();
         interactor.continueExecution();
     }
 
@@ -118,18 +117,25 @@ public class LslThread implements IThread, InteractorListener {
     }
 
     public void stepInto() throws DebugException {
-        // TODO Auto-generated method stub
+        doResume();
+        interactor.step();
+    }
 
+    private void doResume() {
+        suspended = false;
+        debugPlugin().fireDebugEventSet(new DebugEvent[] {
+                new DebugEvent(this, DebugEvent.RESUME, DebugEvent.BREAKPOINT)
+        });
     }
 
     public void stepOver() throws DebugException {
-        // TODO Auto-generated method stub
-
+        doResume();
+        interactor.stepOver();
     }
 
     public void stepReturn() throws DebugException {
-        // TODO Auto-generated method stub
-
+        doResume();
+        interactor.stepOut();
     }
 
     public boolean canTerminate() {
@@ -173,7 +179,7 @@ public class LslThread implements IThread, InteractorListener {
                         b.getVal().toString(), this.target);
             }
             this.stackFrames[i] = new LslStackFrame(frame.getName(), frame.getFile(),
-                    this, this.getDebugTarget(), variables, line);
+                    this, this.getDebugTarget(), variables, line, i == 0);
         }
         
         debugPlugin().fireDebugEventSet(new DebugEvent[] {
