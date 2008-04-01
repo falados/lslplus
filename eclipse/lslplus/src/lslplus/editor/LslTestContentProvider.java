@@ -820,7 +820,7 @@ public class LslTestContentProvider implements ITreeContentProvider {
 
         public LslExpressionNode(String name, Node parent, Object value, Class c, boolean clearable,
                 ParentSetter setter) {
-            super(name, parent, value, LslFloat.class, clearable, setter);
+            super(name, parent, value, c, clearable, setter);
         }
 
         public Node[] getChildren() {
