@@ -224,7 +224,7 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 	private Summary summary;
 
 	public LslProjectNature() {
-		Util.log("creating project nature"); //$NON-NLS-1$
+		if (LslPlusPlugin.DEBUG) Util.log("creating project nature"); //$NON-NLS-1$
 		ResourcesPlugin.getWorkspace().addResourceChangeListener(this);
 	}
 	

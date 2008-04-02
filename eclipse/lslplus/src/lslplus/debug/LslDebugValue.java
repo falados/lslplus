@@ -1,7 +1,5 @@
 package lslplus.debug;
 
-import lslplus.util.Util;
-
 import org.eclipse.debug.core.DebugException;
 import org.eclipse.debug.core.ILaunch;
 import org.eclipse.debug.core.model.IDebugTarget;
@@ -53,7 +51,6 @@ public class LslDebugValue implements IValue {
     }
 
     public Object getAdapter(Class adapter) {
-        Util.log("asked to adapt: " + adapter);
         return null;
     }
 

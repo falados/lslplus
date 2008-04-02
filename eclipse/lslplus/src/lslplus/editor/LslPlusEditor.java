@@ -213,7 +213,7 @@ public class LslPlusEditor extends TextEditor {
                     }
                         
                 } else {
-                    Util.log("resource is null, can't create breakpoint");
+                    if (LslPlusPlugin.DEBUG) Util.log("resource is null, can't create breakpoint");
                 }
             }
 

@@ -58,7 +58,7 @@ public class LslPlusPlugin extends AbstractUIPlugin {
         public String msg;
     }
     
-    public static final boolean DEBUG = true;
+    public static final boolean DEBUG = false;
 
     private static LslPlusPlugin instance;
 

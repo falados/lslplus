@@ -127,7 +127,7 @@ public class TestLaunchDelegate implements ILaunchConfigurationDelegate {
 		String sourceDescriptor = nature.projectSourceList();
 		String suiteDescriptor = suite.toXml();
 		String testDescriptor = "<test-descriptor>" + sourceDescriptor + suiteDescriptor + "</test-descriptor>";  //$NON-NLS-1$//$NON-NLS-2$
-		Util.log(testDescriptor);
+		if (LslPlusPlugin.DEBUG) Util.log(testDescriptor);
 		TestManager testManager = LslPlusPlugin.getDefault().getTestManager();
 		testManager.testLaunched(configuration, launch, suite.getTests().length);
 		LslProcess p = // new LslProcess(LslPlusPlugin.runExecutable(UNIT_TESTER_EXE, testDescriptor, false), launch, testManager);

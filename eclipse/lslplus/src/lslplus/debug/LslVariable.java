@@ -1,7 +1,6 @@
 package lslplus.debug;
 
 import lslplus.LslPlusPlugin;
-import lslplus.util.Util;
 
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
@@ -54,7 +53,6 @@ public class LslVariable implements IVariable {
     }
 
     public Object getAdapter(Class adapter) {
-        Util.log("LslVariable asked to adapt: " + adapter);
         return null;
     }
 
