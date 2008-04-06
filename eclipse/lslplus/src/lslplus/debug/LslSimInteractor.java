@@ -10,6 +10,12 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 
+import lslplus.LslPlusPlugin;
+import lslplus.sim.SimStatuses;
+import lslplus.sim.SimStatuses.SimInfo;
+import lslplus.sim.SimStatuses.SimStatus;
+import lslplus.util.Util;
+
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IMarker;
 import org.eclipse.core.resources.IResource;
@@ -23,19 +29,10 @@ import org.eclipse.debug.core.model.IBreakpoint;
 import com.thoughtworks.xstream.XStream;
 import com.thoughtworks.xstream.io.xml.DomDriver;
 
-import lslplus.LslPlusPlugin;
-import lslplus.lsltest.TestEvents;
-import lslplus.lsltest.TestManager;
-import lslplus.lsltest.TestEvents.AllCompleteEvent;
-import lslplus.lsltest.TestEvents.TestCompleteEvent;
-import lslplus.lsltest.TestEvents.TestEvent;
-import lslplus.lsltest.TestEvents.TestSuspendedEvent;
-import lslplus.util.Util;
-
 /**
  * Interact with a running test session.
  */
-public class LslTestInteractor implements Runnable, Interactor {
+public class LslSimInteractor implements Runnable, Interactor {
     private static class BreakpointData {
         private static XStream xstream = new XStream(new DomDriver());
         public String file;
@@ -54,21 +51,21 @@ public class LslTestInteractor implements Runnable, Interactor {
         }
     }
 
-    private abstract static class ExecCommand {
+    private abstract static class SimCommand {
         protected BreakpointData[] breakpoints = null;
-        protected ExecCommand(BreakpointData[] breakpoints) {
+        protected SimCommand(BreakpointData[] breakpoints) {
             this.breakpoints = breakpoints;
         }
     }
     
-    private static class ContinueCommand extends ExecCommand {
+    private static class ContinueCommand extends SimCommand {
         private static XStream xstream = new XStream(new DomDriver());
         public ContinueCommand(BreakpointData[] breakpoints) {
             super(breakpoints);
         }
         
         static {
-            xstream.alias("exec-continue", ContinueCommand.class); //$NON-NLS-1$
+            xstream.alias("sim-continue", ContinueCommand.class); //$NON-NLS-1$
             BreakpointData.configureXStream(xstream);
         }
         
@@ -77,14 +74,14 @@ public class LslTestInteractor implements Runnable, Interactor {
         }
     }
     
-    private static class StepCommand extends ExecCommand {
+    private static class StepCommand extends SimCommand {
         private static XStream xstream = new XStream(new DomDriver());
         public StepCommand(BreakpointData[] breakpoints) {
             super(breakpoints);
         }
         
         static {
-            xstream.alias("exec-step", StepCommand.class); //$NON-NLS-1$
+            xstream.alias("sim-step", StepCommand.class); //$NON-NLS-1$
             BreakpointData.configureXStream(xstream);
         }
         
@@ -93,14 +90,14 @@ public class LslTestInteractor implements Runnable, Interactor {
         }
     }
     
-    private static class StepOverCommand extends ExecCommand {
+    private static class StepOverCommand extends SimCommand {
         private static XStream xstream = new XStream(new DomDriver());
         public StepOverCommand(BreakpointData[] breakpoints) {
             super(breakpoints);
         }
         
         static {
-            xstream.alias("exec-step-over", StepOverCommand.class); //$NON-NLS-1$
+            xstream.alias("sim-step-over", StepOverCommand.class); //$NON-NLS-1$
             BreakpointData.configureXStream(xstream);
         }
         
@@ -109,7 +106,7 @@ public class LslTestInteractor implements Runnable, Interactor {
         }
     }
     
-    private static class StepOutCommand extends ExecCommand {
+    private static class StepOutCommand extends SimCommand {
         private static XStream xstream = new XStream(new DomDriver());
         public StepOutCommand(BreakpointData[] breakpoints) {
             super(breakpoints);
@@ -129,24 +126,22 @@ public class LslTestInteractor implements Runnable, Interactor {
     private HashSet listeners = new HashSet();
     private BufferedReader reader;
     private PrintStream writer;
-    private String testDescriptor;
-    private TestManager manager;
+    private String simDescriptor;
     private Thread thread;
     private boolean done = false;
     private boolean debugMode;
-    public LslTestInteractor(String launchMode, TestManager manager, String testDescriptor, InputStream in, 
-            OutputStream out) {
+    
+    public LslSimInteractor(String launchMode, String simDescriptor, InputStream in, OutputStream out) {
         reader = new BufferedReader(new InputStreamReader(in));
         writer = new PrintStream(out);
         
-        this.testDescriptor = testDescriptor;
-        this.manager =  manager;
+        this.simDescriptor = simDescriptor;
         this.debugMode = ILaunchManager.DEBUG_MODE.equals(launchMode);
     }
     
     public void start() {
         if (done || thread != null && thread.isAlive()) return;
-        writeOut(testDescriptor);
+        writeOut(simDescriptor);
         writeOut(continueText());
         thread = new Thread(this);
         thread.start();
@@ -259,31 +254,27 @@ public class LslTestInteractor implements Runnable, Interactor {
         
         try {
             while ((line = reader.readLine()) != null) {
-                if (LslPlusPlugin.DEBUG) Util.log("read:" + Util.URIDecode(line)); //$NON-NLS-1$
-                TestEvent event = TestEvents.fromXML(Util.URIDecode(line));
+                //if (LslPlusPlugin.DEBUG) Util.log("read:" + Util.URIDecode(line)); //$NON-NLS-1$
+                SimStatus status = SimStatuses.fromXML(Util.URIDecode(line));
                 
                 // kludge for the mo'
-                if (event instanceof TestCompleteEvent) {
-                    manager.postTestResult(((TestCompleteEvent)event).getTestResult());
+                if (status instanceof SimInfo) {
                     String cmd = continueText();
-                    if (LslPlusPlugin.DEBUG) Util.log("writing: " + cmd); //$NON-NLS-1$
+                    SimInfo info = (SimInfo)status;
+                    LslPlusPlugin.getDefault().getSimManager().newLogMessages(info.getMessages());
+                    //if (LslPlusPlugin.DEBUG) Util.log("writing: " + cmd); //$NON-NLS-1$
                     writeOut(cmd);
-                } else if (event instanceof AllCompleteEvent) {
-                    endSession();
-                    fireComplete();
-                    // TODO: this is a place where a debug event would happen
-                    return;
-                } else if (event instanceof TestSuspendedEvent) {
-                    // TODO: this is where we'd extract the debug info...
-                    if (LslPlusPlugin.DEBUG) Util.log("hit a breakpoint... suspending!"); //$NON-NLS-1$
-                    fireSuspended(((TestSuspendedEvent)event).getScriptState());
-                    return;
+                } else {
+                    Util.error("Unrecognized status: " + status);
                 }
             }
         } catch (IOException e) {
             Util.log(e, e.getLocalizedMessage());
         } catch (RuntimeException e) {
             Util.log(e, e.getLocalizedMessage());
+            if (line != null) {
+                Util.log("input was: " + Util.URIDecode(line));
+            }
             try {
                 endSession();
             } catch (Exception e1) {

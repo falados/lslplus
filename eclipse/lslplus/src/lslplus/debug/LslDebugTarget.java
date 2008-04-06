@@ -16,7 +16,7 @@ import org.eclipse.debug.core.model.IMemoryBlock;
 import org.eclipse.debug.core.model.IProcess;
 import org.eclipse.debug.core.model.IThread;
 
-public class LslDebugTarget implements IDebugTarget {
+public class LslDebugTarget implements IDebugTarget, IProcessListener {
     public static final String LSLPLUS = "lslplus"; //$NON-NLS-1$
     private String name;
     private LslProcess process;
@@ -32,6 +32,7 @@ public class LslDebugTarget implements IDebugTarget {
         thread = new LslThread(this);
         threads = new LslThread[] { thread };
         process.setThread(thread);
+        process.addListener(this);
     }
 
     public String getName() throws DebugException {
@@ -156,6 +157,11 @@ public class LslDebugTarget implements IDebugTarget {
             return getLaunch();
         }
         return null;
+    }
+
+    public void processTerminated(LslProcess p) {
+        setTerminated();
+        p.removeListener(this);
     }
 
 }

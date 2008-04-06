@@ -1,5 +1,6 @@
 package lslplus;
 
+import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.runtime.IAdapterFactory;
 
@@ -16,13 +17,28 @@ public class LslPlusAdapterFactory implements IAdapterFactory {
 		    adapterType == IResource.class) {
 			LslPlusElement e = (LslPlusElement) adaptableObject;
 			return e.getResource();
+		} else if (adaptableObject instanceof LslPlusElement &&
+		        LslPlusScript.class.equals(adapterType)) {
+		    LslPlusElement element = (LslPlusElement)adaptableObject;
+		    if (element.isScript()) {
+		        return new LslPlusScript((IFile)element.getResource());
+		    }
+		} else if (adaptableObject instanceof LslPlusScript &&
+		           IResource.class.equals(adapterType)) {
+		    
+		    return ((LslPlusScript)adaptableObject).getResource();
+		} else if (adaptableObject instanceof LslPlusScript &&
+		           LslPlusElement.class.equals(adapterType)) {
+		    return new LslPlusScript((IFile)((LslPlusScript)adaptableObject).getResource());
 		}
 		return null;
 	}
 
 	public Class[] getAdapterList() {
 		return new Class[] {
-				IResource.class
+				IResource.class,
+				LslPlusElement.class,
+				LslPlusScript.class
 		};
 	}
 

@@ -58,7 +58,7 @@ public class LslPlusPlugin extends AbstractUIPlugin {
         public String msg;
     }
     
-    public static final boolean DEBUG = false;
+    public static final boolean DEBUG = true;
 
     private static LslPlusPlugin instance;
 
@@ -220,12 +220,15 @@ public class LslPlusPlugin extends AbstractUIPlugin {
 
     private TestManager testManager = null;
 
+    private SimManager simManager = null;
+
     /**
      * Creates a new plug-in instance.
      */
     public LslPlusPlugin() {
         instance = this;
         testManager = new TestManager();
+        simManager  = new SimManager();
     }
 
     private LslMetaData buildMetaData() {
@@ -333,6 +336,9 @@ public class LslPlusPlugin extends AbstractUIPlugin {
     
     public void setErrorDecorator(ErrorDecorator errorDecorator) {
         this.fErrorDecorator = errorDecorator;
+    }
+    public SimManager getSimManager() {
+        return simManager;
     }
 
 }

@@ -168,7 +168,7 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 				IFile f = (IFile) resource;
 				IPath p = f.getLocation();
 				IPath pp = f.getProjectRelativePath();
-				String name = pp.toString().replace("/", ".");  //$NON-NLS-1$//$NON-NLS-2$
+				String name = resourceToLslPlusName(resource);
 				
 				if (element.isModule()) {
 				    moduleNameToPath.put(name,pp.toString());
@@ -447,5 +447,9 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 
     public synchronized NameTypePair[] getGlobalVariables(String fileName) {
         return (NameTypePair[]) globalVariables.get(fileName);
+    }
+    
+    public static String resourceToLslPlusName(IResource r) {
+        return r.getProjectRelativePath().toString().replace('/', '.');
     }
 }

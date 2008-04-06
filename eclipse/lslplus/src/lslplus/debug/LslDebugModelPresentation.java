@@ -1,6 +1,6 @@
 package lslplus.debug;
 
-import java.util.LinkedList;
+import java.util.HashSet;
 
 import org.eclipse.debug.core.model.IValue;
 import org.eclipse.debug.ui.IDebugModelPresentation;
@@ -12,7 +12,7 @@ import org.eclipse.ui.IEditorInput;
 
 public class LslDebugModelPresentation implements IDebugModelPresentation {
     private ISourcePresentation presentation = new LslSourceLocator();
-    private LinkedList listeners = new LinkedList();
+    private HashSet listeners = new HashSet();
     public void computeDetail(IValue value, IValueDetailListener listener) {
         listener.detailComputed(value, null);
     }

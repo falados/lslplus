@@ -7,12 +7,11 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.io.StringReader;
+import java.util.HashSet;
 
 import lslplus.LslPlusPlugin;
 import lslplus.launching.Messages;
-import lslplus.launching.TestLaunchDelegate.LineReaderMonitor;
-import lslplus.launching.TestLaunchDelegate.StreamMonitor;
-import lslplus.lsltest.TestManager;
+import lslplus.util.Util;
 
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Platform;
@@ -25,50 +24,55 @@ import org.eclipse.debug.core.model.IProcess;
 import org.eclipse.debug.core.model.IStreamMonitor;
 import org.eclipse.debug.core.model.IStreamsProxy;
 
-public class LslProcess extends Thread implements IProcess {
-	private Reader reader1;
-	private Reader reader2;
-	private ILaunch launch;
-	private Thread processMonitor;
-	private IStreamsProxy proxy = null;
-	private Process p = null;
+public abstract class LslProcess extends Thread implements IProcess {
+	protected Reader reader1;
+	protected Reader reader2;
+	protected ILaunch launch;
+	protected Thread processMonitor;
+	protected IStreamsProxy proxy = null;
+	protected Process p = null;
     private boolean terminated = false;
-    private LineReaderMonitor inputMonitor;
-    private LslTestInteractor interactor;
-	public LslProcess(Process p, String descriptor, ILaunch launch, TestManager testManager) {
-	    this.p = p;
-	    processMonitor = new Thread() {
+    protected Interactor interactor;
+    private HashSet listeners = new HashSet();
+    protected LslThread thread;
+    protected LslProcess() { }
+    
+    protected LslProcess(ILaunch launch) {
+        this.launch = launch;
+    }
+	
+    protected Thread createProcessMonitor() {
+        return new Thread() {
             public void run() {
                 
                 try {
                     LslProcess.this.p.waitFor();
-                    synchronized (LslProcess.this) {
-                        terminated = true;
-                    }
-                    DebugPlugin.getDefault().fireDebugEventSet(new DebugEvent[]{new DebugEvent(LslProcess.this, DebugEvent.TERMINATE)});
+                    fireTerminated();
                 } catch (InterruptedException e) {
                     LslProcess.this.p.destroy();
-                    synchronized (LslProcess.this) { terminated = true; }
-                    DebugPlugin.getDefault().fireDebugEventSet(new DebugEvent[]{new DebugEvent(LslProcess.this, DebugEvent.TERMINATE)});
+                    fireTerminated();
+                } catch (Exception e) {
+                    Util.log(e,e.getLocalizedMessage());
+                    fireTerminated();
                 }
             }
 	    };
-
-		this.reader1 = new StringReader(""); //$NON-NLS-1$
-		this.reader2 = new InputStreamReader(p.getErrorStream());
-		this.launch = launch;
-		
-//		inputMonitor = new LineReaderMonitor(new BufferedReader(new InputStreamReader(p.getInputStream())), testManager);
-//		inputMonitor.start();
-		interactor = new LslTestInteractor(launch.getLaunchMode(),testManager,descriptor, p.getInputStream(), p.getOutputStream());
-//		interactor.start();
-//		processMonitor.start();
-	}
+    }
 
 	public void go() {
+	    p = launchExecutable();
+        this.reader1 = new StringReader(""); //$NON-NLS-1$
+        this.reader2 = new InputStreamReader(p.getErrorStream());
+	    processMonitor = createProcessMonitor();
+        interactor = createInteractor(p);
+        interactor.addListener(thread);
+        thread.setInteractor(interactor);
 	    interactor.start();
 	    processMonitor.start();
 	}
+	
+    abstract protected Interactor createInteractor(Process p);
+	abstract protected Process launchExecutable();
 	
     public String getAttribute(String key) {
 		return null;
@@ -80,10 +84,6 @@ public class LslProcess extends Thread implements IProcess {
         } catch (IllegalThreadStateException e) {
             throw new DebugException(new Status(IStatus.ERROR, LslPlusPlugin.PLUGIN_ID, Messages.getString("TestLaunchDelegate.NOT_TERMINATED"))); //$NON-NLS-1$
         }
-	}
-
-	public String getLabel() {
-		return Messages.getString("TestLaunchDelegate.TEST"); //$NON-NLS-1$
 	}
 
 	public ILaunch getLaunch() {
@@ -129,11 +129,34 @@ public class LslProcess extends Thread implements IProcess {
 
 	public void terminate() throws DebugException {
 	    processMonitor.interrupt();
+	    onTerminate();
 	}
-
+	
+	protected void onTerminate() {
+	    
+	}
+	
     public void setThread(LslThread thread) {
-        interactor.addListener(thread);
-        thread.setInteractor(interactor);
+        this.thread = thread;
     }
 	
+    public synchronized void addListener(IProcessListener l) {
+        this.listeners.add(l);
+    }
+    
+    public synchronized void removeListener(IProcessListener l) {
+        this.listeners.remove(l);
+    }
+    
+    private void fireTerminated() {
+       DebugPlugin.getDefault().fireDebugEventSet(new DebugEvent[]{new DebugEvent(this, DebugEvent.TERMINATE)});
+       IProcessListener[] listenerArray;
+       synchronized (this) {
+           terminated = true;
+           listenerArray = (IProcessListener[]) listeners.toArray(new IProcessListener[listeners.size()]);
+       }
+       for (int i = 0; i < listenerArray.length; i++) {
+            listenerArray[i].processTerminated(this);
+        }
+    }
 }

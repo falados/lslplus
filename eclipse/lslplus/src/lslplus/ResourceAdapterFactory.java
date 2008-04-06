@@ -23,6 +23,8 @@ public class ResourceAdapterFactory implements IAdapterFactory {
 			if (LslPlusElement.class.equals(adapterType) && ("lslp".equals(ext) //$NON-NLS-1$
 			                                         || "lslm".equals(ext))) { //$NON-NLS-1$
 				return new LslPlusElement(f);
+			} else if ("lslp".equals(ext) && LslPlusScript.class.equals(adapterType)) { //$NON-NLS-1$
+			    return new LslPlusScript(f);
 			} else if ("lsl".equals(ext) && LslDerivedScript.class.equals(adapterType)) { //$NON-NLS-1$
 				return new LslDerivedScript(f);
 			} else if ("lslt".equals(ext) && LslTestSuite.class.equals(adapterType)) { //$NON-NLS-1$
@@ -42,7 +44,8 @@ public class ResourceAdapterFactory implements IAdapterFactory {
 	static private Class[] adapterList = {
 		LslPlusElement.class,
 		LslDerivedScript.class,
-		LslTestSuite.class
+		LslTestSuite.class,
+		LslPlusScript.class
 	};
 	
 	public Class[] getAdapterList() {

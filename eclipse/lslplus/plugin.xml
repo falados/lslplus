@@ -3,10 +3,6 @@
 <plugin>
 
     
-<!-- =========================================================================== -->
-<!-- Java Editor Example                                                         -->
-<!-- =========================================================================== -->
-
    <extension
          point="org.eclipse.ui.editors">
       <editor
@@ -67,6 +63,29 @@
                </with></enablement>
          </contextualLaunch>
       </shortcut>
+      <shortcut
+            class="lslplus.launching.LaunchLslSimShortcut"
+            icon="icons/launchlslplus.gif"
+            id="lslplus.LaunchLslSim"
+            label="Launch In Lsl Sim"
+            modes="run, debug">
+         <contextualLaunch>
+            <enablement>
+               <with
+                     variable="selection">
+                  <count
+                        value="1">
+                  </count>
+                  <iterate
+                        ifEmpty="false">
+                     <adapt
+                           type="lslplus.LslPlusScript">
+                     </adapt>
+                  </iterate>
+               </with>
+            </enablement>
+         </contextualLaunch>
+      </shortcut>
    </extension>
    <extension
          point="org.eclipse.core.runtime.adapters">
@@ -82,12 +101,18 @@
          <adapter
                type="lslplus.lsltest.LslTestSuite">
          </adapter>
+         <adapter
+               type="lslplus.LslPlusScript">
+         </adapter>
       </factory>
       <factory
             adaptableType="lslplus.LslPlusElement"
             class="lslplus.LslPlusAdapterFactory">
          <adapter
                type="org.eclipse.core.resources.IResource">
+         </adapter>
+         <adapter
+               type="lslplus.LslPlusScript">
          </adapter>
       </factory>
       <factory
@@ -100,6 +125,16 @@
       <factory
             adaptableType="lslplus.lsltest.LslTestSuite"
             class="lslplus.lsltest.LslTestSuiteAdapterFactory">
+         <adapter
+               type="org.eclipse.core.resources.IResource">
+         </adapter>
+      </factory>
+      <factory
+            adaptableType="lslplus.LslPlusScript"
+            class="lslplus.LslPlusAdapterFactory">
+         <adapter
+               type="lslplus.LslPlusElement">
+         </adapter>
          <adapter
                type="org.eclipse.core.resources.IResource">
          </adapter>
@@ -226,6 +261,12 @@
             modes="run, debug"
             name="Run LSL Unit Test">
       </launchConfigurationType>
+      <launchConfigurationType
+            delegate="lslplus.launching.SimLaunchDelegate"
+            id="lslplus.simLaunch"
+            modes="run,debug"
+            name="Run LSL Simulator">
+      </launchConfigurationType>
    </extension>
    <extension
          point="org.eclipse.debug.ui.launchConfigurationTabGroups">
@@ -234,6 +275,11 @@
             id="lslplus.testLaunchTabGroup"
             type="lslplus.testLaunch">
       </launchConfigurationTabGroup>
+      <launchConfigurationTabGroup
+            class="lslplus.launching.SimLaunchTabGroup"
+            id="lslplus.simLaunchTabGroup"
+            type="lslplus.simLaunch">
+      </launchConfigurationTabGroup>
    </extension>
    <extension
          point="org.eclipse.debug.ui.launchConfigurationTypeImages">
@@ -241,6 +287,11 @@
             configTypeID="lslplus.testLaunch"
             icon="icons/launchlslplus.gif"
             id="lslplus.testLaunchImage">
+      </launchConfigurationTypeImage>
+      <launchConfigurationTypeImage
+            configTypeID="lslplus.simLaunch"
+            icon="icons/launchlslplus.gif"
+            id="lslplus.simLaunchImage">
       </launchConfigurationTypeImage>
    </extension>
    <extension
@@ -259,6 +310,13 @@
             icon="icons/lslplustestrun.gif"
             id="lslplus.TestRunnerView"
             name="TestRunner">
+      </view>
+      <view
+            allowMultiple="false"
+            class="lslplus.simview.SimWatcherViewPart"
+            icon="icons/launchlslplus.gif"
+            id="lslplus.simWatcher"
+            name="Sim Watcher">
       </view>
    </extension>
    <extension
