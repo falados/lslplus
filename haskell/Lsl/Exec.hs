@@ -61,7 +61,7 @@ initStateSimple script perfAction log qtick utick chkBp =
                 nextEvent = undefined }
 
 runEval = (runStateT . runErrorT)
-executeLsl img oid pid sid pkey perfAction log qtick utick chkBp nxtEvent maxTick =
+executeLsl img oid pid sid pkey perfAction log qtick utick chkBp queue maxTick =
      do let state = (EvalState { scriptImage = img,
                             objectId = oid,
                             primId = pid,
@@ -72,11 +72,11 @@ executeLsl img oid pid sid pkey perfAction log qtick utick chkBp nxtEvent maxTic
                             qwtick = qtick,
                             uwtick = utick,
                             checkBreakpoint = chkBp,
-                            nextEvent = nxtEvent})
-        result <- (runEval $ evalScript maxTick) state
+                            nextEvent = undefined})
+        result <- (runEval $ evalScript maxTick queue) state
         case result of
             (Left s,_) -> return $ Left s
-            (Right (),evalState) -> return $ Right $ scriptImage evalState 
+            (Right queue',evalState) -> return $ Right $ (scriptImage evalState, queue')
 
 executeLslSimple script perfAction log qtick utick chkBp maxTick path globbindings args =
     do  result <- (runEval $ evalScriptSimple maxTick path globbindings args)
@@ -580,32 +580,31 @@ incontext s f =
         Left s -> fail s
         Right v -> return v                             
 
-evalScript :: Monad w => Int -> Eval w ()
-evalScript maxTick =
+evalScript :: Monad w => Int -> [Event] -> Eval w [Event]
+evalScript maxTick queue =
     do executionState <- getExecutionState
        case executionState of
-           Erroneous _ -> return ()
+           Erroneous _ -> return queue
            Waiting ->
                do oid <- getObjectId
                   pid <- getPrimId
                   primKey <- getMyPrimKey
                   scriptName <- getScriptName
-                  event <- getNextEvent primKey scriptName
-                  case event of
-                      Nothing -> return ()
-                      Just event ->
+                  case queue of
+                      [] -> return queue
+                      (event:queue') ->
                          do states <- getStates
                             curState <- getCurState
                             (State _ handlers) <- incontext ("state " ++ curState ++ ":") $ findState curState states
                             case matchEvent event handlers of
-                                Nothing -> return ()
+                                Nothing -> return queue'
                                 Just (mem,stmts,name,ctx) ->
                                     do  initStacks
                                         pushFrame name ctx Nothing
                                         pushScope mem $ labelBlocks stmts
                                         pushElement (EvBlock stmts)
                                         setExecutionState Executing
-                                        evalScript maxTick
+                                        evalScript maxTick queue'
            Executing -> do result <- eval maxTick
                            case result of
                                EvalComplete (Just newState) -> 
@@ -614,11 +613,13 @@ evalScript maxTick =
                                EvalComplete _ -> setExecutionState Waiting
                                YieldTil i -> setExecutionState $ SleepingTil i
                                _ -> return ()
+                           return queue
            SleepingTil i -> do tick <- getTick
-                               when (tick >= i) $
-                                   do setExecutionState Executing
-                                      evalScript maxTick
-           Halted -> return ()
+                               if (tick >= i) 
+                                   then do setExecutionState Executing
+                                           evalScript maxTick queue
+                                   else return queue
+           Halted -> return queue
 
 eval :: Monad w => Int -> Eval w EvalResult
 eval maxTick =

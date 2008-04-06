@@ -35,6 +35,7 @@ data World m = World {
                     nextListenerId :: Int,
                     wobjects :: Map String LSLObject,
                     wprims :: Map String Prim,
+                    worldScripts :: Map (String,String) (Validity ScriptImage,[Event]), 
                     inventory :: [(String,LSLObject)],
                     tick :: Int,
                     msglog :: [LogMessage],
@@ -96,6 +97,8 @@ getObjects :: Monad m => WorldM m (Map String LSLObject)
 getObjects = (queryWorld wobjects)
 getPrims :: Monad m => WorldM m (Map String Prim)
 getPrims = queryWorld wprims
+getWorldScripts :: Monad m => WorldM m (Map (String,String) (Validity ScriptImage, [Event]))
+getWorldScripts = queryWorld worldScripts
 getInventory :: Monad m => WorldM m [(String,LSLObject)]
 getInventory = queryWorld inventory
 getMsgLog :: Monad m => WorldM m [LogMessage]
@@ -121,6 +124,7 @@ setMsgLog l = updateWorld (\w -> w { msglog = l })
 setWQueue q = updateWorld (\w -> w { wqueue = q })
 setRandGen g = updateWorld (\w -> w { randGen = g })
 setWorldAvatars l = updateWorld (\w -> w { worldAvatars = l })
+setWorldScripts s = updateWorld (\w -> w { worldScripts = s })
 
 insertWorldDB path value = do
     wdb <- getWorldDB
@@ -137,13 +141,13 @@ nextTick = do
     setTick t'
     return t'
 
-getNextEvent key sname =
-    do (q::Maybe [Event]) <- (getEventQueue key sname)
-       case q of
-          Just (e:es) -> 
-              do setEventQueue key sname es
-                 return $ Just e
-          _ -> return Nothing
+-- getNextEvent key sname =
+--     do (q::Maybe [Event]) <- (getEventQueue key sname)
+--        case q of
+--           Just (e:es) -> 
+--               do setEventQueue key sname es
+--                  return $ Just e
+--           _ -> return Nothing
 
 wrand :: (Monad m, Random a) => WorldM m a
 wrand = do g <- getRandGen
@@ -282,7 +286,8 @@ data LSLObject = LSLObject { primKeys :: [String] } deriving (Show)
 data Prim = Prim {
                     primName :: String,
                     primKey :: String,
-                    primScripts :: [(String,(Validity ScriptImage,[Event]))],
+                    primParent :: Maybe String,
+                    primScripts :: [String],
                     notecards :: [(String,[String])],
                     animations :: [String],
                     textures :: [String],
@@ -292,17 +297,15 @@ data Prim = Prim {
 emptyPrim name key =
     Prim { primName = name,
            primKey = key,
+           primParent = Nothing,
            primScripts = [],
            notecards = [],
            animations = [],
            textures = [],
            sounds = [],
            inventoryObjects = [] }
-addScript prim name vimage = prim { primScripts = (name,(vimage,[Event "state_entry" []])):(primScripts prim) }
+addScript prim name = prim { primScripts = (name:(primScripts prim)) }
          
-type RezzedObject = (String,LSLObject)
-type RezzedObjects = [RezzedObject]
-
 data Listener = Listener {
                        listenerPrimKey :: String,
                        listenerScriptName :: String,
@@ -313,16 +316,33 @@ data Listener = Listener {
     deriving (Show)
     
 
-getEventQueue key scriptName =
+-- should monadify further...
+getPrimInfo pkey =
     do prims <- getPrims
-       case M.lookup key prims of
-           Nothing -> do logAMessage ("prim " ++ key ++ " not found")
-                         return Nothing
+       case M.lookup pkey prims of
+           Nothing -> return Nothing
            Just p ->
-               case lookup scriptName (primScripts p) of
-                   Nothing -> do logAMessage ("script " ++ scriptName ++ " not found in prim " ++ key)
-                                 return Nothing
-                   Just (_,q) ->  return (Just q)
+               case primParent p of 
+                   Nothing -> return $ Just (pkey, 0)
+                   Just p1Key -> do
+                       objects <- getObjects
+                       case M.lookup p1Key objects of
+                           Nothing -> return Nothing
+                           Just (LSLObject plist) ->
+                               case elemIndex pkey plist of
+                                   Nothing -> return Nothing
+                                   Just i -> return $ Just (p1Key, i)
+                                   
+-- getEventQueue key scriptName =
+--     do prims <- getPrims
+--        case M.lookup key prims of
+--            Nothing -> do logAMessage ("prim " ++ key ++ " not found")
+--                          return Nothing
+--            Just p ->
+--                case lookup scriptName (primScripts p) of
+--                    Nothing -> do logAMessage ("script " ++ scriptName ++ " not found in prim " ++ key)
+--                                  return Nothing
+--                    Just (_,q) ->  return (Just q)
 
 -- getEventQueue' :: [Prim] -> String -> String -> Maybe [Event]
 -- getEventQueue' prims key scriptName =
@@ -330,8 +350,8 @@ getEventQueue key scriptName =
 --        (_,q) <- lookup scriptName (primScripts p)
 --        return q
        
-setEventQueue key scriptName q =
-    do updatePrim (\ p -> updateScript p scriptName (\ _ (image, qold) -> return (image, q))) key
+-- setEventQueue key scriptName q =
+--     do updatePrim (\ p -> updateScript p scriptName (\ _ (image, qold) -> return (image, q))) key
 
 pushEvents oid pid e =
     do objects <- getObjects
@@ -340,14 +360,17 @@ pushEvents oid pid e =
            Just o ->
                case lookupByIndex pid (primKeys o) of
                    Nothing -> return ()
-                   Just key ->
-                       do updatePrim (\ p -> let scripts' = map (\ (n,(si,eq)) -> (n,(si,eq ++ [e]))) (primScripts p) in
-                                             return $ p { primScripts = scripts' }) key
+                   Just key -> do
+                       prims <- getPrims
+                       case M.lookup key prims of
+                           Nothing -> return ()
+                           Just p -> mapM_ (pushEvent e key) (primScripts p)
        
 pushEvent e key sid =
-    updatePrim (\ p -> updateScript p sid (pushEvent' e)) key
-    
-pushEvent' e _ (image, es) = return (image,e:es)
+    do scripts <- getWorldScripts
+       case M.lookup (key,sid) scripts of
+           Nothing -> logAMessage ("no such script: " ++ (show (key, sid)))
+           Just (s,q) -> setWorldScripts (M.insert (key,sid) (s,q ++ [e]) scripts)
 
 getObjectNames :: (Monad m) => WorldM m [String]
 getObjectNames = getObjects >>= (return . M.keys)
@@ -363,6 +386,7 @@ newWorld slice maxt iq = World {
                nextListenerId = 0,
                wobjects = M.empty,
                wprims = M.empty,
+               worldScripts = M.empty,
                inventory = [],
                tick = 0,
                msglog = [],
@@ -431,9 +455,9 @@ updatePrim f key =
             Just p -> do p' <- f p
                          setPrims (M.insert key p' prims)
 
-updateScript prim sid f =
-    do scripts' <- modifyLookupM sid f $ primScripts prim
-       return $ prim { primScripts = scripts' }
+-- updateScript prim sid f =
+--     do scripts' <- modifyLookupM sid f $ primScripts prim
+--        return $ prim { primScripts = scripts' }
 
 queryObject oid f =
     do objects <- getObjects
@@ -449,14 +473,14 @@ queryPrim k f =
            Nothing -> Nothing
            Just p -> Just (f p)
          
-onRezScript param sname (Valid scriptImage) =
-     (sname, (Valid (softReset scriptImage), [Event "on_rez" [IVal param]]))
-onRezScript param sname (Invalid s) =
-     (sname, (Invalid s, []))
-onRezPrim param prim =
-   let names = map fst $ primScripts prim
-       states = map (fst.snd) $ primScripts prim in
-       prim { primScripts = zipWith (onRezScript param) names states }
+-- onRezScript param sname (Valid scriptImage) =
+--      (sname, (Valid (softReset scriptImage), [Event "on_rez" [IVal param]]))
+-- onRezScript param sname (Invalid s) =
+--      (sname, (Invalid s, []))
+-- onRezPrim param prim =
+--    let names = map fst $ primScripts prim
+--        states = map (fst.snd) $ primScripts prim in
+--        prim { primScripts = zipWith (onRezScript param) names states }
 
 registerListener listener =
    do listeners <- getListeners
@@ -499,10 +523,15 @@ processEvent (AddScript (name,script) key active) =
        do scripts <- getWScripts
           case lookup script scripts of
               Nothing -> logAMessage ("no such script: " ++ script)
-              Just (Invalid s) -> updatePrim (\ p -> return $ addScript p name (Invalid s)) key
+              Just (Invalid s) -> do
+                  updatePrim (\ p -> return $ addScript p name) key
+                  scripts <- getWorldScripts
+                  setWorldScripts (M.insert (key,name) (Invalid s,[]) scripts)
               Just (Valid code) -> do
+                  updatePrim (\ p -> return $ addScript p name) key
                   let sstate = initLSLScript code
-                  updatePrim (\ p -> return $ addScript p name (Valid sstate)) key
+                  scripts <- getWorldScripts
+                  setWorldScripts (M.insert (key,name) (Valid sstate,[Event "state_entry" []]) scripts)
 processEvent chat@(Chat chan name key msg) =
     do listeners <- getListeners    
        let listeners'= filter (matchListener chat) $ map snd listeners
@@ -525,47 +554,77 @@ matchListener (Chat chan' sender' key' msg') (Listener pkey sid chan sender key 
 
 listenAddress l = (listenerPrimKey l, listenerScriptName l)
 
+-- runScripts :: Monad m => WorldM m ()
+-- runScripts =
+--     do objects <- getObjects
+--        objects' <- mapM processObject (M.toList objects)
+--        setObjects (M.fromList objects')
+-----------------------------------------------------
+--
+--
 runScripts :: Monad m => WorldM m ()
 runScripts =
-    do objects <- getObjects
-       objects' <- mapM processObject (M.toList objects)
-       setObjects (M.fromList objects')
-
-processObject :: Monad m => (String,LSLObject) -> WorldM m (String,LSLObject)
-processObject (name,o) = 
-    do let pairs = zip (primKeys o) [0..]
-       mapM process pairs
-       return (name, o)
---        prims <- getPrims
---        prims' <- modifyByPredM (\ p -> primKey p `elem` map fst pairs) (\p -> processPrim name (lookup (primKey p) pairs) p) prims
---        setPrims prims'
---        return (name,o)
-    where process (k,index) = do
-              prims <- getPrims
-              case M.lookup k prims of
-                  Nothing -> logAMessage ("prim " ++ k ++ " not found")
-                  Just p -> do p' <- processPrim name index p
-                               setPrims (M.insert k p' prims)
+    do scripts <- getWorldScripts
+       mapM_ findAndRunScript (M.keys scripts)
        
-processPrim :: Monad m => String -> Int -> Prim -> WorldM m Prim
---processPrim name Nothing p = error ("can't determine index for prim: " ++ (primKey p))
-processPrim name index p =
-      do scripts' <- mapM (processScript name index (primKey p)) (primScripts p)
-         return $ p { primScripts = scripts' }
-
-processScript :: Monad m => String -> Int -> String -> (String,(Validity ScriptImage,[Event])) -> WorldM m (String,(Validity ScriptImage,[Event]))
-processScript oid pid key (sid,(Valid image, _)) =
-    do --(w::World) <- queryWorld id
-       slice <- getSliceSize
+findAndRunScript scriptKey =
+    do scripts <- getWorldScripts
+       case M.lookup scriptKey scripts of
+          Nothing -> return ()
+          Just script -> checkAndRunScript scriptKey script
+checkAndRunScript _ (Invalid _,_) = return ()
+checkAndRunScript k@(pkey,sname) (Valid img, q) =
+    do  pInfo <- getPrimInfo pkey
+        case pInfo of
+            Nothing -> logAMessage ("script " ++ (show k) ++ ": prim not found!")
+            Just (parent, index) -> runScript parent index pkey sname img q
+runScript parent index pkey sname img q =
+    do slice <- getSliceSize
        tick <- getTick
-       let chkBp _ sm = return (False,sm)
-       result <- executeLsl image oid pid sid key doPredef logAMessage getTick setTick chkBp getNextEvent (tick + slice)
-       Just q <- getEventQueue key sid
+       let checkBp _ sm = return (False,sm)
+       result <- executeLsl img parent index sname pkey doPredef logAMessage getTick setTick checkBp q (tick + slice)
        case result of
-           Left s -> do logAMessage ("execution error in script " ++ key ++ "/" ++ sid ++ ":" ++ s)
-                        return (sid,(Valid image,q))
-           Right image' -> return (sid,(Valid image',q))
-processScript oid pid key (sid,(Invalid s,q)) = return (sid,(Invalid s,q))
+           Left s -> logAMessage ("execution error in script " ++ "(" ++ pkey ++ "," ++ sname ++ ") ->" ++ s)
+           Right (img',q') -> do
+               scripts <- getWorldScripts
+               setWorldScripts (M.insert (pkey,sname) (Valid img',q') scripts)
+-----------------------------------------------------
+
+-- processObject :: Monad m => (String,LSLObject) -> WorldM m (String,LSLObject)
+-- processObject (name,o) = 
+--     do let pairs = zip (primKeys o) [0..]
+--        mapM process pairs
+--        return (name, o)
+-- --        prims <- getPrims
+-- --        prims' <- modifyByPredM (\ p -> primKey p `elem` map fst pairs) (\p -> processPrim name (lookup (primKey p) pairs) p) prims
+-- --        setPrims prims'
+-- --        return (name,o)
+--     where process (k,index) = do
+--               prims <- getPrims
+--               case M.lookup k prims of
+--                   Nothing -> logAMessage ("prim " ++ k ++ " not found")
+--                   Just p -> do p' <- processPrim name index p
+--                                setPrims (M.insert k p' prims)
+       
+-- processPrim :: Monad m => String -> Int -> Prim -> WorldM m Prim
+-- --processPrim name Nothing p = error ("can't determine index for prim: " ++ (primKey p))
+-- processPrim name index p =
+--       do scripts' <- mapM (processScript name index (primKey p)) (primScripts p)
+--          return $ p { primScripts = scripts' }
+
+-- processScript :: Monad m => String -> Int -> String -> (String,(Validity ScriptImage,[Event])) -> WorldM m (String,(Validity ScriptImage,[Event]))
+-- processScript oid pid key (sid,(Valid image, _)) =
+--     do --(w::World) <- queryWorld id
+--        slice <- getSliceSize
+--        tick <- getTick
+--        let chkBp _ sm = return (False,sm)
+--        result <- executeLsl image oid pid sid key doPredef logAMessage getTick setTick chkBp getNextEvent (tick + slice)
+--        Just q <- getEventQueue key sid
+--        case result of
+--            Left s -> do logAMessage ("execution error in script " ++ key ++ "/" ++ sid ++ ":" ++ s)
+--                         return (sid,(Valid image,q))
+--            Right image' -> return (sid,(Valid image',q))
+-- processScript oid pid key (sid,(Invalid s,q)) = return (sid,(Invalid s,q))
 
 simulate :: Monad m => WorldM m ()
 simulate =
@@ -649,6 +708,7 @@ linkRoot = 1::Int
 
 etrace :: Monad m => String -> m ()
 etrace val = trace val $ return ()
+trace1 s val = trace (s ++ ": " ++ show val) val
 
 -- ***************************************************************************
 
