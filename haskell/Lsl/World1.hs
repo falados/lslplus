@@ -33,7 +33,7 @@ data World m = World {
                     wqueue :: WorldEventQueue,
                     wlisteners :: [(Int,Listener)],
                     nextListenerId :: Int,
-                    wobjects :: RezzedObjects,
+                    wobjects :: Map String LSLObject,
                     wprims :: [Prim],
                     inventory :: [(String,LSLObject)],
                     tick :: Int,
@@ -92,7 +92,7 @@ getTick :: Monad m => WorldM m Int
 getTick = queryWorld tick
 getNextListenerId :: Monad m => WorldM m Int
 getNextListenerId = queryWorld nextListenerId
-getObjects :: Monad m => WorldM m [(String,LSLObject)]
+getObjects :: Monad m => WorldM m (Map String LSLObject)
 getObjects = (queryWorld wobjects)
 getPrims :: Monad m => WorldM m [Prim]
 getPrims = queryWorld wprims
@@ -328,7 +328,7 @@ setEventQueue key scriptName q =
 
 pushEvents oid pid e =
     do objects <- getObjects
-       case lookup oid objects of
+       case M.lookup oid objects of
            Nothing -> return ()
            Just o ->
                case lookupByIndex pid (primKeys o) of
@@ -343,10 +343,10 @@ pushEvent e key sid =
 pushEvent' e _ (image, es) = return (image,e:es)
 
 getObjectNames :: (Monad m) => WorldM m [String]
-getObjectNames = liftM (map fst) getObjects
+getObjectNames = getObjects >>= (return . M.keys)
 getListenerIds :: (Monad m) => WorldM m [Int]
 getListenerIds = liftM (map fst) getListeners
-getObject name = liftM (lookup name) getObjects
+getObject name = liftM (M.lookup name) getObjects
 
 newWorld slice maxt iq = World {
                sliceSize = slice,
@@ -354,7 +354,7 @@ newWorld slice maxt iq = World {
                wqueue = iq,
                wlisteners = [],
                nextListenerId = 0,
-               wobjects = [],
+               wobjects = M.empty,
                wprims = [],
                inventory = [],
                tick = 0,
@@ -412,9 +412,10 @@ logAMessage s =
        
 updateObject f name = 
     do objects <- getObjects
-       objects' <- modifyLookupM name f objects
-       setObjects objects'
-       return ()
+       case M.lookup name objects of
+           Nothing -> logAMessage ("object " ++ name ++ " not found")
+           Just o -> do o' <- f o
+                        setObjects (M.insert name o' objects)
 
 updatePrim f key =
     do  prims <- getPrims
@@ -427,7 +428,7 @@ updateScript prim sid f =
 
 queryObject oid f =
     do objects <- getObjects
-       return $ case lookup oid objects of
+       return $ case M.lookup oid objects of
            Nothing -> Nothing
            Just o -> case f o of
                          Nothing -> Nothing
@@ -484,7 +485,7 @@ processEvent (CreatePrim name key) =
        objects <- getObjects
        let prim = emptyPrim name key
        setPrims (prim:worldPrims)
-       setObjects ((key,LSLObject [key]):objects)
+       setObjects (M.insert key (LSLObject [key]) objects)
 processEvent (AddScript (name,script) key active) =
        do scripts <- getWScripts
           case lookup script scripts of
@@ -518,8 +519,8 @@ listenAddress l = (listenerPrimKey l, listenerScriptName l)
 runScripts :: Monad m => WorldM m ()
 runScripts =
     do objects <- getObjects
-       objects' <- mapM processObject objects
-       setObjects objects'
+       objects' <- mapM processObject (M.toList objects)
+       setObjects (M.fromList objects')
 
 processObject :: Monad m => (String,LSLObject) -> WorldM m (String,LSLObject)
 processObject (name,o) = 
