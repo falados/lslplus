@@ -34,7 +34,7 @@ data World m = World {
                     wlisteners :: [(Int,Listener)],
                     nextListenerId :: Int,
                     wobjects :: Map String LSLObject,
-                    wprims :: [Prim],
+                    wprims :: Map String Prim,
                     inventory :: [(String,LSLObject)],
                     tick :: Int,
                     msglog :: [LogMessage],
@@ -94,7 +94,7 @@ getNextListenerId :: Monad m => WorldM m Int
 getNextListenerId = queryWorld nextListenerId
 getObjects :: Monad m => WorldM m (Map String LSLObject)
 getObjects = (queryWorld wobjects)
-getPrims :: Monad m => WorldM m [Prim]
+getPrims :: Monad m => WorldM m (Map String Prim)
 getPrims = queryWorld wprims
 getInventory :: Monad m => WorldM m [(String,LSLObject)]
 getInventory = queryWorld inventory
@@ -315,13 +315,20 @@ data Listener = Listener {
 
 getEventQueue key scriptName =
     do prims <- getPrims
-       return $ getEventQueue' prims key scriptName
+       case M.lookup key prims of
+           Nothing -> do logAMessage ("prim " ++ key ++ " not found")
+                         return Nothing
+           Just p ->
+               case lookup scriptName (primScripts p) of
+                   Nothing -> do logAMessage ("script " ++ scriptName ++ " not found in prim " ++ key)
+                                 return Nothing
+                   Just (_,q) ->  return (Just q)
 
-getEventQueue' :: [Prim] -> String -> String -> Maybe [Event]
-getEventQueue' prims key scriptName =
-    do p <- find (\ p -> primKey p == key) prims
-       (_,q) <- lookup scriptName (primScripts p)
-       return q
+-- getEventQueue' :: [Prim] -> String -> String -> Maybe [Event]
+-- getEventQueue' prims key scriptName =
+--     do p <- find (\ p -> primKey p == key) prims
+--        (_,q) <- lookup scriptName (primScripts p)
+--        return q
        
 setEventQueue key scriptName q =
     do updatePrim (\ p -> updateScript p scriptName (\ _ (image, qold) -> return (image, q))) key
@@ -355,7 +362,7 @@ newWorld slice maxt iq = World {
                wlisteners = [],
                nextListenerId = 0,
                wobjects = M.empty,
-               wprims = [],
+               wprims = M.empty,
                inventory = [],
                tick = 0,
                msglog = [],
@@ -419,8 +426,10 @@ updateObject f name =
 
 updatePrim f key =
     do  prims <- getPrims
-        prims' <- modifyByPredM (\ p -> primKey p == key) f prims
-        setPrims prims'
+        case M.lookup key prims of
+            Nothing -> logAMessage ("prim " ++ key ++ " not found")
+            Just p -> do p' <- f p
+                         setPrims (M.insert key p' prims)
 
 updateScript prim sid f =
     do scripts' <- modifyLookupM sid f $ primScripts prim
@@ -436,7 +445,7 @@ queryObject oid f =
 
 queryPrim k f =
     do prims <- getPrims
-       return $ case find (\ p -> k == primKey p) prims of
+       return $ case M.lookup k prims of
            Nothing -> Nothing
            Just p -> Just (f p)
          
@@ -484,7 +493,7 @@ processEvent (CreatePrim name key) =
     do worldPrims <- getPrims
        objects <- getObjects
        let prim = emptyPrim name key
-       setPrims (prim:worldPrims)
+       setPrims (M.insert key prim worldPrims)
        setObjects (M.insert key (LSLObject [key]) objects)
 processEvent (AddScript (name,script) key active) =
        do scripts <- getWScripts
@@ -525,14 +534,22 @@ runScripts =
 processObject :: Monad m => (String,LSLObject) -> WorldM m (String,LSLObject)
 processObject (name,o) = 
     do let pairs = zip (primKeys o) [0..]
-       prims <- getPrims
-       prims' <- modifyByPredM (\ p -> primKey p `elem` map fst pairs) (\p -> processPrim name (lookup (primKey p) pairs) p) prims
-       setPrims prims'
-       return (name,o)
+       mapM process pairs
+       return (name, o)
+--        prims <- getPrims
+--        prims' <- modifyByPredM (\ p -> primKey p `elem` map fst pairs) (\p -> processPrim name (lookup (primKey p) pairs) p) prims
+--        setPrims prims'
+--        return (name,o)
+    where process (k,index) = do
+              prims <- getPrims
+              case M.lookup k prims of
+                  Nothing -> logAMessage ("prim " ++ k ++ " not found")
+                  Just p -> do p' <- processPrim name index p
+                               setPrims (M.insert k p' prims)
        
-processPrim :: Monad m => String -> Maybe Int -> Prim -> WorldM m Prim
-processPrim name Nothing p = error ("can't determine index for prim: " ++ (primKey p))
-processPrim name (Just index) p =
+processPrim :: Monad m => String -> Int -> Prim -> WorldM m Prim
+--processPrim name Nothing p = error ("can't determine index for prim: " ++ (primKey p))
+processPrim name index p =
       do scripts' <- mapM (processScript name index (primKey p)) (primScripts p)
          return $ p { primScripts = scripts' }
 
