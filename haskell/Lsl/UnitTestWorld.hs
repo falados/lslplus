@@ -218,8 +218,6 @@ checkResults (ms1, val, globs, w) unitTest =
 --------------------------------------------------
 -- 'Interactive' testing
 
-data ExecutionInfo = ExecutionInfo String Int [(String,SourceContext,Maybe Int,MemRegion)]
-
 data TestEvent = TestComplete TestResult | TestSuspended  ExecutionInfo | AllComplete
 
 data ExecCommand = ExecContinue [Breakpoint] | ExecStep [Breakpoint] | ExecStepOver [Breakpoint] | 

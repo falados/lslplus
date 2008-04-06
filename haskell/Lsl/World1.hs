@@ -1,19 +1,28 @@
 module Lsl.World1 where
 
-import Lsl.Structure
+import Lsl.Avatar
+import Lsl.Breakpoint
 import Lsl.Builder
-import Lsl.Type
-import Lsl.FuncSigs
-import Lsl.Parse
-import Lsl.InternalLLFuncs
-import Lsl.Util
-import Lsl.Key
 import Lsl.Evaluation
 import Lsl.Exec
+import Lsl.ExpressionHandler
+import Lsl.FuncSigs
+import Lsl.InternalLLFuncs
+import Lsl.Key
+import Lsl.Log
+import Lsl.Parse
+import Lsl.Structure
+import Lsl.Type
+import Lsl.Util
+import Lsl.ValueDB
 import Control.Monad
 import Control.Monad.State hiding (State,get)
+import Control.Monad.Identity
+import Control.Monad.Error
 import Data.List
 import Data.Bits
+import Data.Map(Map)
+import qualified Data.Map as M
 import Debug.Trace
 import System.Random
 
@@ -28,11 +37,13 @@ data World m = World {
                     wprims :: [Prim],
                     inventory :: [(String,LSLObject)],
                     tick :: Int,
-                    msglog :: [String],
+                    msglog :: [LogMessage],
                     predefs :: [PredefFunc m],
                     randGen :: StdGen,
                     wlibrary :: [(String,Validity LModule)],
-                    wscripts :: [(String,Validity CompiledLSLScript)]
+                    wscripts :: [(String,Validity CompiledLSLScript)],
+                    worldDB :: ValueDB,
+                    worldAvatars :: [(String,Avatar)]
                 } deriving (Show)
 
 -- a state monad for the World
@@ -67,6 +78,10 @@ doPredef name info@(oid, pid, sid, pkey) args =
 queryWorld q = worldM (\w -> (q w, w))
 updateWorld u = worldM (\w -> ((), u w))
 
+getWorldDB :: Monad m => WorldM m ValueDB
+getWorldDB = queryWorld worldDB
+setWorldDB db = updateWorld (\ w -> w { worldDB = db })
+
 getSliceSize :: Monad m => WorldM m Int
 getSliceSize = queryWorld sliceSize
 getListeners :: Monad m => WorldM m [(Int,Listener)]
@@ -83,7 +98,7 @@ getPrims :: Monad m => WorldM m [Prim]
 getPrims = queryWorld wprims
 getInventory :: Monad m => WorldM m [(String,LSLObject)]
 getInventory = queryWorld inventory
-getMsgLog :: Monad m => WorldM m [String]
+getMsgLog :: Monad m => WorldM m [LogMessage]
 getMsgLog = queryWorld msglog
 getWQueue :: Monad m => WorldM m WorldEventQueue
 getWQueue = queryWorld wqueue
@@ -93,6 +108,9 @@ getRandGen :: Monad m => WorldM m StdGen
 getRandGen = queryWorld randGen
 getWScripts :: Monad m => WorldM m  [(String,Validity CompiledLSLScript)]
 getWScripts = queryWorld wscripts
+getWorldAvatars :: Monad m => WorldM m [(String,Avatar)]
+getWorldAvatars = queryWorld worldAvatars
+
 setListeners l = updateWorld (\w -> w { wlisteners = l })   
 setNextListenerId i = updateWorld (\w -> w { nextListenerId = i })
 setObjects os = updateWorld (\w -> w { wobjects = os })
@@ -102,7 +120,16 @@ setTick t = updateWorld (\w -> w { tick = t })
 setMsgLog l = updateWorld (\w -> w { msglog = l })
 setWQueue q = updateWorld (\w -> w { wqueue = q })
 setRandGen g = updateWorld (\w -> w { randGen = g })
+setWorldAvatars l = updateWorld (\w -> w { worldAvatars = l })
 
+insertWorldDB path value = do
+    wdb <- getWorldDB
+    setWorldDB (insertDB path value wdb)
+
+lookupWorldDB path = do
+    wdb <- getWorldDB
+    return $ lookupDB path wdb
+    
 nextTick :: Monad m => WorldM m Int
 nextTick = do
     t <- getTick
@@ -184,6 +211,16 @@ llFrand (oid,pid,sid,pkey) [FVal maxval] =
     do r <- wrand
        continueWith $ FVal (maxval * r)
 
+llSetPos (oid,pid,sid,pkey) [val] =
+    do insertWorldDB ["prim", pkey, "pos" ] val
+       continueWith VoidVal
+
+llGetPos (oid,pid,sid,pkey) [] =
+    do val <- lookupWorldDB ["prim", pkey, "pos" ]
+       case val of
+           Just (Right v@(VVal _ _ _)) -> continueWith v
+           _ -> continueWith (VVal 0.0 0.0 0.0)
+           
 groupList _ [] = []
 groupList n l | n > 0 = take n l : groupList n (drop n l)
               | otherwise = groupList 1 l
@@ -221,7 +258,9 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llListen", llListen),
         ("llMessageLinked", llMessageLinked),
         ("llSay",llSay),
-        ("llSleep", llSleep)
+        ("llSleep", llSleep),
+        ("llGetPos", llGetPos),
+        ("llSetPos",llSetPos)
     ] ++ internalLLFuncs)
 
 logFromScript :: Monad m => ScriptInfo -> String -> WorldM m ()
@@ -243,7 +282,6 @@ data LSLObject = LSLObject { primKeys :: [String] } deriving (Show)
 data Prim = Prim {
                     primName :: String,
                     primKey :: String,
-                    primData :: MemRegion,
                     primScripts :: [(String,(Validity ScriptImage,[Event]))],
                     notecards :: [(String,[String])],
                     animations :: [String],
@@ -254,7 +292,6 @@ data Prim = Prim {
 emptyPrim name key =
     Prim { primName = name,
            primKey = key,
-           primData = emptyMemRegion,
            primScripts = [],
            notecards = [],
            animations = [],
@@ -325,9 +362,15 @@ newWorld slice maxt iq = World {
                predefs = defaultPredefs,
                randGen = mkStdGen 1,
                wlibrary = [],
-               wscripts = []
+               wscripts = [],
+               worldDB = emptyDB,
+               worldAvatars = []
            }
-newWorld' slice maxt iq lib scripts = (newWorld slice maxt iq) { wscripts = scripts, wlibrary = lib }
+newWorld' slice maxt iq lib scripts avatars = 
+    (newWorld slice maxt iq) { 
+        wscripts = scripts, 
+        wlibrary = lib,
+        worldAvatars = avatars }
 
 addObjectToInventory name obj world = world { inventory = (name,obj):(inventory world) }
 
@@ -338,9 +381,9 @@ data WorldEventType = CreatePrim { wePrimName :: String, wePrimKey :: String }
                     | AddScript (String,String) String Bool -- script, prim key, activate
                     | ResetScript String String -- prim key, script name
                     | ResetScripts String -- object name
-                    | Touch String String Int -- agent-id, primKey, duration
+                    | WorldSimEvent { worldSimEventName :: String, worldSimEventArgs :: [SimEventArg] }
                     | Chat { chatChannel :: Int, chatterName :: String, chatterKey :: String, chatMessage :: String }
-    deriving (Show,Read)
+    deriving (Show)
     
 type WorldEvent = (Int,WorldEventType) -- time, event
 
@@ -354,6 +397,9 @@ takeWQ i ((j,we):wes) | i >= j = (Just we,wes)
 putWQ tick we wes = before ++ ((tick,we):after)
     where (before,after) = break ((>tick).fst) wes
 
+putManyWQ [] wq = wq
+putManyWQ ((tick,we):wes) wq = putWQ tick we (putManyWQ wes wq)
+
 putWorldEvent tick we = 
     do weq <- getWQueue
        setWQueue $ putWQ tick we weq
@@ -361,7 +407,7 @@ putWorldEvent tick we =
 logAMessage s =
     do log <- getMsgLog
        tick <- getTick
-       let message = ("@" ++ show tick ++ " -> " ++ s) 
+       let message = LogMessage tick LogInfo "" s 
        setMsgLog (message:log)
        
 updateObject f name = 
@@ -454,6 +500,10 @@ processEvent chat@(Chat chan name key msg) =
        let addresses = nub $ map listenAddress listeners'
        mapM (\ (key,sid) -> pushEvent (Event "listen" [IVal chan, SVal name, KVal key, SVal msg]) key sid) addresses
        return ()
+processEvent (WorldSimEvent name args) = 
+    case M.lookup name eventDescriptors of
+        Nothing -> logAMessage ("event " ++ name ++ " not understood")
+        Just def -> handleSimInputEvent def args
 processEvent _ = error "not implemented"
 
 matchListener (Chat chan' sender' key' msg') (Listener pkey sid chan sender key msg) =
@@ -512,7 +562,7 @@ simulate =
 
 runSim :: Monad m => Int -> Int -> WorldEventQueue -> [(String,Validity CompiledLSLScript)] -> [(String,Validity LModule)] -> m ((),World m)
 runSim slice maxt iq scripts library =
-    runStateT (simulate) $ newWorld' slice maxt iq library scripts
+    runStateT (simulate) $ newWorld' slice maxt iq library scripts [(avatarKey defaultAvatar, defaultAvatar)]
            
 
 testScript = LSLScript 
@@ -571,7 +621,7 @@ lslExec iq library scripts slice1 slice2 maxt action =
            return w''
     where untilM p v f = if p v then return v else f v
           initialWorld :: Monad m => World m
-          initialWorld = newWorld' slice1 slice2 iq library scripts
+          initialWorld = newWorld' slice1 slice2 iq library scripts []
        
 linkSet = -1::Int
 linkAllOthers = -2::Int
@@ -581,3 +631,84 @@ linkRoot = 1::Int
 
 etrace :: Monad m => String -> m ()
 etrace val = trace val $ return ()
+
+-- ***************************************************************************
+
+data SimCommand = SimContinue [Breakpoint] [SimEvent]
+
+data WorldDef = WorldDef { worldDefScript :: String }
+
+data SimStatus = SimEnded { simStatusMessage :: String, simStatusLog :: [LogMessage] } | 
+                 SimInfo { simStatusEvents :: [SimEvent], simStatusLog :: [LogMessage] } |
+                 SimSuspended { simStatusEvents :: [SimEvent], 
+                                simStatusSuspendInfo :: ExecutionInfo,
+                                simStatusLog :: [LogMessage] }
+
+data SimInputEventDefinition m = SimInputEventDefinition { 
+    simInputEventName :: String,
+    simInputEventDescription :: String,
+    simInputEventParameters :: [SimParam],
+    simInputEventHandler :: String -> [LSLValue] -> WorldM m () }
+    
+data SimParam = SimParam { simParamName :: String, simParamDescription :: String,
+                           simParamType :: SimParamType }
+data SimParamType = SimParamPrim | SimParamAvatar | SimParamLSLValue LSLType
+                    
+data SimEvent = SimEvent { simEventName :: String, simEventArgs :: [SimEventArg], simEventDelay :: Int }
+    deriving (Show)
+data SimEventArg = SimEventArg { simEventArgName :: String, simEventArgValue :: String }
+    deriving (Show)
+    
+initWorld def scripts lib = 
+    newWorld' 1000 100000 iq lib scripts [(avatarKey defaultAvatar, defaultAvatar)]
+    where iq = [(1,CreatePrim "object" "00000000-0000-0000-0000-000000000001"),
+                (2,AddScript ("script1",worldDefScript def) "00000000-0000-0000-0000-000000000001" True)]
+
+simStep init@(Left (worldDef, scripts, lib)) command =
+    let world = initWorld worldDef scripts lib in simStep (Right world) command
+simStep (Right world) (SimContinue _ events) =
+    let t = tick world
+        simEventToWorldEvent (SimEvent name args delay) = (t + delay, WorldSimEvent name args)
+        wq' = putManyWQ (map simEventToWorldEvent events) (wqueue world)
+        world' = world { wqueue = wq' }
+        (_,world'') = runIdentity $ runStateT simulate world'
+        log = msglog world''
+        world''' = world'' { msglog = [] } in
+        (SimInfo { simStatusEvents = [], simStatusLog = reverse log }, Right world''')
+        
+        
+-- Event Descriptions and Handlers -------------------------------------------
+------------------------------------------------------------------------------
+--checkArgs def args = do
+checkEventArgs def args = 
+    do
+        when (length params /= length args) $ fail "wrong number of parameters"
+        mapM (uncurry checkEventArg) argList
+    where params = simInputEventParameters def
+          argList = map (\ p -> ( p , find (\ a -> simParamName p == simEventArgName a) args)) params
+          
+checkEventArg (SimParam name _ SimParamPrim) (Just arg) = return $ KVal (simEventArgValue arg)
+checkEventArg (SimParam name _ SimParamAvatar) (Just arg) = return $ KVal (simEventArgValue arg)
+checkEventArg (SimParam name _ (SimParamLSLValue t)) (Just arg) = evaluateExpression t (simEventArgValue arg)
+checkEventArg (SimParam name _ _) Nothing = fail ("event argument " ++ name ++ " not found")
+
+handleSimInputEvent def args = 
+  case checkEventArgs def args of
+      Left s -> logAMessage s
+      Right argValues -> (simInputEventHandler def) (simInputEventName def) argValues
+      
+touchEventDef :: Monad m => SimInputEventDefinition m
+touchEventDef =
+    SimInputEventDefinition {
+        simInputEventName = "Touch Prim",
+        simInputEventDescription = "Avatar touches a prim",
+        simInputEventParameters = [
+            SimParam "Prim" "The prim the avatar should touch" SimParamPrim,
+            SimParam "Avatar" "The avatar that should do the touching" SimParamAvatar,
+            SimParam "Duration" "The duration of the touch" (SimParamLSLValue LLInteger)],
+        simInputEventHandler = undefined }
+        
+eventDescriptors :: Monad m => Map [Char] (SimInputEventDefinition m)
+eventDescriptors = M.fromList [
+        ("Touch Prim", touchEventDef)
+    ]

@@ -1,6 +1,7 @@
 module Lsl.Exec(
     ScriptImage(..),
     EvalState,
+    ExecutionInfo(..),
     MemRegion,
     Binding,
     executeLsl,
@@ -21,6 +22,7 @@ import Data.Bits
 import Data.List
 import Lsl.Breakpoint hiding (checkBreakpoint)
 import Lsl.CodeHelper
+import Lsl.Log
 import Lsl.Util
 import Lsl.Structure
 import Lsl.Type
@@ -1021,18 +1023,6 @@ evalPredef' name =
        pushVal retval
        return evalResult
 
--- vector and rotation operations
--- vecMulScalar (VVal x y z) f = (VVal (x*f) (y*f) (z*f))
--- rotMul (RVal x1 y1 z1 s1) (RVal x2 y2 z2 s2) = 
---     let (x,y,z,s) = (x1,y1,z1,s1) `quaternionMultiply` (x2,y2,z2,s2)
---     in RVal x y z s
--- rot2Mat (RVal x y z s) = quaternionToMatrix (x,y,z,s)
--- matMul ((a1,b1,c1),(a2,b2,c2),(a3,b3,c3)) (VVal a b c) =
---     VVal (a1*a + a2 * b + a3 * c) (b1 * a + b2 * b + b3 * c) (c1 * a + c2 * b + c3 * c)
--- rotMulVec rot vec = matMul (rot2Mat rot) vec
--- invRot (RVal x y z s) = (RVal (-x) (-y) (-z) s)
-
--- vcross (VVal x1 y1 z1) (VVal x2 y2 z2) =
---     let (x,y,z) = (x1,y1,z1) `cross` (x2,y2,z2) in VVal x y z
-
 ctxList es = map (Ctx UnknownSourceContext) es
+
+data ExecutionInfo = ExecutionInfo String Int [(String,SourceContext,Maybe Int,MemRegion)]

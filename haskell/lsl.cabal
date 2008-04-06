@@ -26,6 +26,13 @@ Executable UnitTester2
   Hs-Source-Dirs: .
   Ghc-Options: -fglasgow-exts
 
+Executable SystemTester
+  Build-Depends:  base, haskell98, filepath >= 1.1.0.0, parsec >= 2.1.0.0, HaXml >= 1.19.2, directory, mtl >= 1.1,
+                  network >= 2.1, random >= 1.0, containers >= 0.1
+  Main-Is:        SystemTesterMain.hs
+  Hs-Source-Dirs: .
+  Ghc-Options: -fglasgow-exts
+
 Executable ExpressionHandler
   Build-Depends:  base, haskell98, filepath >= 1.1.0.0, parsec >= 2.1.0.0, HaXml >= 1.19.2, directory, mtl >= 1.1,
                   network >= 2.1, random >= 1.0
