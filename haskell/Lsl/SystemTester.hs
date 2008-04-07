@@ -47,7 +47,8 @@ commandFromXML xml =
 
 simCommand e = match (ElemAcceptor "sim-continue" simple) e >> return (SimContinue [] [])
 
-outputToXML (SimInfo _ log) = (emit "sim-info" [] [emitLog log]) ""
+outputToXML (SimInfo _ log state) = (emit "sim-info" [] [emitLog log,emitState state]) ""
+outputToXML (SimEnded _ log state) = (emit "sim-ended" [] [emitLog log,emitState state]) ""
 
 emitLog log =
     emit "messages" [] $ map emitMessage (log)
@@ -57,6 +58,15 @@ emitMessage logMessage =
                         emitSimple "level" [] (logLevelToName $ logMessageLevel logMessage),
                         emitSimple "source" [] (logMessageSource logMessage),
                         emitSimple "text" [] (logMessageText logMessage)]
+
+emitState state =
+    emit "state" [] [ emitPrims (simStateInfoPrims state),
+                      emitAvatars (simStateInfoAvatars state) ]
+emitPrims prims = emitList "prims" emitPrim prims
+emitAvatars avatars = emitList "avatars" emitAvatar avatars
+
+emitPrim (key,name) = emit "prim" [] [emitSimple "key" [] key, emitSimple "name" [] name]
+emitAvatar (key,name) = emit "avatar" [] [emitSimple "key" [] key, emitSimple "name" [] name]
 
 testSystem :: IO ()
 testSystem = 

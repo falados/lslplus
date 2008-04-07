@@ -30,6 +30,7 @@ import System.Random
 data World m = World {
                     sliceSize :: Int,
                     maxTick :: Int,
+                    nextPause :: Int,
                     wqueue :: WorldEventQueue,
                     wlisteners :: [(Int,Listener)],
                     nextListenerId :: Int,
@@ -89,6 +90,8 @@ getListeners :: Monad m => WorldM m [(Int,Listener)]
 getListeners = queryWorld wlisteners
 getMaxTick :: Monad m => WorldM m Int
 getMaxTick = queryWorld maxTick
+getNextPause :: Monad m => WorldM m Int
+getNextPause = queryWorld nextPause
 getTick :: Monad m => WorldM m Int
 getTick = queryWorld tick
 getNextListenerId :: Monad m => WorldM m Int
@@ -140,14 +143,6 @@ nextTick = do
     let t' = t + 1
     setTick t'
     return t'
-
--- getNextEvent key sname =
---     do (q::Maybe [Event]) <- (getEventQueue key sname)
---        case q of
---           Just (e:es) -> 
---               do setEventQueue key sname es
---                  return $ Just e
---           _ -> return Nothing
 
 wrand :: (Monad m, Random a) => WorldM m a
 wrand = do g <- getRandGen
@@ -333,26 +328,6 @@ getPrimInfo pkey =
                                    Nothing -> return Nothing
                                    Just i -> return $ Just (p1Key, i)
                                    
--- getEventQueue key scriptName =
---     do prims <- getPrims
---        case M.lookup key prims of
---            Nothing -> do logAMessage ("prim " ++ key ++ " not found")
---                          return Nothing
---            Just p ->
---                case lookup scriptName (primScripts p) of
---                    Nothing -> do logAMessage ("script " ++ scriptName ++ " not found in prim " ++ key)
---                                  return Nothing
---                    Just (_,q) ->  return (Just q)
-
--- getEventQueue' :: [Prim] -> String -> String -> Maybe [Event]
--- getEventQueue' prims key scriptName =
---     do p <- find (\ p -> primKey p == key) prims
---        (_,q) <- lookup scriptName (primScripts p)
---        return q
-       
--- setEventQueue key scriptName q =
---     do updatePrim (\ p -> updateScript p scriptName (\ _ (image, qold) -> return (image, q))) key
-
 pushEvents oid pid e =
     do objects <- getObjects
        case M.lookup oid objects of
@@ -381,6 +356,7 @@ getObject name = liftM (M.lookup name) getObjects
 newWorld slice maxt iq = World {
                sliceSize = slice,
                maxTick = maxt,
+               nextPause = slice,
                wqueue = iq,
                wlisteners = [],
                nextListenerId = 0,
@@ -455,10 +431,6 @@ updatePrim f key =
             Just p -> do p' <- f p
                          setPrims (M.insert key p' prims)
 
--- updateScript prim sid f =
---     do scripts' <- modifyLookupM sid f $ primScripts prim
---        return $ prim { primScripts = scripts' }
-
 queryObject oid f =
     do objects <- getObjects
        return $ case M.lookup oid objects of
@@ -473,15 +445,6 @@ queryPrim k f =
            Nothing -> Nothing
            Just p -> Just (f p)
          
--- onRezScript param sname (Valid scriptImage) =
---      (sname, (Valid (softReset scriptImage), [Event "on_rez" [IVal param]]))
--- onRezScript param sname (Invalid s) =
---      (sname, (Invalid s, []))
--- onRezPrim param prim =
---    let names = map fst $ primScripts prim
---        states = map (fst.snd) $ primScripts prim in
---        prim { primScripts = zipWith (onRezScript param) names states }
-
 registerListener listener =
    do listeners <- getListeners
       id <- getNextListenerId
@@ -554,14 +517,6 @@ matchListener (Chat chan' sender' key' msg') (Listener pkey sid chan sender key 
 
 listenAddress l = (listenerPrimKey l, listenerScriptName l)
 
--- runScripts :: Monad m => WorldM m ()
--- runScripts =
---     do objects <- getObjects
---        objects' <- mapM processObject (M.toList objects)
---        setObjects (M.fromList objects')
------------------------------------------------------
---
---
 runScripts :: Monad m => WorldM m ()
 runScripts =
     do scripts <- getWorldScripts
@@ -588,54 +543,16 @@ runScript parent index pkey sname img q =
            Right (img',q') -> do
                scripts <- getWorldScripts
                setWorldScripts (M.insert (pkey,sname) (Valid img',q') scripts)
------------------------------------------------------
-
--- processObject :: Monad m => (String,LSLObject) -> WorldM m (String,LSLObject)
--- processObject (name,o) = 
---     do let pairs = zip (primKeys o) [0..]
---        mapM process pairs
---        return (name, o)
--- --        prims <- getPrims
--- --        prims' <- modifyByPredM (\ p -> primKey p `elem` map fst pairs) (\p -> processPrim name (lookup (primKey p) pairs) p) prims
--- --        setPrims prims'
--- --        return (name,o)
---     where process (k,index) = do
---               prims <- getPrims
---               case M.lookup k prims of
---                   Nothing -> logAMessage ("prim " ++ k ++ " not found")
---                   Just p -> do p' <- processPrim name index p
---                                setPrims (M.insert k p' prims)
-       
--- processPrim :: Monad m => String -> Int -> Prim -> WorldM m Prim
--- --processPrim name Nothing p = error ("can't determine index for prim: " ++ (primKey p))
--- processPrim name index p =
---       do scripts' <- mapM (processScript name index (primKey p)) (primScripts p)
---          return $ p { primScripts = scripts' }
-
--- processScript :: Monad m => String -> Int -> String -> (String,(Validity ScriptImage,[Event])) -> WorldM m (String,(Validity ScriptImage,[Event]))
--- processScript oid pid key (sid,(Valid image, _)) =
---     do --(w::World) <- queryWorld id
---        slice <- getSliceSize
---        tick <- getTick
---        let chkBp _ sm = return (False,sm)
---        result <- executeLsl image oid pid sid key doPredef logAMessage getTick setTick chkBp getNextEvent (tick + slice)
---        Just q <- getEventQueue key sid
---        case result of
---            Left s -> do logAMessage ("execution error in script " ++ key ++ "/" ++ sid ++ ":" ++ s)
---                         return (sid,(Valid image,q))
---            Right image' -> return (sid,(Valid image',q))
--- processScript oid pid key (sid,(Invalid s,q)) = return (sid,(Invalid s,q))
 
 simulate :: Monad m => WorldM m ()
 simulate =
-    do w <- queryWorld id
-       --etrace (show w)
-       processEvents
+    do processEvents
        runScripts
        t <- getTick
-       maxt <- getMaxTick
        setTick (t + 1)
-       if t > maxt then return () else simulate
+       pauseTime <- getNextPause
+       if t + 1 >= pauseTime then return () else simulate
+--       if t > maxt then return () else simulate
 
 runSim :: Monad m => Int -> Int -> WorldEventQueue -> [(String,Validity CompiledLSLScript)] -> [(String,Validity LModule)] -> m ((),World m)
 runSim slice maxt iq scripts library =
@@ -689,16 +606,16 @@ simulate' world =
     
 -- simulate a world built with the given library and the 
 -- set of scripts
-lslExec iq library scripts slice1 slice2 maxt action =
-    untilM ((>= maxt) . tick) initialWorld $ \ w ->
-        do w' <- simulate' w
-           let newmax = tick w' + slice2
-           action w'
-           let w'' = w' { maxTick = newmax, msglog = []}
-           return w''
-    where untilM p v f = if p v then return v else f v
-          initialWorld :: Monad m => World m
-          initialWorld = newWorld' slice1 slice2 iq library scripts []
+-- lslExec iq library scripts slice1 slice2 maxt action =
+--     untilM ((>= maxt) . tick) initialWorld $ \ w ->
+--         do w' <- simulate' w
+--            let newmax = tick w' + slice2
+--            action w'
+--            let w'' = w' { maxTick = newmax, msglog = []}
+--            return w''
+--     where untilM p v f = if p v then return v else f v
+--           initialWorld :: Monad m => World m
+--           initialWorld = newWorld' slice1 slice2 iq library scripts []
        
 linkSet = -1::Int
 linkAllOthers = -2::Int
@@ -716,12 +633,24 @@ data SimCommand = SimContinue [Breakpoint] [SimEvent]
 
 data WorldDef = WorldDef { worldDefScript :: String }
 
-data SimStatus = SimEnded { simStatusMessage :: String, simStatusLog :: [LogMessage] } | 
-                 SimInfo { simStatusEvents :: [SimEvent], simStatusLog :: [LogMessage] } |
+data SimStatus = SimEnded { simStatusMessage :: String, simStatusLog :: [LogMessage], simStatusState :: SimStateInfo } | 
+                 SimInfo { simStatusEvents :: [SimEvent], simStatusLog :: [LogMessage], simStatusState :: SimStateInfo } |
                  SimSuspended { simStatusEvents :: [SimEvent], 
                                 simStatusSuspendInfo :: ExecutionInfo,
-                                simStatusLog :: [LogMessage] }
+                                simStatusLog :: [LogMessage],
+                                simStatusState :: SimStateInfo }
 
+data SimStateInfo = SimStateInfo {
+        simStateInfoPrims :: [(String,String)],
+        simStateInfoAvatars :: [(String,String)]
+    }
+
+stateInfoFromWorld world =
+    SimStateInfo {
+        simStateInfoPrims = map (\ p -> (primKey p, primName p)) (M.elems $ wprims world),
+        simStateInfoAvatars = map (\ (_,a) -> (avatarKey a, avatarName a)) (worldAvatars world)
+    }
+    
 data SimInputEventDefinition m = SimInputEventDefinition { 
     simInputEventName :: String,
     simInputEventDescription :: String,
@@ -738,7 +667,7 @@ data SimEventArg = SimEventArg { simEventArgName :: String, simEventArgValue :: 
     deriving (Show)
     
 initWorld def scripts lib = 
-    newWorld' 1000 100000 iq lib scripts [(avatarKey defaultAvatar, defaultAvatar)]
+    newWorld' 1000 10000 iq lib scripts [(avatarKey defaultAvatar, defaultAvatar)]
     where iq = [(1,CreatePrim "object" "00000000-0000-0000-0000-000000000001"),
                 (2,AddScript ("script1",worldDefScript def) "00000000-0000-0000-0000-000000000001" True)]
 
@@ -746,14 +675,20 @@ simStep init@(Left (worldDef, scripts, lib)) command =
     let world = initWorld worldDef scripts lib in simStep (Right world) command
 simStep (Right world) (SimContinue _ events) =
     let t = tick world
+        slice = sliceSize world
         simEventToWorldEvent (SimEvent name args delay) = (t + delay, WorldSimEvent name args)
         wq' = putManyWQ (map simEventToWorldEvent events) (wqueue world)
-        world' = world { wqueue = wq' }
+        world' = world { wqueue = wq', nextPause = t + slice }
         (_,world'') = runIdentity $ runStateT simulate world'
         log = msglog world''
         world''' = world'' { msglog = [] } in
-        (SimInfo { simStatusEvents = [], simStatusLog = reverse log }, Right world''')
-        
+        if trace1 "tick" (tick world''') < trace1 "maxTick" (maxTick world''') 
+            then (SimInfo { simStatusEvents = [], 
+                            simStatusLog = reverse log,
+                            simStatusState = stateInfoFromWorld world''' }, Right world''')
+            else (SimEnded { simStatusMessage = "ended", 
+                             simStatusLog = reverse log,
+                             simStatusState = stateInfoFromWorld world''' }, Right world''')
         
 -- Event Descriptions and Handlers -------------------------------------------
 ------------------------------------------------------------------------------
@@ -784,7 +719,22 @@ touchEventDef =
             SimParam "Prim" "The prim the avatar should touch" SimParamPrim,
             SimParam "Avatar" "The avatar that should do the touching" SimParamAvatar,
             SimParam "Duration" "The duration of the touch" (SimParamLSLValue LLInteger)],
-        simInputEventHandler = undefined }
+        simInputEventHandler = 
+            let f _ [KVal pk, KVal ak, IVal duration] = do
+                    result <- runErrorT $ do
+                        prims <- lift getPrims
+                        prim <- M.lookup pk prims
+                        info <- lift $ getPrimInfo pk
+                        case info of
+                            Nothing -> fail ("can't get prim info")
+                            Just (oid,index) -> do
+                                lift $ pushEvents oid index (Event "touch_start" [IVal 1])
+                    case result of
+                        Left s -> logAMessage ("couldn't process touch event - " ++ s)
+                        Right _ -> return ()
+                f name _ = logAMessage ("invalid event activation: " ++ name)
+            in f
+    }
         
 eventDescriptors :: Monad m => Map [Char] (SimInputEventDefinition m)
 eventDescriptors = M.fromList [
