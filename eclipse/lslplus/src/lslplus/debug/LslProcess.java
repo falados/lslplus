@@ -47,13 +47,13 @@ public abstract class LslProcess extends Thread implements IProcess {
                 
                 try {
                     LslProcess.this.p.waitFor();
-                    fireTerminated();
+                    onTerminate();
                 } catch (InterruptedException e) {
                     LslProcess.this.p.destroy();
-                    fireTerminated();
+                    onTerminate();
                 } catch (Exception e) {
                     Util.log(e,e.getLocalizedMessage());
-                    fireTerminated();
+                    onTerminate();
                 }
             }
 	    };
@@ -129,11 +129,10 @@ public abstract class LslProcess extends Thread implements IProcess {
 
 	public void terminate() throws DebugException {
 	    processMonitor.interrupt();
-	    onTerminate();
 	}
 	
 	protected void onTerminate() {
-	    
+	    fireTerminated();
 	}
 	
     public void setThread(LslThread thread) {

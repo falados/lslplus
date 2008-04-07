@@ -5,6 +5,7 @@ import java.util.Iterator;
 
 import lslplus.debug.LslSimProcess;
 import lslplus.sim.SimStatuses;
+import lslplus.sim.SimStatuses.SimState;
 import lslplus.simview.SimWatcherViewPart;
 import lslplus.util.Util;
 
@@ -16,6 +17,7 @@ public class SimManager {
     private HashSet listeners = new HashSet();
     private volatile boolean active  = false;
     private LslSimProcess process = null;
+    private SimState simState;
     public synchronized void addSimListener(SimListener listener) {
         this.listeners.add(listener);
     }
@@ -116,4 +118,9 @@ public class SimManager {
             listener.simEnded();
         }
     }
+    public synchronized void setSimState(SimState state) {
+        this.simState = state;
+    }
+    
+    public synchronized SimState getSimState() { return simState; }
 }

@@ -18,18 +18,55 @@ public class SimStatuses {
         public String getSource() { return source; }
         public String getLevel() { return level; }
     }
-    public static class SimStatus { }
-    public static class SimInfo extends SimStatus {
-        private Message[] messages;
+    
+    public static class SimPrim {
+        private String key;
+        private String name;
         
+        public String getKey() { return key; }
+        public String getName() { return name; }
+    }
+    
+    public static class SimAvatar {
+        private String key;
+        private String name;
+        
+        public String getKey() { return key; }
+        public String getName() { return name; }
+    }
+    
+    public static class SimState {
+        private SimPrim[] prims;
+        private SimAvatar[] avatars;
+        
+        public SimPrim[] getPrims() { return prims; }
+        public SimAvatar[] getAvatars() { return avatars; }
+    }
+    public static class SimStatus {
+        private Message[] messages;
+        private SimState state;
         public Message[] getMessages() {
             return messages;
         }
+        
+        public SimState getState() {
+            return state;
+            
+        }
+    }
+    
+    public static class SimInfo extends SimStatus {
+    }
+
+    public static class SimEnded extends SimStatus {
     }
     
     public static void configureXStream(XStream xstream) {
         xstream.alias("sim-info", SimInfo.class); //$NON-NLS-1$
+        xstream.alias("sim-ended", SimEnded.class); //$NON-NLS-1$
         xstream.alias("message", Message.class);        //$NON-NLS-1$
+        xstream.alias("prim", SimPrim.class); //$NON-NLS-1$
+        xstream.alias("avatar", SimAvatar.class); //$NON-NLS-1$
     }
     
     static {

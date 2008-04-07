@@ -30,6 +30,7 @@ public class LslSimProcess extends LslProcess {
 	}
 
 	protected void onTerminate() {
+	    super.onTerminate();
 	    simManager().simStopped();
 	}
 	

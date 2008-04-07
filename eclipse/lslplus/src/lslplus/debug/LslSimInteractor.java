@@ -11,7 +11,9 @@ import java.util.Iterator;
 import java.util.LinkedList;
 
 import lslplus.LslPlusPlugin;
+import lslplus.SimManager;
 import lslplus.sim.SimStatuses;
+import lslplus.sim.SimStatuses.SimEnded;
 import lslplus.sim.SimStatuses.SimInfo;
 import lslplus.sim.SimStatuses.SimStatus;
 import lslplus.util.Util;
@@ -261,9 +263,17 @@ public class LslSimInteractor implements Runnable, Interactor {
                 if (status instanceof SimInfo) {
                     String cmd = continueText();
                     SimInfo info = (SimInfo)status;
-                    LslPlusPlugin.getDefault().getSimManager().newLogMessages(info.getMessages());
+                    simManager().newLogMessages(info.getMessages());
+                    simManager().setSimState(info.getState());
                     //if (LslPlusPlugin.DEBUG) Util.log("writing: " + cmd); //$NON-NLS-1$
                     writeOut(cmd);
+                } else if (status instanceof SimEnded) {
+                    if (LslPlusPlugin.DEBUG) Util.log(Util.URIDecode(line));
+                    SimEnded ended = (SimEnded) status;
+                    simManager().newLogMessages(ended.getMessages());
+                    simManager().setSimState(ended.getState());
+                    endSession();
+                    fireComplete();
                 } else {
                     Util.error("Unrecognized status: " + status);
                 }
@@ -280,6 +290,10 @@ public class LslSimInteractor implements Runnable, Interactor {
             } catch (Exception e1) {
             }
         }
+    }
+
+    private SimManager simManager() {
+        return LslPlusPlugin.getDefault().getSimManager();
     }
     
     private DebugPlugin getDebugPlugin() { return DebugPlugin.getDefault(); }
