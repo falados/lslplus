@@ -1,10 +1,17 @@
 package lslplus.simview;
 
-import lslplus.simview.UserEventDescription.ParameterDescription;
-
+import lslplus.LslPlusPlugin;
+import lslplus.SimManager;
+import lslplus.sim.SimEvent;
+import lslplus.sim.SimEventArg;
+import lslplus.sim.SimEventDefinition;
+import lslplus.sim.SimParamDefinition;
+import lslplus.sim.SimStatuses.NameKeyType;
 import org.eclipse.jface.dialogs.Dialog;
 import org.eclipse.jface.dialogs.IDialogConstants;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.events.ModifyEvent;
+import org.eclipse.swt.events.ModifyListener;
 import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.layout.GridData;
@@ -17,13 +24,19 @@ import org.eclipse.swt.widgets.Event;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Listener;
 import org.eclipse.swt.widgets.Shell;
+import org.eclipse.swt.widgets.Text;
 
 public class EventDialog extends Dialog {
     private Combo combo;
-    private UserEventDescription desc;
-    protected EventDialog(Shell parentShell, UserEventDescription desc) {
+    private String[] args = null;
+    private boolean[] argValid = null;
+    private SimEventDefinition desc;
+    protected EventDialog(Shell parentShell, SimEventDefinition desc) {
         super(parentShell);
         this.desc = desc;
+        args = new String[desc.getParams().length];
+        argValid  = new boolean[args.length];
+        for (int i = 0; i < argValid.length; i++) argValid[i] = false;
     }
 
     private Button okButton() {
@@ -34,6 +47,15 @@ public class EventDialog extends Dialog {
         return combo.getSelectionIndex() >= 0;
     }
 
+    private void updateButtons() {
+        boolean valid = true;
+        for (int i = 0; valid && i < args.length; i++) {
+            valid = argValid[i];
+        }
+        
+        okButton().setEnabled(valid);
+    }
+    
     protected Control createButtonBar(Composite parent) {
         Control c = super.createButtonBar(parent);
         okButton().setEnabled(false);
@@ -46,12 +68,12 @@ public class EventDialog extends Dialog {
     }
     
     protected Control createDialogArea(Composite parent) {
-        getShell().setText("Event: " + desc.getEventName());
+        getShell().setText("Event: " + desc.getName());
         Composite  composite = (Composite) super.createDialogArea(parent);
         Label descriptionLabel = new Label(composite, SWT.LEAD|SWT.HORIZONTAL|SWT.WRAP);
-        descriptionLabel.setText(desc.getEventDescription()); //$NON-NLS-1$
+        descriptionLabel.setText(desc.getDescription()); //$NON-NLS-1$
         
-        ParameterDescription[] parameters = desc.getParameters();
+        SimParamDefinition[] parameters = desc.getParams();
         
         for (int i = 0; i < parameters.length; i++) {
             Composite comp = new Composite(parent, SWT.NONE);
@@ -70,25 +92,20 @@ public class EventDialog extends Dialog {
             
             String controlID = parameters[i].getControlID();
             if (controlID.startsWith("expression-")) {
-                
-            } else if ("prim".equals(controlID)) {
-                combo = new Combo(comp, SWT.READ_ONLY|SWT.DROP_DOWN);
-
-                combo.setItems(new String[] { "foo", "bar" });
-                combo.deselectAll();
-                
-                combo.addSelectionListener(new SelectionListener() {
-                    public void widgetDefaultSelected(SelectionEvent e) {
-                    }
-
-                    public void widgetSelected(SelectionEvent e) {
-                        if (combo.getSelectionIndex() >= 0) {
-                            okButton().setEnabled(true);
-                        } else {
-                            okButton().setEnabled(false);
-                        }
+                final Text text = new Text(comp, SWT.SINGLE|SWT.LEFT);
+                final int argIndex = i;
+                text.addModifyListener(new ModifyListener() {
+                    public void modifyText(ModifyEvent e) {
+                        args[argIndex] = text.getText();
+                        argValid[argIndex] = text.getText().trim().length() > 0;
+                        updateButtons();
                     }
                 });
+                
+            } else if ("avatar".equals(controlID)) {
+                createKeyCombo(i, comp, simManager().getSimState().getAvatars());
+            } else if ("prim".equals(controlID)) {
+                createKeyCombo(i, comp, simManager().getSimState().getPrims());
                 
             }
         }
@@ -96,4 +113,44 @@ public class EventDialog extends Dialog {
         return composite;
     }
 
+    private void createKeyCombo(final int argIndex, Composite parent, NameKeyType[] nameKeyObj) {
+        final Combo combo = new Combo(parent, SWT.READ_ONLY|SWT.DROP_DOWN);
+        String[] dropdownRepresentation = new String[nameKeyObj.length];
+        final String[] itemKey = new String[dropdownRepresentation.length];
+        for (int j = 0; j < dropdownRepresentation.length; j++) {
+            dropdownRepresentation[j] = nameKeyObj[j].getCombinedRepresentation();
+            itemKey[j] = nameKeyObj[j].getKey();
+        }
+        combo.setItems(dropdownRepresentation);
+        combo.deselectAll();
+        
+        combo.addSelectionListener(new SelectionListener() {
+            public void widgetDefaultSelected(SelectionEvent e) {
+            }
+
+            public void widgetSelected(SelectionEvent e) {
+                if (combo.getSelectionIndex() >= 0) {
+                    argValid[argIndex] = true;
+                    args[argIndex] = itemKey[combo.getSelectionIndex()];
+                } else {
+                    argValid[argIndex] = false;
+                    args[argIndex] = null;
+                }
+                updateButtons();
+            }
+        });
+    }
+
+    private SimManager simManager() {
+        return LslPlusPlugin.getDefault().getSimManager();
+    }
+
+    public SimEvent getEvent() {
+        if (this.getReturnCode() != Dialog.OK) return null;
+        SimEventArg[] simEventArgs = new SimEventArg[args.length];
+        for (int i = 0; i < simEventArgs.length; i++) {
+            simEventArgs[i] = new SimEventArg(desc.getParams()[i].getName(), args[i]);
+        }
+        return new SimEvent(desc.getName(), 0, simEventArgs);
+    }
 }

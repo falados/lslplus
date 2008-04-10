@@ -152,6 +152,10 @@ public class LslTestInteractor implements Runnable, Interactor {
         thread.start();
     }
  
+    public void stop() {
+        
+    }
+    
     private String continueText() {
         BreakpointData[] bpData = null;
         if (debugMode) {

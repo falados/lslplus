@@ -2,6 +2,7 @@ package lslplus.launching;
 
 import lslplus.LslPlusPlugin;
 import lslplus.LslProjectNature;
+import lslplus.SimManager;
 import lslplus.debug.LslDebugTarget;
 import lslplus.debug.LslSimProcess;
 import lslplus.debug.LslSourceLocator;
@@ -43,10 +44,13 @@ public class SimLaunchDelegate implements ILaunchConfigurationDelegate {
         LslSimProcess p = new LslSimProcess(testDescriptor, launch);
         LslDebugTarget target = new LslDebugTarget("lslplus-test", launch, p); //$NON-NLS-1$
         p.go();
-        LslPlusPlugin.getDefault().getSimManager().simLaunched(p);
+        simManager().simLaunched(p);
         launch.addDebugTarget(target);
         launch.addProcess(p);
         launch.setSourceLocator(new LslSourceLocator());
     }
 
+    private SimManager simManager() {
+        return LslPlusPlugin.getDefault().getSimManager();
+    }
 }

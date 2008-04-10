@@ -19,20 +19,42 @@ public class SimStatuses {
         public String getLevel() { return level; }
     }
     
-    public static class SimPrim {
-        private String key;
-        private String name;
-        
-        public String getKey() { return key; }
-        public String getName() { return name; }
+    public static interface NameKeyType {
+        public String getName();
+        public String getKey();
+        public String getCombinedRepresentation();
     }
     
-    public static class SimAvatar {
+    public static class SimPrim implements NameKeyType {
         private String key;
         private String name;
         
         public String getKey() { return key; }
         public String getName() { return name; }
+        
+        public String toString() {
+            return name + " - " + key;
+        }
+        
+        public String getCombinedRepresentation() {
+            return toString();
+        }
+    }
+    
+    public static class SimAvatar implements NameKeyType {
+        private String key;
+        private String name;
+        
+        public String getKey() { return key; }
+        public String getName() { return name; }
+        public String getCombinedRepresentation() {
+            
+            return toString();
+        }
+        
+        public String toString() {
+            return name + " - " + key;
+        }
     }
     
     public static class SimState {
@@ -42,6 +64,7 @@ public class SimStatuses {
         public SimPrim[] getPrims() { return prims; }
         public SimAvatar[] getAvatars() { return avatars; }
     }
+    
     public static class SimStatus {
         private Message[] messages;
         private SimState state;

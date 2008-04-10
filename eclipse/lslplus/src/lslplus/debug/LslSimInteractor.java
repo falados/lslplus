@@ -12,6 +12,8 @@ import java.util.LinkedList;
 
 import lslplus.LslPlusPlugin;
 import lslplus.SimManager;
+import lslplus.sim.SimEvent;
+import lslplus.sim.SimEventListener;
 import lslplus.sim.SimStatuses;
 import lslplus.sim.SimStatuses.SimEnded;
 import lslplus.sim.SimStatuses.SimInfo;
@@ -34,7 +36,7 @@ import com.thoughtworks.xstream.io.xml.DomDriver;
 /**
  * Interact with a running test session.
  */
-public class LslSimInteractor implements Runnable, Interactor {
+public class LslSimInteractor implements Runnable, Interactor, SimEventListener {
     private static class BreakpointData {
         private static XStream xstream = new XStream(new DomDriver());
         public String file;
@@ -55,20 +57,23 @@ public class LslSimInteractor implements Runnable, Interactor {
 
     private abstract static class SimCommand {
         protected BreakpointData[] breakpoints = null;
-        protected SimCommand(BreakpointData[] breakpoints) {
+        protected SimEvent[] events;
+        protected SimCommand(BreakpointData[] breakpoints, SimEvent[] events) {
             this.breakpoints = breakpoints;
+            this.events = events;
         }
     }
     
     private static class ContinueCommand extends SimCommand {
         private static XStream xstream = new XStream(new DomDriver());
-        public ContinueCommand(BreakpointData[] breakpoints) {
-            super(breakpoints);
+        public ContinueCommand(BreakpointData[] breakpoints, SimEvent[] events) {
+            super(breakpoints, events);
         }
         
         static {
             xstream.alias("sim-continue", ContinueCommand.class); //$NON-NLS-1$
             BreakpointData.configureXStream(xstream);
+            SimEvent.configureXStream(xstream);
         }
         
         public static String toXML(ContinueCommand cmd) {
@@ -78,8 +83,8 @@ public class LslSimInteractor implements Runnable, Interactor {
     
     private static class StepCommand extends SimCommand {
         private static XStream xstream = new XStream(new DomDriver());
-        public StepCommand(BreakpointData[] breakpoints) {
-            super(breakpoints);
+        public StepCommand(BreakpointData[] breakpoints, SimEvent[] events) {
+            super(breakpoints, events);
         }
         
         static {
@@ -94,8 +99,8 @@ public class LslSimInteractor implements Runnable, Interactor {
     
     private static class StepOverCommand extends SimCommand {
         private static XStream xstream = new XStream(new DomDriver());
-        public StepOverCommand(BreakpointData[] breakpoints) {
-            super(breakpoints);
+        public StepOverCommand(BreakpointData[] breakpoints, SimEvent[] events) {
+            super(breakpoints, events);
         }
         
         static {
@@ -110,8 +115,8 @@ public class LslSimInteractor implements Runnable, Interactor {
     
     private static class StepOutCommand extends SimCommand {
         private static XStream xstream = new XStream(new DomDriver());
-        public StepOutCommand(BreakpointData[] breakpoints) {
-            super(breakpoints);
+        public StepOutCommand(BreakpointData[] breakpoints, SimEvent[] events) {
+            super(breakpoints, events);
         }
         
         static {
@@ -132,6 +137,7 @@ public class LslSimInteractor implements Runnable, Interactor {
     private Thread thread;
     private boolean done = false;
     private boolean debugMode;
+    private LinkedList eventQueue = new LinkedList();
     
     public LslSimInteractor(String launchMode, String simDescriptor, InputStream in, OutputStream out) {
         reader = new BufferedReader(new InputStreamReader(in));
@@ -143,18 +149,23 @@ public class LslSimInteractor implements Runnable, Interactor {
     
     public void start() {
         if (done || thread != null && thread.isAlive()) return;
+        simManager().addSimEventListener(this);
         writeOut(simDescriptor);
         writeOut(continueText());
         thread = new Thread(this);
         thread.start();
     }
  
+    public void stop() {
+        simManager().removeSimEventListener(this);
+    }
+    
     private String continueText() {
         BreakpointData[] bpData = null;
         if (debugMode) {
             bpData = createBreakpointData();
         }
-        ContinueCommand cmd = new ContinueCommand(bpData);
+        ContinueCommand cmd = new ContinueCommand(bpData,getAllPendingEvents());
         return ContinueCommand.toXML(cmd);
     }
     
@@ -163,7 +174,7 @@ public class LslSimInteractor implements Runnable, Interactor {
         if (debugMode) {
             bpData = createBreakpointData();
         }
-        StepCommand cmd = new StepCommand(bpData);
+        StepCommand cmd = new StepCommand(bpData, getAllPendingEvents());
         return StepCommand.toXML(cmd);
     }
 
@@ -172,7 +183,8 @@ public class LslSimInteractor implements Runnable, Interactor {
         if (debugMode) {
             bpData = createBreakpointData();
         }
-        StepOverCommand cmd = new StepOverCommand(bpData);
+        SimEvent[] events = (SimEvent[]) eventQueue.toArray(new SimEvent[0]);
+        StepOverCommand cmd = new StepOverCommand(bpData,getAllPendingEvents());
         return StepOverCommand.toXML(cmd);
     }
 
@@ -181,7 +193,7 @@ public class LslSimInteractor implements Runnable, Interactor {
         if (debugMode) {
             bpData = createBreakpointData();
         }
-        StepOutCommand cmd = new StepOutCommand(bpData);
+        StepOutCommand cmd = new StepOutCommand(bpData, getAllPendingEvents());
         return StepOutCommand.toXML(cmd);
     }
 
@@ -308,5 +320,19 @@ public class LslSimInteractor implements Runnable, Interactor {
         writer.println("quit"); //$NON-NLS-1$
         writer.flush();
         writer.close();
+    }
+    
+    public void putEvent(SimEvent event) {
+        synchronized (eventQueue) {
+            eventQueue.add(event);
+        }
+    }
+    
+    private SimEvent[] getAllPendingEvents() {
+        synchronized (eventQueue) {
+            SimEvent[] events = (SimEvent[]) eventQueue.toArray(new SimEvent[eventQueue.size()]);
+            eventQueue.clear();
+            return events;
+        }
     }
 }

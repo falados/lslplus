@@ -133,6 +133,7 @@ public abstract class LslProcess extends Thread implements IProcess {
 	
 	protected void onTerminate() {
 	    fireTerminated();
+	    interactor.stop();
 	}
 	
     public void setThread(LslThread thread) {

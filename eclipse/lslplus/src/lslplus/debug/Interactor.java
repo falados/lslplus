@@ -8,4 +8,5 @@ public interface Interactor {
     public void stepOver();
     public void addListener(InteractorListener listener);
     public void removeListener(InteractorListener listener);
+    public void stop();
 }

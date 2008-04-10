@@ -3,36 +3,26 @@ package lslplus.simview;
 import lslplus.LslPlusPlugin;
 import lslplus.SimListener;
 import lslplus.SimManager;
+import lslplus.sim.SimEvent;
+import lslplus.sim.SimEventDefinition;
 import lslplus.sim.SimStatuses;
-import lslplus.simview.UserEventDescription.ParameterDescription;
-import lslplus.simview.UserEventDescription.PrimParameter;
 import lslplus.util.Util;
 
 import org.eclipse.jface.action.Action;
 import org.eclipse.jface.action.IToolBarManager;
 import org.eclipse.jface.action.Separator;
-import org.eclipse.jface.dialogs.Dialog;
-import org.eclipse.jface.dialogs.IDialogConstants;
 import org.eclipse.jface.resource.ImageDescriptor;
 import org.eclipse.jface.viewers.TreeViewer;
-import org.eclipse.jface.window.Window;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.SashForm;
 import org.eclipse.swt.custom.ViewForm;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
-import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
-import org.eclipse.swt.widgets.Button;
-import org.eclipse.swt.widgets.Combo;
 import org.eclipse.swt.widgets.Composite;
-import org.eclipse.swt.widgets.Control;
-import org.eclipse.swt.widgets.Event;
-import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Layout;
-import org.eclipse.swt.widgets.Listener;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Tree;
 import org.eclipse.swt.widgets.TreeColumn;
@@ -41,67 +31,8 @@ import org.eclipse.ui.part.ViewPart;
 
 public class SimWatcherViewPart extends ViewPart implements SimListener {
     public static final String ID = "lslplus.simWatcher"; //$NON-NLS-1$
-    private static UserEventDescription touchEventDescription =
-        new UserEventDescription("Touch Event", "Touch a prim",
-                new ParameterDescription[] {
-                    new PrimParameter()
-                });
-    private static class TouchDialog extends Dialog {
-        private Combo combo;
-        protected TouchDialog(Shell parentShell) {
-            super(parentShell);
-        }
-
-        private Button okButton() {
-            return getButton(IDialogConstants.OK_ID);
-        }
-        
-        private boolean selectionIsValid() {
-            return combo.getSelectionIndex() >= 0;
-        }
-
-        protected Control createButtonBar(Composite parent) {
-            Control c = super.createButtonBar(parent);
-            okButton().setEnabled(false);
-            okButton().addListener(SWT.Show, new Listener() {
-               public void handleEvent(Event event) {
-                   okButton().setEnabled(selectionIsValid());
-               }
-            });
-            return c;
-        }
-        
-        protected Control createDialogArea(Composite parent) {
-            getShell().setText("Select a prim to touch");
-            Composite  composite = (Composite) super.createDialogArea(parent);
-            Label nameLabel = new Label(composite, SWT.LEFT|SWT.HORIZONTAL);
-            nameLabel.setText("Prim Name / Key"); //$NON-NLS-1$
-            
-            combo = new Combo(composite, SWT.READ_ONLY|SWT.DROP_DOWN);
-
-            combo.setItems(new String[] { "foo", "bar" });
-            combo.deselectAll();
-            
-            combo.addSelectionListener(new SelectionListener() {
-                public void widgetDefaultSelected(SelectionEvent e) {
-                }
-
-                public void widgetSelected(SelectionEvent e) {
-                    if (combo.getSelectionIndex() >= 0) {
-                        okButton().setEnabled(true);
-                    } else {
-                        okButton().setEnabled(false);
-                    }
-                }
-            });
-            
-            return composite;
-        }
-    }
     private class StopAction extends Action {
-        private Shell parent;
         public StopAction(Shell parentShell) {
-            this.parent = parentShell;
             setText("Stop Sim"); //$NON-NLS-1$
             setToolTipText("Stop Sim"); //$NON-NLS-1$
             ImageDescriptor descriptor = LslPlusPlugin
@@ -130,12 +61,26 @@ public class SimWatcherViewPart extends ViewPart implements SimListener {
         }
 
         public void run() {
-            Dialog dlg = //new TouchDialog(parentShell);
-                    new EventDialog(parentShell, touchEventDescription);
+            SimEventDefinition def = simManager.getAnEventDefinition("Touch Prim");
+            
+            if (def == null) {
+                Util.error("event definition not found: Touch Prim");
+                return;
+            }
+            EventDialog dlg = //new TouchDialog(parentShell);
+                    new EventDialog(parentShell, def);
             dlg.open();
             
-            if (dlg.getReturnCode() == Window.OK) {
-                Util.log("OK!");
+//            if (dlg.getReturnCode() == Window.OK) {
+//                SimEvent event = new SimEvent("Touch Prim", 0,
+//                        new SimEventArg[] {
+//                            new SimEventArg("Prim", "20000000-0000-0000-0000-000000000000"),
+//                            new SimEventArg("Avatar", "10000000-0000-0000-0000-000000000000"),
+//                            new SimEventArg("Duration", "1.0")
+//                        });
+            SimEvent event = dlg.getEvent();
+            if (event != null) {
+                simManager.putEvent(event);
             }
         }
     }
