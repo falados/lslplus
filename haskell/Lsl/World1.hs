@@ -1,9 +1,20 @@
 module Lsl.World1 where
 
+import Control.Monad
+import Control.Monad.State hiding (State,get)
+import Control.Monad.Identity
+import Control.Monad.Error
+import Data.List
+import Data.Bits
+import Data.Map(Map)
+import qualified Data.Map as M
+import Debug.Trace
+
 import Lsl.Avatar
 import Lsl.Breakpoint
 import Lsl.Builder
 import Lsl.Evaluation
+import Lsl.EventSigs
 import Lsl.Exec
 import Lsl.ExpressionHandler
 import Lsl.FuncSigs
@@ -15,16 +26,10 @@ import Lsl.Structure
 import Lsl.Type
 import Lsl.Util
 import Lsl.ValueDB
-import Control.Monad
-import Control.Monad.State hiding (State,get)
-import Control.Monad.Identity
-import Control.Monad.Error
-import Data.List
-import Data.Bits
-import Data.Map(Map)
-import qualified Data.Map as M
-import Debug.Trace
+import Lsl.WorldDef
+
 import System.Random
+import Test.QuickCheck
 
 -- a data type that defines the state of the 'world'
 data World m = World {
@@ -55,7 +60,7 @@ worldM f = StateT (\ s -> return (f s))
 
 -- execute a predefined ('ll') function
 doPredef :: Monad m => String -> ScriptInfo -> [LSLValue] -> WorldM m (EvalResult,LSLValue)
-doPredef name info@(oid, pid, sid, pkey) args =
+doPredef name info@(ScriptInfo oid pid sid pkey event) args =
     do predefs <- getPredefFuncs
        -- find the correct function to execute
        case tryPredefs name pkey sid args predefs of
@@ -175,7 +180,7 @@ defaultPredef name predef =
         Just numParams -> PredefFunc name Nothing Nothing (replicate numParams Nothing) predef
 
 llMessageLinked :: Monad m => ScriptInfo -> [LSLValue] -> WorldM m (EvalResult,LSLValue)       
-llMessageLinked (oid,pid,sid,pkey) [IVal link,IVal val,SVal msg,KVal key] =
+llMessageLinked (ScriptInfo oid pid sid pkey _) [IVal link,IVal val,SVal msg,KVal key] =
     do mNumPrims <- queryObject oid (\ o -> return $ length (primKeys o))
        case mNumPrims of
            Nothing -> do logAMessage ("object " ++ oid ++ " not found!")
@@ -187,34 +192,34 @@ llMessageLinked (oid,pid,sid,pkey) [IVal link,IVal val,SVal msg,KVal key] =
                       else if link == linkAllChildren then [1..(n-1)]
                       else if link == linkThis then [pid]
                       else [link - 1] in
-                   do mapM (flip (pushEvents oid) (Event "link_message" [IVal pid,IVal val,SVal msg, KVal key])) targetList
+                   do mapM (flip (pushEvents oid) (Event "link_message" [IVal pid,IVal val,SVal msg, KVal key] [])) targetList
                       return (EvalIncomplete,VoidVal)
 
 -- the key to 'sleep' is that instead of returning 'EvalIncomplete' as its EvalResult, it returns
 -- 'YieldTil <some-tick>', which puts the script into a sleep state.
 -- other functions which have a built in delay should use this mechanism as well.
-llSleep (oid,pid,sid,pkey) [FVal f] =
+llSleep info@(ScriptInfo oid pid sid pkey event) [FVal f] =
     do tick <- getTick
-       return $ (YieldTil (tick + floor (f * 1000.0)),VoidVal)
-llSay info@(oid,pid,sid,pkey) [IVal chan, SVal message] =
+       return $ (YieldTil (tick + durationToTicks f),VoidVal)
+llSay info@(ScriptInfo oid pid sid pkey event) [IVal chan, SVal message] =
     do logFromScript info $ concat ["chan = ", show chan, ", message = ", message]
        tick <- getTick
        Just name <- queryPrim pkey primName
        putWorldEvent tick $ Chat chan name pkey message
        return (EvalIncomplete,VoidVal)
-llListen (oid,pid,sid,pkey) [IVal chan, SVal sender, KVal key, SVal msg] =
+llListen (ScriptInfo oid pid sid pkey event) [IVal chan, SVal sender, KVal key, SVal msg] =
     do lid <- registerListener $ Listener pkey sid chan sender key msg
        return (EvalIncomplete,IVal lid)
 
-llFrand (oid,pid,sid,pkey) [FVal maxval] =
+llFrand _ [FVal maxval] =
     do r <- wrand
        continueWith $ FVal (maxval * r)
 
-llSetPos (oid,pid,sid,pkey) [val] =
+llSetPos (ScriptInfo oid pid sid pkey event) [val] =
     do insertWorldDB ["prim", pkey, "pos" ] val
        continueWith VoidVal
 
-llGetPos (oid,pid,sid,pkey) [] =
+llGetPos (ScriptInfo oid pid sid pkey event) [] =
     do val <- lookupWorldDB ["prim", pkey, "pos" ]
        case val of
            Just (Right v@(VVal _ _ _)) -> continueWith v
@@ -263,7 +268,7 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
     ] ++ internalLLFuncs)
 
 logFromScript :: Monad m => ScriptInfo -> String -> WorldM m ()
-logFromScript (_,_,_,pkey) msg = logAMessage (pkey ++ ": " ++ msg)
+logFromScript scriptInfo msg = logAMessage (scriptInfoPrimKey scriptInfo ++ ": " ++ msg)
 
 indent n = showString $ (replicate (4 * n) ' ')
 niceShowsList n l = showString "[\n" . indent (n+1) . 
@@ -276,18 +281,18 @@ niceShowsWorld w =
     indent 1 . showString "msglog: " . niceShowsList 1 (reverse $ msglog w) . showString "\n"
 niceShowWorld w = niceShowsWorld w ""
     
-data LSLObject = LSLObject { primKeys :: [String] } deriving (Show)
+-- data LSLObject = LSLObject { primKeys :: [String] } deriving (Show)
 
-data Prim = Prim {
-                    primName :: String,
-                    primKey :: String,
-                    primParent :: Maybe String,
-                    primScripts :: [String],
-                    notecards :: [(String,[String])],
-                    animations :: [String],
-                    textures :: [String],
-                    sounds :: [String],
-                    inventoryObjects :: [LSLObject] } deriving (Show)
+-- data Prim = Prim {
+--                     primName :: String,
+--                     primKey :: String,
+--                     primParent :: Maybe String,
+--                     primScripts :: [String],
+--                     notecards :: [(String,[String])],
+--                     animations :: [String],
+--                     textures :: [String],
+--                     sounds :: [String],
+--                     inventoryObjects :: [LSLObject] } deriving (Show)
 
 emptyPrim name key =
     Prim { primName = name,
@@ -347,6 +352,18 @@ pushEvent e key sid =
            Nothing -> logAMessage ("no such script: " ++ (show (key, sid)))
            Just (s,q) -> setWorldScripts (M.insert (key,sid) (s,q ++ [e]) scripts)
 
+pushEventToPrim e key =
+    do prims <- getPrims
+       case M.lookup key prims of
+           Nothing -> logAMessage ("no such prim: " ++ key)
+           Just p -> mapM_ (pushEvent e key) (primScripts p)
+           
+pushEventToObject e key =
+    do objects <- getObjects
+       case M.lookup key objects of
+           Nothing -> logAMessage("no such object: " ++ key)
+           Just o ->  mapM_ (pushEventToPrim e) (primKeys o)
+
 getObjectNames :: (Monad m) => WorldM m [String]
 getObjectNames = getObjects >>= (return . M.keys)
 getListenerIds :: (Monad m) => WorldM m [Int]
@@ -378,7 +395,12 @@ newWorld' slice maxt iq lib scripts avatars =
         wscripts = scripts, 
         wlibrary = lib,
         worldAvatars = avatars }
-
+newWorld'' slice maxt iq lib scripts avatars objs prims activeScripts =
+    (newWorld' slice maxt iq lib scripts avatars) {
+        wobjects = objs,
+        wprims = prims,
+        worldScripts = activeScripts }
+        
 addObjectToInventory name obj world = world { inventory = (name,obj):(inventory world) }
 
 ticksPerSecond :: Int
@@ -494,13 +516,13 @@ processEvent (AddScript (name,script) key active) =
                   updatePrim (\ p -> return $ addScript p name) key
                   let sstate = initLSLScript code
                   scripts <- getWorldScripts
-                  setWorldScripts (M.insert (key,name) (Valid sstate,[Event "state_entry" []]) scripts)
+                  setWorldScripts (M.insert (key,name) (Valid sstate,[Event "state_entry" [] []]) scripts)
 processEvent chat@(Chat chan name key msg) =
     do listeners <- getListeners    
        let listeners'= filter (matchListener chat) $ map snd listeners
        -- event goes to all UNIQUE addresses in list
        let addresses = nub $ map listenAddress listeners'
-       mapM (\ (key,sid) -> pushEvent (Event "listen" [IVal chan, SVal name, KVal key, SVal msg]) key sid) addresses
+       mapM (\ (key,sid) -> pushEvent (Event "listen" [IVal chan, SVal name, KVal key, SVal msg] []) key sid) addresses
        return ()
 processEvent (WorldSimEvent name args) = 
     case M.lookup name eventDescriptors of
@@ -556,7 +578,8 @@ simulate =
 
 runSim :: Monad m => Int -> Int -> WorldEventQueue -> [(String,Validity CompiledLSLScript)] -> [(String,Validity LModule)] -> m ((),World m)
 runSim slice maxt iq scripts library =
-    runStateT (simulate) $ newWorld' slice maxt iq library scripts [(avatarKey defaultAvatar, defaultAvatar)]
+    let avKey = nextKey nullKey in
+    runStateT (simulate) $ newWorld' slice maxt iq library scripts [(avKey, defaultAvatar avKey)]
            
 
 testScript = LSLScript 
@@ -656,10 +679,11 @@ data SimInputEventDefinition m = SimInputEventDefinition {
     simInputEventDescription :: String,
     simInputEventParameters :: [SimParam],
     simInputEventHandler :: String -> [LSLValue] -> WorldM m () }
-    
+
 data SimParam = SimParam { simParamName :: String, simParamDescription :: String,
                            simParamType :: SimParamType }
-data SimParamType = SimParamPrim | SimParamAvatar | SimParamLSLValue LSLType
+data SimParamType = SimParamPrim | SimParamAvatar | SimParamLSLValue LSLType | SimParamRootPrim | SimParamKey |
+                    SimParamScript
                     
 data SimEvent = SimEvent { simEventName :: String, simEventArgs :: [SimEventArg], simEventDelay :: Int }
     deriving (Show)
@@ -667,9 +691,11 @@ data SimEventArg = SimEventArg { simEventArgName :: String, simEventArgValue :: 
     deriving (Show)
     
 initWorld def scripts lib = 
-    newWorld' 1000 10000 iq lib scripts [(avatarKey defaultAvatar, defaultAvatar)]
-    where iq = [(1,CreatePrim "object" "00000000-0000-0000-0000-000000000001"),
-                (2,AddScript ("script1",worldDefScript def) "00000000-0000-0000-0000-000000000001" True)]
+    newWorld' 1000 1000000 iq lib scripts [(avKey, defaultAvatar avKey)]
+    where avKey = nextKey nullKey
+          primKey = nextKey avKey
+          iq = [(1,CreatePrim "object" primKey),
+                (2,AddScript ("script1",worldDefScript def) primKey True)]
 
 simStep init@(Left (worldDef, scripts, lib)) command =
     let world = initWorld worldDef scripts lib in simStep (Right world) command
@@ -700,43 +726,91 @@ checkEventArgs def args =
     where params = simInputEventParameters def
           argList = map (\ p -> ( p , find (\ a -> simParamName p == simEventArgName a) args)) params
           
-checkEventArg (SimParam name _ SimParamPrim) (Just arg) = return $ KVal (simEventArgValue arg)
+checkEventArg (SimParam _ _ SimParamPrim) (Just arg) = return $ KVal (simEventArgValue arg)
+checkEventArg (SimParam _ _ SimParamRootPrim) (Just arg) = return $ KVal (simEventArgValue arg)
+checkEventArg (SimParam _ _ SimParamScript) (Just arg) = return $ SVal (simEventArgValue arg)
 checkEventArg (SimParam name _ SimParamAvatar) (Just arg) = return $ KVal (simEventArgValue arg)
+checkEventArg (SimParam name _ SimParamKey) (Just arg) = return $ KVal (simEventArgValue arg)
 checkEventArg (SimParam name _ (SimParamLSLValue t)) (Just arg) = evaluateExpression t (simEventArgValue arg)
 checkEventArg (SimParam name _ _) Nothing = fail ("event argument " ++ name ++ " not found")
 
+validSimInputEvent simEvent =
+   case M.lookup (worldSimEventName simEvent) (eventDescriptors :: Map [Char] (SimInputEventDefinition Identity)) of
+       Left s -> fail s
+       Right def ->
+           case checkEventArgs def (worldSimEventArgs simEvent) of
+               Left s -> fail s
+               Right _ -> return ()
+               
 handleSimInputEvent def args = 
   case checkEventArgs def args of
       Left s -> logAMessage s
       Right argValues -> (simInputEventHandler def) (simInputEventName def) argValues
-      
-touchEventDef :: Monad m => SimInputEventDefinition m
-touchEventDef =
+
+mkTouchStartEvent pk nd ak = WorldSimEvent "touch_start" [SimEventArg "Prim Key" pk, SimEventArg "num_detected" nd, SimEventArg "Avatar key" ak]
+mkTouchEvent pk nd ak = WorldSimEvent "touch" [SimEventArg "Prim Key" pk, SimEventArg "num_detected" nd, SimEventArg "Avatar key" ak, SimEventArg "Grab vector" "<0.0,0.0,0.0>"]
+mkTouchEndEvent pk nd ak = WorldSimEvent "touch_end" [SimEventArg "Prim Key" pk, SimEventArg "num_detected" nd, SimEventArg "Avatar key" ak]
+
+userTouchEventDef :: Monad m => SimInputEventDefinition m
+userTouchEventDef =
     SimInputEventDefinition {
         simInputEventName = "Touch Prim",
-        simInputEventDescription = "Avatar touches a prim",
+        simInputEventDescription = "Avatar touches a prim for a duraction",
         simInputEventParameters = [
             SimParam "Prim" "The prim the avatar should touch" SimParamPrim,
             SimParam "Avatar" "The avatar that should do the touching" SimParamAvatar,
-            SimParam "Duration" "The duration of the touch" (SimParamLSLValue LLInteger)],
+            SimParam "Duration" "The duration of the touch (in seconds)" (SimParamLSLValue LLFloat)],
         simInputEventHandler = 
-            let f _ [KVal pk, KVal ak, IVal duration] = do
-                    result <- runErrorT $ do
-                        prims <- lift getPrims
-                        prim <- M.lookup pk prims
-                        info <- lift $ getPrimInfo pk
-                        case info of
-                            Nothing -> fail ("can't get prim info")
-                            Just (oid,index) -> do
-                                lift $ pushEvents oid index (Event "touch_start" [IVal 1])
-                    case result of
-                        Left s -> logAMessage ("couldn't process touch event - " ++ s)
-                        Right _ -> return ()
+            let f _ [KVal pk, KVal ak, FVal duration] = do
+                    t <- getTick
+                    putWorldEvent t (mkTouchStartEvent pk "1" ak)
+                    let tdur = durationToTicks duration
+                    let tticks = [(t + 1),(t + 1 + 500)..(t + tdur)]
+                    mapM_ ((flip putWorldEvent) (mkTouchEvent pk "1" ak)) tticks
+                    putWorldEvent (t + tdur) (mkTouchEndEvent pk "1" ak)
                 f name _ = logAMessage ("invalid event activation: " ++ name)
             in f
     }
         
 eventDescriptors :: Monad m => Map [Char] (SimInputEventDefinition m)
-eventDescriptors = M.fromList [
-        ("Touch Prim", touchEventDef)
-    ]
+eventDescriptors = M.fromList $ mkEventDefList ([userTouchEventDef] ++ rawLslEventDescriptors)
+
+mkEventDefList eventDefs = map (\ e -> (simInputEventName e, e)) eventDefs
+
+rawLslEventDescriptors :: Monad m => [SimInputEventDefinition m]
+rawLslEventDescriptors = map lslEventDescriptorToSimInputDef lslEventDescriptors
+
+lslEventDescriptorToSimInputDef (name, params, delivery, additionalData, description) =
+    SimInputEventDefinition {
+        simInputEventName = name,
+        simInputEventDescription = "This is a raw LSL event: " ++ description,
+        simInputEventParameters =
+            (case delivery of
+               EventDeliveryScript -> [SimParam "Prim Key" "key of prim to deliver to" SimParamPrim,
+                                       SimParam "Script" "name of script to deliver to" SimParamScript]
+               EventDeliveryObject -> [SimParam "Object Key" "key of object to deliver to" SimParamRootPrim]
+               EventDeliveryRoot -> [SimParam "Object Key" "key of object to deliver to" SimParamRootPrim]
+               EventDeliveryPrim -> [SimParam "Prim Key" "key of prim to deliver to" SimParamPrim]
+               ) ++
+            (flip map additionalData (\ d -> case d of
+                EventAdditionalKeys name description -> SimParam name description SimParamKey
+                EventAdditionalAvatarKeys name description -> SimParam name description SimParamAvatar
+                EventAdditionalVectors name description -> SimParam name description (SimParamLSLValue LLVector))) ++
+            map ( \ (t,name) -> SimParam name "" (SimParamLSLValue t)) params,
+        simInputEventHandler =
+            let f _ list = 
+                    let lenAddl = length additionalData
+                        (df,rest) = case delivery of
+                               EventDeliveryScript -> 
+                                   let (KVal pk:SVal sn:vals) = list in ((\ e -> pushEvent e pk sn),vals)
+                               EventDeliveryObject ->
+                                   let (KVal key:vals) = list in ((\ e -> pushEventToObject e key),vals)
+                               _ -> let (KVal key:vals) = list in ((\ e -> pushEventToPrim e key), vals)
+                    in df (Event name (drop lenAddl rest) (zipWith mkInfo additionalData (take lenAddl rest)) )
+                       where mkInfo (EventAdditionalVectors _ _) val = ("vector",val)
+                             mkInfo _                            val = ("key",val)
+            in f
+    }
+
+----- MISC ----
+durationToTicks dur = floor (1000.0 * dur)

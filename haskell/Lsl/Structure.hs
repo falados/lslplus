@@ -36,6 +36,7 @@ module Lsl.Structure (
 
 import Lsl.Type
 import Lsl.Constants
+import Lsl.EventSigs
 import Lsl.FuncSigs
 import Data.List
 import Data.Bits
@@ -133,42 +134,43 @@ data Handler = Handler CtxName [CtxVar] [CtxStmt]
     deriving (Show)
     
 goodHandlers :: [(String,[LSLType])]
-goodHandlers = [ 
-    ("at_rot_target", [LLInteger,LLRot,LLRot]),
-    ("at_target", [LLInteger,LLVector,LLVector]),
-    ("attach",[LLKey]),
-    ("changed", [LLInteger]),
-    ("collision",[LLInteger]),
-    ("collision_end",[LLInteger]),
-    ("collision_start",[LLInteger]),
-    ("control",[LLKey,LLInteger,LLInteger]),
-    ("changed", [LLInteger]),
-    ("dataserver",[LLKey,LLString]),
-    ("email",[LLString,LLString,LLString,LLString,LLInteger]),
-    ("http_response",[LLKey,LLInteger,LLList,LLString]),
-    ("land_collision",[LLVector]),
-    ("land_collision_end",[LLVector]),
-    ("land_collision_start",[LLVector]),
-    ("link_message", [LLInteger, LLInteger, LLString, LLKey]),
-    ("listen", [LLInteger, LLString, LLKey, LLString]),
-    ("money",[LLKey,LLInteger]),
-    ("moving_end",[]),
-    ("moving_start",[]),
-    ("no_sensor",[]),
-    ("not_at_rot_target",[]),
-    ("not_at_target",[]),
-    ("object_rez",[LLKey]),
-    ("on_rez", [LLInteger]),
-    ("remote_data", [LLInteger,LLKey,LLKey,LLString,LLInteger,LLString]),
-    ("run_time_permissions", [LLInteger]),
-    ("sensor",[LLInteger]),
-    ("state_entry", []),
-    ("state_exit", []),
-    ("timer", []),
-    ("touch", [LLInteger]),
-    ("touch_start",[LLInteger]),
-    ("touch_end",[LLInteger])
-    ]
+goodHandlers = simpleLslEventDescriptors
+--     [ 
+--     ("at_rot_target", [LLInteger,LLRot,LLRot]),
+--     ("at_target", [LLInteger,LLVector,LLVector]),
+--     ("attach",[LLKey]),
+--     ("changed", [LLInteger]),
+--     ("collision",[LLInteger]),
+--     ("collision_end",[LLInteger]),
+--     ("collision_start",[LLInteger]),
+--     ("control",[LLKey,LLInteger,LLInteger]),
+--     ("changed", [LLInteger]),
+--     ("dataserver",[LLKey,LLString]),
+--     ("email",[LLString,LLString,LLString,LLString,LLInteger]),
+--     ("http_response",[LLKey,LLInteger,LLList,LLString]),
+--     ("land_collision",[LLVector]),
+--     ("land_collision_end",[LLVector]),
+--     ("land_collision_start",[LLVector]),
+--     ("link_message", [LLInteger, LLInteger, LLString, LLKey]),
+--     ("listen", [LLInteger, LLString, LLKey, LLString]),
+--     ("money",[LLKey,LLInteger]),
+--     ("moving_end",[]),
+--     ("moving_start",[]),
+--     ("no_sensor",[]),
+--     ("not_at_rot_target",[]),
+--     ("not_at_target",[]),
+--     ("object_rez",[LLKey]),
+--     ("on_rez", [LLInteger]),
+--     ("remote_data", [LLInteger,LLKey,LLKey,LLString,LLInteger,LLString]),
+--     ("run_time_permissions", [LLInteger]),
+--     ("sensor",[LLInteger]),
+--     ("state_entry", []),
+--     ("state_exit", []),
+--     ("timer", []),
+--     ("touch", [LLInteger]),
+--     ("touch_start",[LLInteger]),
+--     ("touch_end",[LLInteger])
+--     ]
     
 data State = State CtxName [Handler]
     deriving (Show)

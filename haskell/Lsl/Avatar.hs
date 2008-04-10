@@ -8,8 +8,8 @@ data Avatar = Avatar { avatarKey :: String,
                        avatarRotation :: (Float,Float,Float,Float) }
      deriving (Show)
                        
-defaultAvatar = 
-    Avatar { avatarKey = "00000000-0000-0000-0000-000000000001",
+defaultAvatar key = 
+    Avatar { avatarKey = key,
              avatarName = "Default Avatar",
              avatarRegion = (0,0),
              avatarPosition = (128.0,128.0,128.0),

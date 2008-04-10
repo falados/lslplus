@@ -4,6 +4,7 @@ module Lsl.MetaData where
 
 import IO
 import Lsl.Constants
+import Lsl.EventSigs
 import Lsl.FuncSigs
 import Lsl.InternalLLFuncs
 import Lsl.Structure
@@ -11,7 +12,7 @@ import Lsl.Type
 import qualified Lsl.XmlCreate as X
 
 emit t = X.emit t []
-emitSimple t s = emit t [showString s]
+emitSimple t s = X.emitSimple t [] s
 
 -- this is the main function...
 printMeta = putStr buildMeta
@@ -20,19 +21,18 @@ buildMeta :: String
 buildMeta =
     emit "lslmeta" [handlers,functions,constants] ""
 
-emitHandler (name,params) =
-    let dummyNames = zipWith (++) (repeat "arg") (map show [1..])
-        params' = zip dummyNames params
-    in emit "handler" [
-           emitSimple "name" name,
-           emitParams params',
-           emitSimple "description" ("no description for " ++ name)]
+emitHandler (name,params,_,_,description) =
+    emit "handler" [
+        emitSimple "name" name,
+        emitParams params',
+        emitSimple "description" description]
+    where params' = map (\ (x,y) -> (y,x)) params
 
 emitParams params = emit "params" (map emitParam params)
 emitParam (name,t) = emit "param" [emitSimple "name"  name, emitSimple "type" (lslTypeString t)]
 
 handlers =
-    emit "handlers" (map emitHandler goodHandlers)
+    emit "handlers" (map emitHandler lslEventDescriptors)
     
 functions =
     emit "functions" (map emitFunction funcMeta)

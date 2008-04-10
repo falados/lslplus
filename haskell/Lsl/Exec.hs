@@ -45,7 +45,8 @@ initLSLScript (globals,fs,ss)  =
         valueStack = [],
         callStack = [],
         stepManager = emptyStepManager,
-        globals = globals }
+        globals = globals,
+        currentEvent = Nothing }
 
 initStateSimple script perfAction log qtick utick chkBp =
     EvalState { scriptImage = initLSLScript script,
@@ -116,7 +117,8 @@ data ScriptImage = ScriptImage {
                      valueStack :: ValueStack,
                      callStack :: CallStack,
                      stepManager :: StepManager,
-                     globals :: [Global]
+                     globals :: [Global],
+                     currentEvent :: Maybe Event
                  } deriving (Show)
 
 frameInfo scriptImage =
@@ -355,6 +357,8 @@ getCallStack :: Monad w => Eval w CallStack
 getCallStack = queryExState callStack
 getStates :: Monad w => Eval w [State]
 getStates = queryExState states
+getCurrentEvent :: Monad w => Eval w (Maybe Event)
+getCurrentEvent = queryExState currentEvent
 getExecutionState :: Monad w => Eval w ExecutionState
 getExecutionState = queryExState executionState
 getCurState :: Monad w => Eval w String
@@ -380,6 +384,7 @@ setCallStack c = updateExState (\e -> e { callStack = c })
 setStepManager m = updateExState (\e -> e { stepManager = m })
 setExecutionState state = updateExState (\e -> e { executionState = state })
 setCurState state = updateExState (\e -> e { curState = state })
+setCurrentEvent event = updateExState (\e -> e { currentEvent = Just event })
 --setWorld w = updateState (\s -> s { world = w })
 
 initStacks :: Monad w => Eval w ()
@@ -524,8 +529,8 @@ unwindToLabel name =
 data ExecutionState = Waiting | Executing | Halted | SleepingTil Int | Erroneous String | Crashed String
     deriving (Show,Eq)
 
-matchEvent (Event name _) [] = fail ("no such handler" ++ name)
-matchEvent event@(Event name values) ((Handler (Ctx ctx name') parms stmts):hs) 
+matchEvent (Event name _ _) [] = fail ("no such handler" ++ name)
+matchEvent event@(Event name values _) ((Handler (Ctx ctx name') parms stmts):hs) 
         | name == name' = do mem <- bindParms (ctxItems parms) values
                              return (mem,stmts,name,ctx)
         | otherwise = matchEvent event hs
@@ -604,6 +609,7 @@ evalScript maxTick queue =
                                         pushScope mem $ labelBlocks stmts
                                         pushElement (EvBlock stmts)
                                         setExecutionState Executing
+                                        setCurrentEvent event
                                         evalScript maxTick queue'
            Executing -> do result <- eval maxTick
                            case result of
@@ -1019,7 +1025,8 @@ evalPredef' name =
        sid <- getScriptName
        oid <- getObjectId
        pid <- getPrimId
-       let scriptInfo = (oid,pid,sid,key)
+       event <- getCurrentEvent
+       let scriptInfo = ScriptInfo oid pid sid key event
        (evalResult,retval) <- doAction name scriptInfo args
        pushVal retval
        return evalResult

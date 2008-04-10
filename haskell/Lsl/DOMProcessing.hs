@@ -1,8 +1,10 @@
 module Lsl.DOMProcessing(ElemAcceptor(..),
                          findElement,
                          findOptionalElement,
+                         findSimple,
                          ctxelem,
                          simple,
+                         simpleElement,
                          matchChoice,
                          matchMaybe,
                          cmatch,
@@ -52,6 +54,10 @@ match acceptor e@(Elem n _ _) | n /= acceptorTag acceptor = fail ("unexpected el
 simple (Elem _ _ []) = return ""
 simple (Elem _ _ contents) = return (processContents contents)
 --simple _ = fail "unexpected content in tag"
+
+simpleElement s = ElemAcceptor s simple
+
+findSimple s = findElement (simpleElement s)
 
 processContents = concatMap processContentItem
 processContentItem (CElem (Elem name _ _) _) = error ("unexpected content element (" ++ name ++ ")")

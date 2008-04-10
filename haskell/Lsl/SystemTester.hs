@@ -45,8 +45,37 @@ commandFromXML xml =
              Left s -> error s
              Right command -> command
 
-simCommand e = match (ElemAcceptor "sim-continue" simple) e >> return (SimContinue [] [])
+--simCommand e = match (ElemAcceptor "sim-continue" simple) e >> return (SimContinue [] [])
+simCommand e = execCmd "sim-continue" SimContinue e
 
+execCmd s f e = do
+    (bp,events) <- match (ElemAcceptor s commandContent) e
+    return (f bp events)
+  
+commandContent (Elem _ _ contents) = do
+    (breakpoints,contents1) <- findOptionalElement  breakpointsElement [ e | e@(CElem _ _) <- contents]
+    (events,[]) <- findOptionalElement  (elementList "events" simEventElement) contents1
+    return $ (maybe [] id breakpoints, maybe [] id events)
+
+simEventElement :: Monad m => ElemAcceptor m SimEvent
+simEventElement =
+    let f (Elem _ _ contents) = 
+             do (name,contents1) <- findElement (ElemAcceptor "name" simple) [ e | e@(CElem _ _) <- contents]
+                (delay,contents2) <- findElement (ElemAcceptor "delay" simple) contents1
+                (args,[]) <- findOptionalElement (elementList "args" simArgElement) contents2
+                case reads delay of
+                    [] -> fail "invalid delay: expected integer"
+                    ((i,_):_) -> return $ SimEvent name (maybe [] id args) i
+    in ElemAcceptor "event" f
+
+simArgElement :: Monad m => ElemAcceptor m SimEventArg
+simArgElement = 
+    let f (Elem _ _ contents) =
+            do (name,contents1) <- findElement (ElemAcceptor "name" simple) [ e | e@(CElem _ _) <- contents]
+               (value,[]) <- findElement (ElemAcceptor "value" simple) contents1
+               return $ SimEventArg name value
+    in ElemAcceptor "arg" f
+    
 outputToXML (SimInfo _ log state) = (emit "sim-info" [] [emitLog log,emitState state]) ""
 outputToXML (SimEnded _ log state) = (emit "sim-ended" [] [emitLog log,emitState state]) ""
 
