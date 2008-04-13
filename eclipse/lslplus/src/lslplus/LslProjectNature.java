@@ -1,5 +1,6 @@
 package lslplus;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -338,8 +339,28 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 		return files;
 	}
 	
+	public String[] getLslScripts() {
+	    if (entryPoints == null) return new String[0];
+	    ArrayList l = new ArrayList();
+	    
+	    synchronized (this) {
+	        for (Iterator  i = entryPoints.keySet().iterator(); i.hasNext();) {
+	            String name = (String) i.next();
+	            
+	            if (name.endsWith(".lslp")) { //$NON-NLS-1$
+	                l.add(name);
+	            }
+	        }
+	    }
+	    
+	    String[] scripts = (String[]) l.toArray(new String[l.size()]);
+	    Arrays.sort(scripts);
+	    return scripts;
+	}
+	
+	
 	public IProject getProject() {
-		return project;
+	    return project;
 	}
 	
 	public Summary getSummary() {

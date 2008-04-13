@@ -1,6 +1,7 @@
 package lslplus;
 
 import lslplus.lsltest.LslTestSuite;
+import lslplus.sim.SimProject;
 import lslplus.util.Util;
 
 import org.eclipse.core.resources.IFile;
@@ -36,6 +37,14 @@ public class ResourceAdapterFactory implements IAdapterFactory {
 					Util.log(e, e.getLocalizedMessage());
 					return null;
 				}
+			} else if ("simp".equals(ext) && SimProject.WorldNode.class.equals(adapterType)) {
+			    try {
+			        SimProject.WorldNode node = SimProject.fromXml(f.getContents(), f);
+			        return node;
+			    } catch (CoreException e) {
+			        Util.log(e, e.getLocalizedMessage());
+			        return null;
+			    }
 			}
 		}
 		return null;
@@ -45,7 +54,8 @@ public class ResourceAdapterFactory implements IAdapterFactory {
 		LslPlusElement.class,
 		LslDerivedScript.class,
 		LslTestSuite.class,
-		LslPlusScript.class
+		LslPlusScript.class,
+		SimProject.WorldNode.class
 	};
 	
 	public Class[] getAdapterList() {

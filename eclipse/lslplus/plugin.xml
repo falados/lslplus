@@ -20,6 +20,13 @@
             id="lslplus.editor.LslTestEditor"
             name="LSL Plus Test Editor">
       </editor>
+      <editor
+            class="lslplus.editor.SimEditor"
+            extensions="simp"
+            icon="icons/obj16/lslplus-test.gif"
+            id="lslplus.editor.SimEditor"
+            name="Lsl Plus Sim Editor">
+      </editor>
    </extension>
    
    <extension
@@ -78,9 +85,14 @@
                   </count>
                   <iterate
                         ifEmpty="false">
-                     <adapt
-                           type="lslplus.LslPlusScript">
-                     </adapt>
+                     <or>
+                        <adapt
+                              type="lslplus.LslPlusScript">
+                        </adapt>
+                        <adapt
+                              type="lslplus.sim.SimProject$WorldNode">
+                        </adapt>
+                     </or>
                   </iterate>
                </with>
             </enablement>
@@ -103,6 +115,9 @@
          </adapter>
          <adapter
                type="lslplus.LslPlusScript">
+         </adapter>
+         <adapter
+               type="lslplus.sim.SimProject$WorldNode">
          </adapter>
       </factory>
       <factory
@@ -135,6 +150,13 @@
          <adapter
                type="lslplus.LslPlusElement">
          </adapter>
+         <adapter
+               type="org.eclipse.core.resources.IResource">
+         </adapter>
+      </factory>
+      <factory
+            adaptableType="lslplus.sim.SimProject$WorldNode"
+            class="lslplus.sim.SimProjectAdapterFactory">
          <adapter
                type="org.eclipse.core.resources.IResource">
          </adapter>
@@ -204,6 +226,14 @@
             icon="icons/obj16/lslplus.gif"
             id="lslplus.script_wizard"
             name="New LSL Plus Script"
+            preferredPerspectives="lslplus.LslPlusPerspective">
+      </wizard>
+      <wizard
+            category="lslplus.lslplus"
+            class="lslplus.wizards.NewSimProjectWizard"
+            icon="icons/obj16/lslplus-test.gif"
+            id="lslplus.newSimProjectWizard"
+            name="New Sim Project File"
             preferredPerspectives="lslplus.LslPlusPerspective">
       </wizard>
    </extension>

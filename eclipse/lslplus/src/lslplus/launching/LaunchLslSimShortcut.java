@@ -1,6 +1,7 @@
 package lslplus.launching;
 
 import lslplus.LslPlusScript;
+import lslplus.sim.SimProject;
 import lslplus.util.Util;
 
 import org.eclipse.core.resources.IResource;
@@ -21,25 +22,32 @@ public class LaunchLslSimShortcut implements ILaunchShortcut {
 	public static final String LC_RESOURCE_NAME = "resource_name"; //$NON-NLS-1$
 
 	public void launch(ISelection selection, String mode) {
-		Object o = null;
-		LslPlusScript s = null;
 		if (selection instanceof IStructuredSelection &&
-		    ((IStructuredSelection)selection).size() == 1 &&
-			(o = ((IStructuredSelection)selection).getFirstElement()) instanceof IAdaptable &&
-			(s = (LslPlusScript)((IAdaptable)o).getAdapter(LslPlusScript.class)) != null) {
-			
-			try {
-				ILaunchConfiguration config = findConfig(s);
-				DebugUITools.launch(config, mode);
-			} catch (CoreException e) {
-				Util.log(e, e.getLocalizedMessage());
-			}
+		    ((IStructuredSelection)selection).size() == 1) {
+		    Object o = ((IStructuredSelection)selection).getFirstElement();
+		    if (o instanceof IAdaptable) {
+	            LslPlusScript s = null;
+	            SimProject.WorldNode w = null;
+	            IResource r = null;
+		        if ((s = (LslPlusScript)((IAdaptable)o).getAdapter(LslPlusScript.class)) != null) {
+		            r = s.getResource();
+		        } else if ((w = (SimProject.WorldNode)((IAdaptable)o).getAdapter(SimProject.WorldNode.class)) != null) {
+		            r = w.getResource();
+		        }
+                if (r != null) {
+                    try {
+                        ILaunchConfiguration config = findConfig(r);
+                        DebugUITools.launch(config, mode);
+                    } catch (CoreException e) {
+                        Util.log(e, e.getLocalizedMessage());
+                    }
+                }
+		    }
 		}
 	}
 
-	private ILaunchConfiguration findConfig(LslPlusScript script) throws CoreException {
+	private ILaunchConfiguration findConfig(IResource r) throws CoreException {
 		ILaunchConfiguration[] configs = debugPlugin().getLaunchManager().getLaunchConfigurations(getConfigurationType());
-		IResource r = script.getResource();
 		
 		String name = r.getFullPath().toPortableString();
 		ILaunchConfiguration config = null;

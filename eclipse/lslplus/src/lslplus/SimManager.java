@@ -9,6 +9,7 @@ import lslplus.sim.SimEvent;
 import lslplus.sim.SimEventDefinition;
 import lslplus.sim.SimEventListener;
 import lslplus.sim.SimKeyManager;
+import lslplus.sim.SimMetaDataListener;
 import lslplus.sim.SimStatuses;
 import lslplus.sim.SimStatuses.SimState;
 import lslplus.simview.SimWatcherViewPart;
@@ -46,6 +47,7 @@ public class SimManager implements SimEventListener {
     
     private HashSet listeners = new HashSet();
     private HashSet simEventListeners = new HashSet();
+    private HashSet simMetaDataListeners = new HashSet();
     private volatile boolean active  = false;
     private LslSimProcess process = null;
     private SimState simState;
@@ -63,6 +65,14 @@ public class SimManager implements SimEventListener {
         this.listeners.remove(listener);
     }
 
+    public synchronized void addSimMetaDataListener(SimMetaDataListener listener) {
+        this.simMetaDataListeners.add(listener);
+    }
+    
+    public synchronized void removeSimMetaDataListener(SimMetaDataListener listener) {
+        this.simMetaDataListeners.remove(listener);
+    }
+    
     public void addSimEventListener(SimEventListener listener) {
         synchronized (simEventListeners) {
             this.simEventListeners.add(listener);
@@ -219,6 +229,7 @@ public class SimManager implements SimEventListener {
                 }
                 
                 eventDescriptors = map;
+                fireSimMetaDataReady();
                 return new Status(IStatus.OK,LslPlusPlugin.PLUGIN_ID, "OK");
             }
             
@@ -228,5 +239,12 @@ public class SimManager implements SimEventListener {
 
     }
     
+    protected void fireSimMetaDataReady() {
+        for (Iterator i = simMetaDataListeners.iterator(); i.hasNext();) {
+            SimMetaDataListener l = (SimMetaDataListener) i.next();
+            l.metaDataReady();
+        }
+    }
+
     public SimKeyManager getKeyManager() { return keyManager; }
 }

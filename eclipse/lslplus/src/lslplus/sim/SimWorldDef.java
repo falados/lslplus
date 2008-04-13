@@ -50,7 +50,7 @@ public class SimWorldDef {
         }
     }
     
-    private static XStream xtream = new XStream(new DomDriver());
+    private static XStream xstream = new XStream(new DomDriver());
     
     public static void configureXStream(XStream xstream) {
         xstream.alias("world-def", SimWorldDef.class); //$NON-NLS-1$
@@ -58,6 +58,14 @@ public class SimWorldDef {
         xstream.alias("script", Script.class); //$NON-NLS-1$
         xstream.alias("object", SimObject.class); //$NON-NLS-1$
         xstream.alias("prim", Prim.class); //$NON-NLS-1$
+    }
+    
+    static {
+        configureXStream(xstream);
+    }
+    
+    public static String toXML(SimWorldDef def) {
+        return xstream.toXML(def);
     }
     
     private long maxTime;
@@ -77,7 +85,7 @@ public class SimWorldDef {
         this.avatars = avatars;
     }
 
-    private static SimWorldDef mkSimpleWorld(SimKeyManager keyManager, String name) {
+    public static SimWorldDef mkSimpleWorld(SimKeyManager keyManager, String name) {
         String primKey = keyManager.getNextKey();
         SimWorldDef.Script[] scripts = new SimWorldDef.Script[] {
                 new SimWorldDef.Script(primKey, name, name)

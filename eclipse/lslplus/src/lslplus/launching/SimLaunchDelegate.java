@@ -6,6 +6,9 @@ import lslplus.SimManager;
 import lslplus.debug.LslDebugTarget;
 import lslplus.debug.LslSimProcess;
 import lslplus.debug.LslSourceLocator;
+import lslplus.sim.SimKeyManager;
+import lslplus.sim.SimProject;
+import lslplus.sim.SimWorldDef;
 import lslplus.util.Util;
 
 import org.eclipse.core.resources.IResource;
@@ -32,13 +35,21 @@ public class SimLaunchDelegate implements ILaunchConfigurationDelegate {
                     "Referenced resource no longer exists!");
             return;
         }
-
-        String name = LslProjectNature.resourceToLslPlusName(resource);
         
+        SimWorldDef def = null;
+        SimProject.WorldNode world = (SimProject.WorldNode) resource.getAdapter(SimProject.WorldNode.class);
+        
+        if (world == null) {
+            String name = LslProjectNature.resourceToLslPlusName(resource);
+            def =  SimWorldDef.mkSimpleWorld(new SimKeyManager(), name);
+        } else {
+            def = SimProject.toSimWorldDef(world);
+        }
         LslProjectNature nature = (LslProjectNature) resource.getProject().getNature(LslProjectNature.ID);
         String sourceDescriptor = nature.projectSourceList();
+        //SimWorldDef def =  SimWorldDef.mkSimpleWorld(simManager().getKeyManager(), name);
         String testDescriptor = "<sim-descriptor>" + sourceDescriptor + //$NON-NLS-1$
-                                "<worldDef><script>" + name + "</script></worldDef>" + //$NON-NLS-1$ //$NON-NLS-2$
+                                SimWorldDef.toXML(def) + 
                                 "</sim-descriptor>";  //$NON-NLS-1$
         if (LslPlusPlugin.DEBUG) Util.log(testDescriptor);
         LslSimProcess p = new LslSimProcess(testDescriptor, launch);

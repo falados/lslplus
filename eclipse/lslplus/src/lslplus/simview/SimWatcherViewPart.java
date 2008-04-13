@@ -5,6 +5,7 @@ import lslplus.SimListener;
 import lslplus.SimManager;
 import lslplus.sim.SimEvent;
 import lslplus.sim.SimEventDefinition;
+import lslplus.sim.SimMetaDataListener;
 import lslplus.sim.SimStatuses;
 import lslplus.util.Util;
 
@@ -18,10 +19,14 @@ import org.eclipse.swt.custom.SashForm;
 import org.eclipse.swt.custom.ViewForm;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
+import org.eclipse.swt.widgets.Button;
+import org.eclipse.swt.widgets.Combo;
 import org.eclipse.swt.widgets.Composite;
+import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Layout;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Tree;
@@ -29,7 +34,7 @@ import org.eclipse.swt.widgets.TreeColumn;
 import org.eclipse.ui.IActionBars;
 import org.eclipse.ui.part.ViewPart;
 
-public class SimWatcherViewPart extends ViewPart implements SimListener {
+public class SimWatcherViewPart extends ViewPart implements SimListener, SimMetaDataListener {
     public static final String ID = "lslplus.simWatcher"; //$NON-NLS-1$
     private class StopAction extends Action {
         public StopAction(Shell parentShell) {
@@ -90,6 +95,8 @@ public class SimWatcherViewPart extends ViewPart implements SimListener {
     private SashForm sashForm;
     private TreeViewer logViewer;
     private SimManager simManager;
+    private Combo eventsCombo = null;
+    private Button eventsButton = null;
 
     private LogViewerContentProvider logViewerModel;
     private TreeColumn fColumn1;
@@ -105,11 +112,13 @@ public class SimWatcherViewPart extends ViewPart implements SimListener {
     public SimWatcherViewPart() {
         simManager = LslPlusPlugin.getDefault().getSimManager();
         simManager.addSimListener(this);
+        simManager.addSimMetaDataListener(this);
     }
 
     public void dispose() {
         super.dispose();
         simManager.removeSimListener(this);
+        simManager.removeSimMetaDataListener(this);
         if (labelProvider != null) labelProvider.dispose();
     }
 
@@ -119,10 +128,59 @@ public class SimWatcherViewPart extends ViewPart implements SimListener {
 
     public void createPartControl(Composite parent) {
         this.parent = parent;
+        final Shell parentShell = this.getSite().getShell();
         GridLayout gridLayout = new GridLayout();
         gridLayout.marginWidth = 0;
         gridLayout.marginHeight = 0;
         parent.setLayout(gridLayout);
+        
+        Composite comp = new Composite(parent, SWT.NONE);
+        GridLayout layout = new GridLayout();
+        layout.numColumns = 3;
+//        layout.marginHeight = convertVerticalDLUsToPixels(IDialogConstants.VERTICAL_MARGIN);
+//        layout.marginWidth = convertHorizontalDLUsToPixels(IDialogConstants.HORIZONTAL_MARGIN);
+//        layout.verticalSpacing = convertVerticalDLUsToPixels(IDialogConstants.VERTICAL_SPACING);
+//        layout.horizontalSpacing = convertHorizontalDLUsToPixels(IDialogConstants.HORIZONTAL_SPACING);
+        comp.setLayout(layout);
+        comp.setLayoutData(new GridData(GridData.FILL_BOTH));
+
+        Label label0 = new Label(comp, SWT.SHADOW_NONE|SWT.RIGHT|SWT.HORIZONTAL);
+        label0.setText("Send an event");
+        eventsCombo = new Combo(comp, SWT.READ_ONLY|SWT.DROP_DOWN);
+        populateEventsCombo();
+        eventsCombo.deselectAll();
+        eventsCombo.addSelectionListener(new SelectionListener() {
+            public void widgetDefaultSelected(SelectionEvent e) {
+            }
+
+            public void widgetSelected(SelectionEvent e) {
+                eventsButton.setEnabled(simManager.isSimActive() && eventsCombo.getSelectionIndex() >= 0);
+            }
+        });
+        
+        eventsButton = new Button(comp, SWT.PUSH|SWT.CENTER);
+        eventsButton.setText("Go...");
+        eventsButton.setEnabled(false);
+        eventsButton.addSelectionListener(new SelectionListener() {
+            public void widgetDefaultSelected(SelectionEvent e) {
+            }
+
+            public void widgetSelected(SelectionEvent e) {
+                int index = eventsCombo.getSelectionIndex();
+                if (index >= 0) {
+                    SimEventDefinition def = simManager.getAllEventDefinitions()[index];
+                    
+                    EventDialog dlg = new EventDialog(parentShell, def);
+                    dlg.open();
+                    
+                    SimEvent event = dlg.getEvent();
+                    if (event != null) simManager.putEvent(event);
+                    eventsCombo.deselectAll();
+                }
+            }
+            
+        });
+        
         SashForm sashForm = createSashForm(parent);
         sashForm.setLayoutData(new GridData(GridData.FILL_BOTH));
         configureToolBar();
@@ -230,7 +288,7 @@ public class SimWatcherViewPart extends ViewPart implements SimListener {
     };
 
     private void refreshAsync() {
-        LslPlusPlugin.getDefault().getWorkbench().getDisplay().asyncExec(refresher);
+        asyncExec(refresher);
     }
     
     private SimManager getSimManager() {
@@ -240,5 +298,30 @@ public class SimWatcherViewPart extends ViewPart implements SimListener {
     public void simEnded() {
         touchAction.setEnabled(false);
         stopAction.setEnabled(false);
+    }
+
+    public void metaDataReady() {
+        if (eventsCombo != null) {
+            asyncExec(new Runnable() {
+                public void run() {
+                    populateEventsCombo();
+                }
+            });
+        }
+    }
+
+    private void asyncExec(Runnable r) {
+        LslPlusPlugin.getDefault().getWorkbench().getDisplay().asyncExec(r);
+    }
+    private void populateEventsCombo() {
+        SimEventDefinition[] eventDefs = simManager.getAllEventDefinitions();
+        if (eventDefs == null) eventDefs = new SimEventDefinition[0];
+        String[] names = new String[eventDefs.length];
+        
+        for (int i = 0; i < names.length; i++) {
+            names[i] = eventDefs[i].getName();
+        }
+        
+        eventsCombo.setItems(names);
     }
 }
