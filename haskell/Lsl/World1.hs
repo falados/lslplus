@@ -487,17 +487,6 @@ processEvents =
                   processEvent we
                   processEvents
 
-sampleModule = LModule
-    [llString "msg0" <<- slit "Message0",
-     llString "msg1" <<- slit "Message1",
-     GF (Func (FuncDec (nullCtx "sample") LLVoid []) 
-          [llString "msg1" <<- slit "Message2",
-           call "llSay" [ilit 0, (get "msg0")],
-           call "llSay" [ilit 0, (get "msg1")]
-          ])
-    ] []
-library = [("sample",sampleModule)]
-              
 processEvent (CreatePrim name key) =
     do worldPrims <- getPrims
        objects <- getObjects
@@ -574,72 +563,7 @@ simulate =
        setTick (t + 1)
        pauseTime <- getNextPause
        if t + 1 >= pauseTime then return () else simulate
---       if t > maxt then return () else simulate
 
-runSim :: Monad m => Int -> Int -> WorldEventQueue -> [(String,Validity CompiledLSLScript)] -> [(String,Validity LModule)] -> m ((),World m)
-runSim slice maxt iq scripts library =
-    let avKey = nextKey nullKey in
-    runStateT (simulate) $ newWorld' slice maxt iq library scripts [(avKey, defaultAvatar avKey)]
-           
-
-testScript = LSLScript 
-    [
-        mimport "sample" [] "foo",
-        llInteger "l" <<- ilit 5
-    ]
-    [
-        state "default" [
-            handler "state_entry" [] [
-                llInteger "i" <<- ilit 1,
-                llInteger "j" <<- ilit 1,
-                llInteger "k" <<- ilit 1,
-                "i" <=> postinc "j",
-                "k" <=> preinc "j",
-                call "llSay" [ilit 0, slit "i = " !+ castString (get "i") !+
-                              slit ", j = " !+ castString (get "j") !+
-                              slit ", k = " !+ castString (get "k") !+
-                              slit ", l = " !+ castString (get "l")],
-                call "llSay" [ilit 0, slit "length = " !+ 
-                                      castString (call "llStringLength" [slit "01234"])],
-                call "llSay" [ilit 0, slit "new String = " !+ 
-                                      (call "llGetSubString" [slit "01234", ilit 0, neg $ ilit 1])],
-                call "llSay" [ilit 0, castString (call "llGetPos" [])],
-                call "foosample" []
-            ]
-        ]
-    ]
-
-lslExecSimple script scripts library =
-    let scripts' = zip (map fst scripts) $ map (validLSLScript library . snd) scripts in
-        do result <- runSim 1000 1000 [(1,CreatePrim "object" "00000000-0000-0000-0000-000000000001"),
-             (2,AddScript ("script1",script) "00000000-0000-0000-0000-000000000001" True)]
-             scripts' library
-           return $ niceShowWorld (snd result)
-           
-
--- lslExecSimpleFromFile file =
---     do script <- parseFile lslParser file
---        s <- return $ lslExecSimple script
---        print s
-
-simulate' :: Monad m => World m -> m (World m)
-simulate' world = 
-    do (_,world') <- runStateT (simulate) world
-       return world'
-    
--- simulate a world built with the given library and the 
--- set of scripts
--- lslExec iq library scripts slice1 slice2 maxt action =
---     untilM ((>= maxt) . tick) initialWorld $ \ w ->
---         do w' <- simulate' w
---            let newmax = tick w' + slice2
---            action w'
---            let w'' = w' { maxTick = newmax, msglog = []}
---            return w''
---     where untilM p v f = if p v then return v else f v
---           initialWorld :: Monad m => World m
---           initialWorld = newWorld' slice1 slice2 iq library scripts []
-       
 linkSet = -1::Int
 linkAllOthers = -2::Int
 linkAllChildren = -3::Int
@@ -667,6 +591,7 @@ data SimStateInfo = SimStateInfo {
         simStateInfoPrims :: [(String,String)],
         simStateInfoAvatars :: [(String,String)]
     }
+nullSimState = SimStateInfo [] []
 
 stateInfoFromWorld world =
     SimStateInfo {
@@ -690,15 +615,21 @@ data SimEvent = SimEvent { simEventName :: String, simEventArgs :: [SimEventArg]
 data SimEventArg = SimEventArg { simEventArgName :: String, simEventArgValue :: String }
     deriving (Show)
     
-initWorld def scripts lib = 
-    newWorld' 1000 1000000 iq lib scripts [(avKey, defaultAvatar avKey)]
-    where avKey = nextKey nullKey
-          primKey = nextKey avKey
-          iq = [(1,CreatePrim "object" primKey),
-                (2,AddScript ("script1",worldDefScript def) primKey True)]
+-- initWorld def scripts lib = 
+--     newWorld' 1000 1000000 iq lib scripts [(avKey, defaultAvatar avKey)]
+--     where avKey = nextKey nullKey
+--           primKey = nextKey avKey
+--           iq = [(1,CreatePrim "object" primKey),
+--                 (2,AddScript ("script1",worldDefScript def) primKey True)]
+
+initWorld def scripts lib = worldFromFullWorldDef newWorld'' def lib scripts
 
 simStep init@(Left (worldDef, scripts, lib)) command =
-    let world = initWorld worldDef scripts lib in simStep (Right world) command
+--     let world = initWorld worldDef scripts lib in simStep (Right world) command
+    case initWorld worldDef scripts lib of
+        Left s -> -- initialization failed
+            (SimEnded ("Error initializing: " ++ s) [] nullSimState, init)
+        Right world -> simStep (Right (logInitialProblems world)) command
 simStep (Right world) (SimContinue _ events) =
     let t = tick world
         slice = sliceSize world
@@ -814,3 +745,9 @@ lslEventDescriptorToSimInputDef (name, params, delivery, additionalData, descrip
 
 ----- MISC ----
 durationToTicks dur = floor (1000.0 * dur)
+
+logInitialProblems world =
+    let log = msglog world
+        newLog = [LogMessage 0 LogWarn "init" ("script \"" ++ name ++ "\" in prim " ++ prim ++ " failed to activate because of error: " ++ s) |
+                          ((prim,name),(Invalid (_,s),_)) <- M.toList (worldScripts world) ] ++ log
+    in world { msglog = newLog }

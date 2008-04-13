@@ -20,8 +20,8 @@ import Lsl.Type
 import Text.XML.HaXml hiding (when)
 
 data FullWorldDef = FullWorldDef {
-                        fullWorldDefMaxTime :: Integer,
-                        fullWorldDefSliceSize :: Integer,
+                        fullWorldDefMaxTime :: Int,
+                        fullWorldDefSliceSize :: Int,
                         fullWorldDefActiveScripts :: [((String,String),(String))], -- [((primKey,invName),(scriptID))]
                         fullWorldDefObjects :: [LSLObject],
                         fullWorldDefPrims :: [Prim],
@@ -47,10 +47,10 @@ worldFromFullWorldDef worldBuilder fwd lib scripts =
        return $ worldBuilder (fullWorldDefSliceSize fwd)
                              (fullWorldDefMaxTime fwd)
                              [] lib scripts 
-                             (fullWorldDefAvatars fwd)
-                             (fullWorldDefObjects fwd)
+                             (mkAvatarLookup (fullWorldDefAvatars fwd))
+                             (mkObjectMap (fullWorldDefObjects fwd))
                              primMap
-                             activatedScripts
+                             (M.fromList activatedScripts)
 
 fctx :: Monad m => String -> Either String a -> m a
 fctx s (Left s') = fail s
@@ -59,9 +59,10 @@ fctx _ (Right v) = return v
 maybe2Either Nothing = Left "failed"
 maybe2Either (Just v) = Right v
 
-mkPrimMap prims =
-    let tuples = map (\ p -> (primKey p, p)) prims in M.fromList tuples
-    
+mkPrimMap prims = M.fromList [(primKey p, p) | p <- prims]
+    --let tuples = map (\ p -> (primKey p, p)) prims in M.fromList tuples
+mkObjectMap objects = M.fromList [ (p,LSLObject (p:ps)) | LSLObject (p:ps) <- objects ]
+mkAvatarLookup avatars = [ (avatarKey a,a) | a <- avatars]
 checkObject primMap o = mapM_ (flip M.lookup primMap) (primKeys o)
 checkObjects primMap os = mapM_ (checkObject primMap) os
 

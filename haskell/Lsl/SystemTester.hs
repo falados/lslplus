@@ -14,6 +14,7 @@ import Lsl.TestResult
 import Lsl.Type
 import Lsl.Util
 import Lsl.World1
+import Lsl.WorldDef
 import Lsl.XmlCreate
 import Text.XML.HaXml hiding (when)
 import Text.XML.HaXml.Posn
@@ -24,11 +25,11 @@ initializationFromXML xml = let doc = xmlParse "" xml in parseInitialization doc
 
 parseInitialization (Document _ _ root _) = match initSimElement root
 
-initSimElement :: Monad m => ElemAcceptor m (([(String,String)],[(String,String)]),WorldDef)
+initSimElement :: Monad m => ElemAcceptor m (([(String,String)],[(String,String)]),FullWorldDef)
 initSimElement =
     let f (Elem _ _ contents) =
             do (sources,contents1) <- findElement sourceFilesElement [ e | e@(CElem _ _) <- contents]
-               (worldDef,[]) <- findElement worldDefElement contents1
+               (worldDef,[]) <- findElement worldElement contents1
                return (sources,worldDef)
     in ElemAcceptor "sim-descriptor" f
 
