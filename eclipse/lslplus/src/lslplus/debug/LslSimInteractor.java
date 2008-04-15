@@ -18,6 +18,7 @@ import lslplus.sim.SimStatuses;
 import lslplus.sim.SimStatuses.SimEnded;
 import lslplus.sim.SimStatuses.SimInfo;
 import lslplus.sim.SimStatuses.SimStatus;
+import lslplus.sim.SimStatuses.SimSuspended;
 import lslplus.util.Util;
 
 import org.eclipse.core.resources.IFile;
@@ -183,7 +184,6 @@ public class LslSimInteractor implements Runnable, Interactor, SimEventListener 
         if (debugMode) {
             bpData = createBreakpointData();
         }
-        SimEvent[] events = (SimEvent[]) eventQueue.toArray(new SimEvent[0]);
         StepOverCommand cmd = new StepOverCommand(bpData,getAllPendingEvents());
         return StepOverCommand.toXML(cmd);
     }
@@ -286,6 +286,12 @@ public class LslSimInteractor implements Runnable, Interactor, SimEventListener 
                     simManager().setSimState(ended.getState());
                     endSession();
                     fireComplete();
+                } else if (status instanceof SimSuspended) {
+                    if (LslPlusPlugin.DEBUG) Util.log("hit a breakpoint... suspending!"); //$NON-NLS-1$
+                    simManager().newLogMessages(status.getMessages());
+                    simManager().setSimState(status.getState());
+                    fireSuspended(((SimSuspended)status).getScriptState());
+                    return;
                 } else {
                     Util.error("Unrecognized status: " + status);
                 }

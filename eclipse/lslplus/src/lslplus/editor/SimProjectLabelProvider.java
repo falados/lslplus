@@ -13,10 +13,11 @@ import org.eclipse.swt.graphics.Image;
 public class SimProjectLabelProvider extends LabelProvider implements ITableLabelProvider {
     private LinkedList images;
     private Image objectImage = createImage("icons/object.gif"); //$NON-NLS-1$
-    private Image primImage = createImage("icons/prim.gif");
-    private Image avatarImage = createImage("icons/avatar.gif");
-    private Image scriptImage = createImage("icons/obj16/lslplus.gif");
-    private Image valImage = createImage("icons/arg.gif");
+    private Image primImage = createImage("icons/prim.gif"); //$NON-NLS-1$
+    private Image avatarImage = createImage("icons/avatar.gif"); //$NON-NLS-1$
+    private Image scriptImage = createImage("icons/obj16/lslplus.gif"); //$NON-NLS-1$
+    private Image valImage = createImage("icons/arg.gif"); //$NON-NLS-1$
+    private Image worldImage = createImage("icons/world.gif"); //$NON-NLS-1$
     private Image createImage(String path) {
         if (images == null) images = new LinkedList();
         Image i = LslPlusPlugin.createImage(path);
@@ -35,6 +36,8 @@ public class SimProjectLabelProvider extends LabelProvider implements ITableLabe
             return avatarImage;
         } else if (element instanceof SimProject.ScriptNode) {
             return scriptImage;
+        } else if (element instanceof SimProject.WorldNode) {
+            return worldImage;
         } else {
             // TODO: add other node types
             return valImage;

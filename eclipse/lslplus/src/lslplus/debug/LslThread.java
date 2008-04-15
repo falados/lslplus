@@ -21,6 +21,7 @@ public class LslThread implements IThread, InteractorListener {
     private boolean stepping;
     private boolean terminated;
     private Interactor interactor;
+    private String name = "LslThread"; //$NON-NLS-1$
     
     public LslThread(LslDebugTarget target) {
         this.target = target;
@@ -36,7 +37,7 @@ public class LslThread implements IThread, InteractorListener {
     }
 
     public String getName() throws DebugException {
-        return "LslThread"; //$NON-NLS-1$
+        return name;
     }
 
     public int getPriority() throws DebugException {
@@ -164,10 +165,12 @@ public class LslThread implements IThread, InteractorListener {
 
     public void suspended(LslScriptExecutionState state) {
         setSuspended(true);
-        this.stackFrames = new LslStackFrame[state.getFrames().length];
+        this.name = state.getThreadInfo().getName();
+        
+        this.stackFrames = new LslStackFrame[state.getThreadInfo().getFrames().length];
         
         for (int i = 0; i < this.stackFrames.length; i++) {
-            Frame frame = state.getFrames()[i];
+            Frame frame = state.getThreadInfo().getFrames()[i];
             LslVariable[] variables = new LslVariable[frame.getBindings().length];
             
             int line = 0;

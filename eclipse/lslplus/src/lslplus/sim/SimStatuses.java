@@ -1,5 +1,7 @@
 package lslplus.sim;
 
+import lslplus.debug.LslScriptExecutionState;
+
 import com.thoughtworks.xstream.XStream;
 import com.thoughtworks.xstream.io.xml.DomDriver;
 
@@ -84,12 +86,20 @@ public class SimStatuses {
     public static class SimEnded extends SimStatus {
     }
     
+    public static class SimSuspended extends SimStatus {
+        LslScriptExecutionState scriptState;
+        public LslScriptExecutionState getScriptState() { return scriptState; }
+    }
+    
     public static void configureXStream(XStream xstream) {
+        LslScriptExecutionState.configureXStream(xstream);
         xstream.alias("sim-info", SimInfo.class); //$NON-NLS-1$
         xstream.alias("sim-ended", SimEnded.class); //$NON-NLS-1$
+        xstream.alias("sim-suspended", SimSuspended.class); //$NON-NLS-1$
         xstream.alias("message", Message.class);        //$NON-NLS-1$
         xstream.alias("prim", SimPrim.class); //$NON-NLS-1$
         xstream.alias("avatar", SimAvatar.class); //$NON-NLS-1$
+        xstream.aliasField("script-state", SimSuspended.class, "scriptState");  //$NON-NLS-1$//$NON-NLS-2$
     }
     
     static {

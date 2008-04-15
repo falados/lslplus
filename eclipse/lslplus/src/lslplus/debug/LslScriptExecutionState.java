@@ -145,13 +145,26 @@ public class LslScriptExecutionState {
         public String getName() { return name; }
     }
     
+    public static class ThreadInfo {
+        private String name = null;
+        private Frame[] frames;
+        
+        public ThreadInfo(String name, Frame[] frames) {
+            this.name = name;
+            this.frames = frames;
+        }
+        
+        public String getName() { return name; }
+        public Frame[] getFrames() { return frames; }
+    }
+    
     private String sourceElement;
     private int currentLine;
-    private Frame[] frames;
+    private ThreadInfo threadInfo;
     
     public String getSourceElement() { return sourceElement; }
     public int getCurrentLine() { return currentLine; }
-    public Frame[] getFrames() { return frames; }
+    public ThreadInfo getThreadInfo() { return threadInfo; }
 
     private static XStream xstream;
     
