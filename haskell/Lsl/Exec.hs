@@ -2,10 +2,11 @@ module Lsl.Exec(
     ScriptImage(..),
     EvalState,
     ExecutionInfo(..),
+    ExecutionState(..),
+    FrameInfo(..),
     MemRegion,
     Binding,
     executeLsl,
-    executeLslSimple,
     frameInfo,
     initLSLScript,
     initStateSimple,
@@ -37,6 +38,7 @@ import Control.Monad.Error
 initLSLScript :: CompiledLSLScript -> ScriptImage
 initLSLScript (globals,fs,ss)  =
     ScriptImage {
+        scriptImageName = "",
         curState = "default",
         executionState = Waiting,
         glob = initGlobals globals,
@@ -79,13 +81,6 @@ executeLsl img oid pid sid pkey perfAction log qtick utick chkBp queue maxTick =
             (Left s,_) -> return $ Left s
             (Right queue',evalState) -> return $ Right $ (scriptImage evalState, queue')
 
-executeLslSimple script perfAction log qtick utick chkBp maxTick path globbindings args =
-    do  result <- (runEval $ evalScriptSimple maxTick path globbindings args)
-                  (initStateSimple script perfAction log qtick utick chkBp)
-        case result of
-            (Left s,_) -> return $ Left s
-            (Right (evResult,val),state) -> return $ Right $ (evResult,val,state)
-            
 -- The state of evaluation for a script.
 data EvalState m = EvalState {
      scriptImage :: ScriptImage,
@@ -109,6 +104,7 @@ evalT v = lift ((\ f -> StateT (\ s -> return (f s))) v)
 -- status of all stacks, global variables, and immutable items like
 -- the functions and state definitions.
 data ScriptImage = ScriptImage {
+                     scriptImageName :: String,
                      curState :: StateName,
                      executionState :: ExecutionState,
                      glob :: MemRegion,
@@ -121,7 +117,9 @@ data ScriptImage = ScriptImage {
                      currentEvent :: Maybe Event
                  } deriving (Show)
 
-frameInfo scriptImage =
+data FrameInfo = FrameInfo { frameInfoImageName :: String, frameInfoFrames :: [(String,SourceContext,Maybe Int,[(String,LSLValue)])] }
+
+frameInfo scriptImage = FrameInfo (scriptImageName scriptImage) $
     frames ++ [("glob", bottomContext, Nothing, glob scriptImage)]
     where frames = (map collapseFrame $ callStack scriptImage)
           (bottomContext,bottomLine) = case frames of
@@ -371,8 +369,8 @@ getPrimId :: Monad w => Eval w Int
 getPrimId = queryState primId
 getScriptName :: Monad w => Eval w String
 getScriptName = queryState scriptName
--- getWorld :: WorldInterface w => Eval w w
--- getWorld = queryState world
+getScriptImageName :: Monad w => Eval w String
+getScriptImageName = queryExState scriptImageName
 getMyPrimKey :: Monad w => Eval w String
 getMyPrimKey = queryState myPrimKey
 getStepManager :: Monad w => Eval w StepManager
@@ -385,7 +383,7 @@ setStepManager m = updateExState (\e -> e { stepManager = m })
 setExecutionState state = updateExState (\e -> e { executionState = state })
 setCurState state = updateExState (\e -> e { curState = state })
 setCurrentEvent event = updateExState (\e -> e { currentEvent = Just event })
---setWorld w = updateState (\s -> s { world = w })
+setScriptImageName n = updateExState (\ e -> e { scriptImageName = n })
 
 initStacks :: Monad w => Eval w ()
 initStacks = 
@@ -526,7 +524,7 @@ unwindToLabel name =
     in f 1
 
 
-data ExecutionState = Waiting | Executing | Halted | SleepingTil Int | Erroneous String | Crashed String
+data ExecutionState = Waiting | Executing | Halted | SleepingTil Int | Erroneous String | Crashed String | Suspended Breakpoint
     deriving (Show,Eq)
 
 matchEvent (Event name _ _) [] = fail ("no such handler" ++ name)
@@ -556,7 +554,8 @@ evalSimple maxTick =
             _ -> return (result,Nothing)
             
 setupSimple path globbindings args =
-    do  updateGlobals globbindings
+    do  setScriptImageName (concat (intersperse "." path))
+        updateGlobals globbindings
         (params,stmts,ctx) <- getEntryPoint path
         mem <- bindParmsForgiving params args
         initStacks
@@ -589,6 +588,7 @@ evalScript :: Monad w => Int -> [Event] -> Eval w [Event]
 evalScript maxTick queue =
     do executionState <- getExecutionState
        case executionState of
+           Suspended _ -> setExecutionState Executing >> evalScript maxTick queue
            Erroneous _ -> return queue
            Waiting ->
                do oid <- getObjectId
@@ -618,6 +618,7 @@ evalScript maxTick queue =
                                       setExecutionState Waiting
                                EvalComplete _ -> setExecutionState Waiting
                                YieldTil i -> setExecutionState $ SleepingTil i
+                               BrokeAt bp -> setExecutionState (Suspended bp)
                                _ -> return ()
                            return queue
            SleepingTil i -> do tick <- getTick
@@ -1033,4 +1034,4 @@ evalPredef' name =
 
 ctxList es = map (Ctx UnknownSourceContext) es
 
-data ExecutionInfo = ExecutionInfo String Int [(String,SourceContext,Maybe Int,MemRegion)]
+data ExecutionInfo = ExecutionInfo String Int FrameInfo

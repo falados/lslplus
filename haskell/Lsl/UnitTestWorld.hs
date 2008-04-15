@@ -1,5 +1,4 @@
 module Lsl.UnitTestWorld(
-    runUnitTests,
     simStep,
     SimpleWorld,
     TestEvent(..),
@@ -101,38 +100,6 @@ doPredef n i a =
                      return $ (EvalIncomplete, defaultValue rt)
               else fail ("unexpected call: " ++ renderCall n a)
               
--- simulate (ModuleFunc moduleName funcName) globs args =
---     do lib <- getWLibrary
---        case lookup moduleName lib of
---            Nothing -> return (Left $ "No such module: " ++ moduleName)
---            Just (Invalid s) -> return (Left $ "Invalid module: " ++ moduleName)
---            Just (Valid lmodule) ->
---                let script = mkScript lmodule in
---                    sim moduleName (validLSLScript lib script) [funcName] globs args
--- simulate (ScriptFunc scriptName funcName) globs args = simScript scriptName [funcName] globs args
--- simulate (ScriptHandler scriptName stateName handlerName) globs args = simScript scriptName [stateName,handlerName] globs args
--- simScript name path globs args =
---     do scripts <- getWScripts
---        case lookup name scripts of
---            Nothing -> return (Left $ "No such script: " ++ name)
---            Just vscript -> sim name vscript path globs args
-
--- sim name vscript path globs args =
---     case vscript of
---         Invalid s -> return (Left ("Invalid script: " ++ name))
---         Valid script -> 
---             do  maxTick <- getMaxTick
---                 result <- executeLslSimple script doPredef logMsg getTick setTick maxTick path globs args 
---                 return result
-
-simulate entryPoint globs args =
-    do scriptAndPath <- convertEntryPoint entryPoint
-       case scriptAndPath of
-           Left s -> return (Left s)
-           Right (script,path) -> 
-               do maxTick <- getMaxTick
-                  executeLslSimple script doPredef logMsg getTick setTick checkBp maxTick path globs args
-        
 mkScript (LModule globdefs vars) =
     LSLScript (varsToGlobdefs ++ globdefs) [L.State (nullCtx "default") []]
     where varsToGlobdefs = map (\ v -> GV v Nothing) vars
@@ -159,25 +126,6 @@ convertEntryPoint (ModuleFunc moduleName funcName) =
                 case validLSLScript lib (mkScript lmodule) of
                     Invalid _ -> return $ Left "Invalid entry point (internal error?)"
                     Valid script -> return $ Right (script,[funcName])
-
-runUnitTests library scripts unitTests = do
-    flip mapM unitTests $ \ unitTest -> do
-        let name = unitTestName unitTest
-        let result = (runState $ runErrorT $ simulate (entryPoint unitTest) (initialGlobs unitTest) (arguments unitTest))
-                     (SimpleWorld { maxTick = 10000, tick = 0, msgLog = [], 
-                                    wScripts = scripts, wLibrary = library, expectations = (expectedCalls unitTest),
-                                    breakpointManager = emptyBreakpointManager})
-        let resultDescriptor = case result of
-                (Left s, w) -> ErrorResult name s (msgLog w)
-                (Right res1, w) ->
-                    case res1 of
-                        Left s -> ErrorResult name s (msgLog w)
-                        Right (EvalIncomplete,_,execState) -> Timeout name (msgLog w)
-                        Right (EvalComplete newstate, Just val, execState) ->
-                            checkResults (newstate, val, glob $ scriptImage execState, w) unitTest
-        putStr $ resultToXML resultDescriptor
-        putStr "\n"
-    return ()
 
 checkResults (ms1, val, globs, w) unitTest =
     let name = unitTestName unitTest

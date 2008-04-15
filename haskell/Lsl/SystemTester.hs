@@ -8,6 +8,7 @@ import Lsl.Compiler
 import Lsl.DOMProcessing
 import Lsl.DOMSourceDescriptor
 import Lsl.Exec
+import Lsl.ExecInfo
 import Lsl.Log
 import Lsl.Structure
 import Lsl.TestResult
@@ -47,7 +48,13 @@ commandFromXML xml =
              Right command -> command
 
 --simCommand e = match (ElemAcceptor "sim-continue" simple) e >> return (SimContinue [] [])
-simCommand e = execCmd "sim-continue" SimContinue e
+simCommand e = --execCmd "sim-continue" SimContinue e
+    (matchSimContinue e) `mplus` (matchSimStep e) `mplus` (matchSimStepOver e) `mplus` (matchSimStepOut e)
+    
+matchSimContinue e = execCmd "sim-continue" SimContinue e
+matchSimStep e = execCmd "sim-step" SimStep e
+matchSimStepOver e = execCmd "sim-step-over" SimStepOver e
+matchSimStepOut e = execCmd "sim-step-out" SimStepOut e
 
 execCmd s f e = do
     (bp,events) <- match (ElemAcceptor s commandContent) e
@@ -79,7 +86,10 @@ simArgElement =
     
 outputToXML (SimInfo _ log state) = (emit "sim-info" [] [emitLog log,emitState state]) ""
 outputToXML (SimEnded _ log state) = (emit "sim-ended" [] [emitLog log,emitState state]) ""
-
+outputToXML (SimSuspended _ suspendInfo log state) = (emit "sim-suspended" [] [emitExecutionInfo suspendInfo,
+                                                                               emitLog log,
+                                                                               emitState state]) ""
+                                                                               
 emitLog log =
     emit "messages" [] $ map emitMessage (log)
 

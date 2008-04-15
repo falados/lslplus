@@ -50,7 +50,9 @@ data World m = World {
                     wlibrary :: [(String,Validity LModule)],
                     wscripts :: [(String,Validity CompiledLSLScript)],
                     worldDB :: ValueDB,
-                    worldAvatars :: [(String,Avatar)]
+                    worldAvatars :: [(String,Avatar)],
+                    worldBreakpointManager :: BreakpointManager,
+                    worldSuspended :: Maybe (String,String) -- prim-key, script-name, image
                 } deriving (Show)
 
 -- a state monad for the World
@@ -121,6 +123,10 @@ getWScripts :: Monad m => WorldM m  [(String,Validity CompiledLSLScript)]
 getWScripts = queryWorld wscripts
 getWorldAvatars :: Monad m => WorldM m [(String,Avatar)]
 getWorldAvatars = queryWorld worldAvatars
+getWorldBreakpointManager :: Monad m => WorldM m BreakpointManager
+getWorldBreakpointManager = queryWorld worldBreakpointManager
+getWorldSuspended :: Monad m => WorldM m (Maybe (String,String))
+getWorldSuspended = queryWorld worldSuspended
 
 setListeners l = updateWorld (\w -> w { wlisteners = l })   
 setNextListenerId i = updateWorld (\w -> w { nextListenerId = i })
@@ -133,6 +139,8 @@ setWQueue q = updateWorld (\w -> w { wqueue = q })
 setRandGen g = updateWorld (\w -> w { randGen = g })
 setWorldAvatars l = updateWorld (\w -> w { worldAvatars = l })
 setWorldScripts s = updateWorld (\w -> w { worldScripts = s })
+setWorldBreakpointManager m = updateWorld (\w -> w { worldBreakpointManager = m })
+setWorldSuspended v = updateWorld (\w -> w { worldSuspended = v })
 
 insertWorldDB path value = do
     wdb <- getWorldDB
@@ -323,7 +331,7 @@ getPrimInfo pkey =
            Nothing -> return Nothing
            Just p ->
                case primParent p of 
-                   Nothing -> return $ Just (pkey, 0)
+                   Nothing -> return $ Just (pkey, 0, primName p)
                    Just p1Key -> do
                        objects <- getObjects
                        case M.lookup p1Key objects of
@@ -331,7 +339,7 @@ getPrimInfo pkey =
                            Just (LSLObject plist) ->
                                case elemIndex pkey plist of
                                    Nothing -> return Nothing
-                                   Just i -> return $ Just (p1Key, i)
+                                   Just i -> return $ Just (p1Key, i, primName p)
                                    
 pushEvents oid pid e =
     do objects <- getObjects
@@ -388,8 +396,11 @@ newWorld slice maxt iq = World {
                wlibrary = [],
                wscripts = [],
                worldDB = emptyDB,
-               worldAvatars = []
+               worldAvatars = [],
+               worldBreakpointManager = emptyBreakpointManager,
+               worldSuspended = Nothing
            }
+           
 newWorld' slice maxt iq lib scripts avatars = 
     (newWorld slice maxt iq) { 
         wscripts = scripts, 
@@ -432,13 +443,25 @@ putManyWQ ((tick,we):wes) wq = putWQ tick we (putManyWQ wes wq)
 putWorldEvent tick we = 
     do weq <- getWQueue
        setWQueue $ putWQ tick we weq
+
+checkBp bp sm =
+    do  bpm <- getWorldBreakpointManager
+        let (result,bpm',sm') = checkBreakpoint bp bpm sm
+        setWorldBreakpointManager bpm'
+        return (result,sm')
        
 logAMessage s =
     do log <- getMsgLog
        tick <- getTick
        let message = LogMessage tick LogInfo "" s 
        setMsgLog (message:log)
-       
+
+logTrace source s =
+    do log <- getMsgLog
+       tick <- getTick
+       let message = LogMessage tick LogTrace source s 
+       setMsgLog (message:log)
+              
 updateObject f name = 
     do objects <- getObjects
        case M.lookup name objects of
@@ -477,16 +500,19 @@ registerListener listener =
 
 processEvents :: Monad m => WorldM m ()
 processEvents =
-    do tick <- getTick
-       weq <- getWQueue
-       case takeWQ tick weq of
-           (Nothing,_) -> return ()
-           (Just we,weq') -> 
-               do setWQueue weq'
-                  w <- queryWorld id
-                  processEvent we
-                  processEvents
-
+    do suspenseInfo <- getWorldSuspended
+       when (isNothing suspenseInfo) $ do
+           tick <- getTick
+           weq <- getWQueue
+           case takeWQ tick weq of
+               (Nothing,_) -> return ()
+               (Just we,weq') -> 
+                   do setWQueue weq'
+                      w <- queryWorld id
+                      processEvent we
+                      processEvents
+    where isNothing = maybe True (const False)
+    
 processEvent (CreatePrim name key) =
     do worldPrims <- getPrims
        objects <- getObjects
@@ -541,19 +567,30 @@ findAndRunScript scriptKey =
 checkAndRunScript _ (Invalid _,_) = return ()
 checkAndRunScript k@(pkey,sname) (Valid img, q) =
     do  pInfo <- getPrimInfo pkey
-        case pInfo of
-            Nothing -> logAMessage ("script " ++ (show k) ++ ": prim not found!")
-            Just (parent, index) -> runScript parent index pkey sname img q
-runScript parent index pkey sname img q =
+        suspenseInfo <- getWorldSuspended
+        case suspenseInfo of
+            Nothing -> run pInfo
+            Just (suspKey,suspName) | pkey == suspKey && suspName == sname -> run pInfo
+                                    | otherwise -> return ()
+   where run pInfo =
+             case pInfo of
+                 Nothing -> logAMessage ("script " ++ (show k) ++ ": prim not found!")
+                 Just (parent, index, primName) -> runScript parent index pkey sname primName img q
+runScript parent index pkey sname primName img q =
     do slice <- getSliceSize
        tick <- getTick
-       let checkBp _ sm = return (False,sm)
-       result <- executeLsl img parent index sname pkey doPredef logAMessage getTick setTick checkBp q (tick + slice)
+       let img' = img { scriptImageName = sname ++ "/" ++ primName ++ "/" ++ pkey }
+       let log = logTrace (pkey ++ ":" ++ sname)
+       --let checkBp _ sm = return (False,sm)
+       result <- executeLsl img' parent index sname pkey doPredef log getTick setTick checkBp q (tick + slice)
        case result of
            Left s -> logAMessage ("execution error in script " ++ "(" ++ pkey ++ "," ++ sname ++ ") ->" ++ s)
-           Right (img',q') -> do
+           Right (img'',q') -> do
                scripts <- getWorldScripts
-               setWorldScripts (M.insert (pkey,sname) (Valid img',q') scripts)
+               setWorldScripts (M.insert (pkey,sname) (Valid img'',q') scripts)
+               case executionState img'' of
+                   Suspended bp -> setWorldSuspended (Just (pkey,sname))
+                   _ -> setWorldSuspended Nothing
 
 simulate :: Monad m => WorldM m ()
 simulate =
@@ -562,7 +599,10 @@ simulate =
        t <- getTick
        setTick (t + 1)
        pauseTime <- getNextPause
-       if t + 1 >= pauseTime then return () else simulate
+       suspendInfo <- getWorldSuspended
+       if t + 1 >= pauseTime || isSuspended suspendInfo then return () else simulate
+    where isSuspended Nothing = False
+          isSuspended _ = True
 
 linkSet = -1::Int
 linkAllOthers = -2::Int
@@ -576,7 +616,10 @@ trace1 s val = trace (s ++ ": " ++ show val) val
 
 -- ***************************************************************************
 
-data SimCommand = SimContinue [Breakpoint] [SimEvent]
+data SimCommand = SimContinue { simCmdBreakpoints :: [Breakpoint], simCmdEvents :: [SimEvent] }
+                | SimStep { simCmdBreakpoints :: [Breakpoint], simCmdEvents :: [SimEvent] }
+                | SimStepOver { simCmdBreakpoints :: [Breakpoint], simCmdEvents :: [SimEvent] }
+                | SimStepOut { simCmdBreakpoints :: [Breakpoint], simCmdEvents :: [SimEvent] }
 
 data WorldDef = WorldDef { worldDefScript :: String }
 
@@ -630,19 +673,46 @@ simStep init@(Left (worldDef, scripts, lib)) command =
         Left s -> -- initialization failed
             (SimEnded ("Error initializing: " ++ s) [] nullSimState, init)
         Right world -> simStep (Right (logInitialProblems world)) command
-simStep (Right world) (SimContinue _ events) =
+simStep (Right world) command =
     let t = tick world
+        events = simCmdEvents command
+        newBreakpointManager = replaceBreakpoints (simCmdBreakpoints command) (worldBreakpointManager world)
         slice = sliceSize world
+        newScripts = case worldSuspended world of
+             Nothing -> worldScripts world
+             Just (k,s) ->
+                 let (Just (Valid img,eq)) = M.lookup (k,s) (worldScripts world) -- TODO: non-exhaustive but MUST succeed
+                     stepMgr = stepManager img
+                     img' = case command of
+                                SimStep _ _ -> img { stepManager = setStepBreakpoint stepMgr }
+                                SimStepOver _ _ -> img { stepManager = setStepOverBreakpoint stepMgr }
+                                SimStepOut _ _ -> img { stepManager = setStepOutBreakpoint stepMgr }
+                                _ -> img
+                 in M.insert (k,s) (Valid img',eq) (worldScripts world)
         simEventToWorldEvent (SimEvent name args delay) = (t + delay, WorldSimEvent name args)
         wq' = putManyWQ (map simEventToWorldEvent events) (wqueue world)
-        world' = world { wqueue = wq', nextPause = t + slice }
+        world' = trace ("breakpoints: " ++ show newBreakpointManager) $ world { wqueue = wq', 
+                         nextPause = t + slice,
+                         worldBreakpointManager = newBreakpointManager,
+                         worldScripts = newScripts }
         (_,world'') = runIdentity $ runStateT simulate world'
         log = msglog world''
         world''' = world'' { msglog = [] } in
         if trace1 "tick" (tick world''') < trace1 "maxTick" (maxTick world''') 
-            then (SimInfo { simStatusEvents = [], 
-                            simStatusLog = reverse log,
-                            simStatusState = stateInfoFromWorld world''' }, Right world''')
+            then case worldSuspended world''' of
+                Nothing ->
+                     (SimInfo { simStatusEvents = [], 
+                                simStatusLog = reverse log,
+                                simStatusState = stateInfoFromWorld world''' }, Right world''')
+                Just (k,s) ->
+                     let (Just (Valid img,eq)) = M.lookup (k,s) (worldScripts world''') -- TODO: non-exhaustive but MUST succeed
+                         (Suspended bp) = executionState img -- TODO: non-exhaustive but MUST succeed
+                         executionInfo = ExecutionInfo (breakpointFile bp) (breakpointLine bp) (frameInfo img)
+                     in
+                     (SimSuspended { simStatusEvents = [], 
+                                     simStatusSuspendInfo = executionInfo,
+                                     simStatusLog = reverse log,
+                                     simStatusState = stateInfoFromWorld world''' }, Right world''')
             else (SimEnded { simStatusMessage = "ended", 
                              simStatusLog = reverse log,
                              simStatusState = stateInfoFromWorld world''' }, Right world''')

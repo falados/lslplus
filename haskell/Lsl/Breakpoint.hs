@@ -36,7 +36,8 @@ newtype StepManager = StepManager [DynamicBreakpoint] deriving (Show)
 mkBreakpoint name line col = Breakpoint name line col
 
 data BreakpointManager = BreakpointManager { fixedBreakpoints :: (Map String (Set (Int,Int))) }
-
+    deriving (Show)
+    
 emptyStepManager = StepManager []
 
 emptyBreakpointManager = BreakpointManager M.empty
