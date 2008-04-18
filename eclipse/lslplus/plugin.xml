@@ -23,7 +23,7 @@
       <editor
             class="lslplus.editor.SimEditor"
             extensions="simp"
-            icon="icons/obj16/lslplus-test.gif"
+            icon="icons/obj16/lslplus-sim.gif"
             id="lslplus.editor.SimEditor"
             name="Lsl Plus Sim Editor">
       </editor>
@@ -231,7 +231,7 @@
       <wizard
             category="lslplus.lslplus"
             class="lslplus.wizards.NewSimProjectWizard"
-            icon="icons/obj16/lslplus-test.gif"
+            icon="icons/obj16/lslplus-sim.gif"
             id="lslplus.newSimProjectWizard"
             name="New Sim Project File"
             preferredPerspectives="lslplus.LslPlusPerspective">

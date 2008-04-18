@@ -124,7 +124,6 @@ public class LslPlusEditor extends TextEditor {
      */
     public void doSave(IProgressMonitor monitor) {
         super.doSave(monitor);
-        LslPlusPlugin.getDefault().errorStatusChanged();
     }
 
     /**
@@ -132,7 +131,6 @@ public class LslPlusEditor extends TextEditor {
      */
     public void doSaveAs() {
         super.doSaveAs();
-        LslPlusPlugin.getDefault().errorStatusChanged();
     }
 
     protected void editorContextMenuAboutToShow(IMenuManager menu) {

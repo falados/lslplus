@@ -256,9 +256,13 @@ public class LslPlusPlugin extends AbstractUIPlugin {
     }
 
     public void errorStatusChanged() {
-        if (fErrorDecorator != null) {
-            fErrorDecorator.errorStatusChanged();
-        }
+        getWorkbench().getDisplay().asyncExec(new Runnable() {
+            public void run() {
+                if (fErrorDecorator != null) {
+                    fErrorDecorator.errorStatusChanged();
+                }
+            }
+        });
     }
 
     /**

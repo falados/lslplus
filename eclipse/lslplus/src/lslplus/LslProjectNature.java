@@ -28,7 +28,6 @@ import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
-import org.eclipse.core.runtime.jobs.Job;
 
 import com.thoughtworks.xstream.XStream;
 import com.thoughtworks.xstream.io.xml.DomDriver;
@@ -240,18 +239,6 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 			if (LslPlusPlugin.DEBUG) Util.log("result: " + result); //$NON-NLS-1$
 			XStream xstream = new XStream(new DomDriver());
 
-			WorkspaceJob job = new WorkspaceJob(Messages.ProjectNature_REFRESH) {
-
-				public IStatus runInWorkspace(IProgressMonitor monitor)
-						throws CoreException {
-					project.refreshLocal(IResource.DEPTH_INFINITE, monitor);
-					return new Status(IStatus.OK, "lslplus", Messages.ProjectNature_REFRESHED_OK); //$NON-NLS-1$
-				}
-				
-			};
-			
-			job.schedule(100);
-			
 			xstream.alias("summary", Summary.class); //$NON-NLS-1$
 			xstream.alias("item", Item.class); //$NON-NLS-1$
 			xstream.alias("entryPoint", EntryPointDefinition.class); //$NON-NLS-1$
@@ -293,7 +280,22 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 		} catch (Exception e) {
 			Util.log(e, e.getLocalizedMessage());
 		}
+		
+		LslPlusPlugin.getDefault().errorStatusChanged();
+		
+        WorkspaceJob job = new WorkspaceJob(Messages.ProjectNature_REFRESH) {
+
+            public IStatus runInWorkspace(IProgressMonitor monitor)
+                    throws CoreException {
+                project.refreshLocal(IResource.DEPTH_INFINITE, monitor);
+                return new Status(IStatus.OK, "lslplus", Messages.ProjectNature_REFRESHED_OK); //$NON-NLS-1$
+            }
+            
+        };
+        
+        job.schedule(100);
 	}
+	
 	public void configure() throws CoreException {
 	}
 	
@@ -394,6 +396,8 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 						        i.setAttribute(IMarker.CHAR_END, offsets[1]);
 						    }
 						}
+						
+						Util.log("Marked " + key);
 					}
 				} catch (CoreException e) {
 					Util.log(e, "error reading file"); //$NON-NLS-1$
@@ -403,6 +407,7 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 	}
 	
 	public void resourceChanged(IResourceChangeEvent event) {
+	    Util.log("resource changed!");
 		final IResourceDelta delta = event.getDelta();
 
 		DeltaVisitor dv = new DeltaVisitor();
@@ -417,9 +422,10 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 		}
 		
 		if (checkErrors) {
-			Job job = new Job("EvaluateErrors") { //$NON-NLS-1$
+		    Util.log("check errors!");
+			WorkspaceJob job = new WorkspaceJob("EvaluateErrors") { //$NON-NLS-1$
 
-				protected IStatus run(IProgressMonitor monitor) {
+				public IStatus runInWorkspace(IProgressMonitor monitor) {
 					checkForErrors();
 					return new Status(IStatus.OK,LSLPLUS, Messages.ProjectNature_OK);
 				}

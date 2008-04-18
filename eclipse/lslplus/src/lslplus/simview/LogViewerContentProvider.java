@@ -35,8 +35,9 @@ public class LogViewerContentProvider implements ITreeContentProvider {
     }
 
     public void addMessages(SimStatuses.Message[] messages) {
-        Collections.addAll(logMessages, messages);
-        
+        LinkedList temp = new LinkedList();
+        Collections.addAll(temp, messages);
+        logMessages.addAll(0, temp);
     }
 
     public void clear() {

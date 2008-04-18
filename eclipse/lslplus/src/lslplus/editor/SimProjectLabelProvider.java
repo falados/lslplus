@@ -15,9 +15,15 @@ public class SimProjectLabelProvider extends LabelProvider implements ITableLabe
     private Image objectImage = createImage("icons/object.gif"); //$NON-NLS-1$
     private Image primImage = createImage("icons/prim.gif"); //$NON-NLS-1$
     private Image avatarImage = createImage("icons/avatar.gif"); //$NON-NLS-1$
+    private Image avatarRefImage = createImage("icons/avatar-ref.gif"); //$NON-NLS-1$
     private Image scriptImage = createImage("icons/obj16/lslplus.gif"); //$NON-NLS-1$
-    private Image valImage = createImage("icons/arg.gif"); //$NON-NLS-1$
+    private Image valImage = createImage("icons/valimage.gif"); //$NON-NLS-1$
     private Image worldImage = createImage("icons/world.gif"); //$NON-NLS-1$
+    private Image propertiesImage = createImage("icons/properties.gif"); //$NON-NLS-1$
+    private Image gridPositionImage = createImage("icons/grid-position.gif"); //$NON-NLS-1$
+    private Image xPositionImage = createImage("icons/x-position.gif"); //$NON-NLS-1$
+    private Image yPositionImage = createImage("icons/y-position.gif"); //$NON-NLS-1$
+    private Image zPositionImage = createImage("icons/z-position.gif"); //$NON-NLS-1$
     private Image createImage(String path) {
         if (images == null) images = new LinkedList();
         Image i = LslPlusPlugin.createImage(path);
@@ -38,6 +44,19 @@ public class SimProjectLabelProvider extends LabelProvider implements ITableLabe
             return scriptImage;
         } else if (element instanceof SimProject.WorldNode) {
             return worldImage;
+        } else if (element instanceof SimProject.PrimPropertiesNode ||
+                   element instanceof SimProject.AvatarPropertiesNode) {
+            return propertiesImage;
+        } else if (element instanceof SimProject.GridPositionNode) {
+            return gridPositionImage;
+        } else if (element instanceof SimProject.GridCoordinateNode) {
+            SimProject.GridCoordinateNode n = (SimProject.GridCoordinateNode) element;
+            if (n.getName().startsWith("x")) return xPositionImage;
+            if (n.getName().startsWith("y")) return yPositionImage;
+            if (n.getName().startsWith("z")) return zPositionImage;
+            return valImage;
+        } else if (element instanceof SimProject.AvatarReferenceNode) {
+            return avatarRefImage;
         } else {
             // TODO: add other node types
             return valImage;
@@ -45,7 +64,7 @@ public class SimProjectLabelProvider extends LabelProvider implements ITableLabe
     }
 
     public String getColumnText(Object element, int columnIndex) {
-        if (columnIndex == 0) return ((SimProject.Node)element).getNodeName();
+        if (columnIndex == 0) return ((SimProject.Node)element).getNameDisplay();
         else if (columnIndex == 1) return ((SimProject.Node)element).getValue().toString();
         return null;
     }

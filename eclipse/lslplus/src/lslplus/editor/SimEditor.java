@@ -1,11 +1,13 @@
 package lslplus.editor;
 
 import java.io.ByteArrayInputStream;
+import java.util.LinkedList;
 
 import lslplus.LslPlusPlugin;
 import lslplus.LslProjectNature;
 import lslplus.sim.SimProject;
 import lslplus.sim.SimWorldDef;
+import lslplus.sim.SimProject.Node;
 import lslplus.util.Util;
 
 import org.eclipse.core.commands.ExecutionException;
@@ -67,20 +69,20 @@ public class SimEditor extends EditorPart implements SimProject.NodeListener {
 
         public IStatus execute(IProgressMonitor monitor, IAdaptable info) throws ExecutionException {
             oldValue = n.getValueString();
-            n.setValueFromString(value);
+            n.updateValue(value);
             incChangeCount();
             return Status.OK_STATUS;
         }
 
         public IStatus redo(IProgressMonitor monitor, IAdaptable info) throws ExecutionException {
             oldValue = n.getValueString();
-            n.setValueFromString(value);
+            n.updateValue(value);
             incChangeCount();
             return Status.OK_STATUS;
         }
 
         public IStatus undo(IProgressMonitor monitor, IAdaptable info) throws ExecutionException {
-            n.setValueFromString(oldValue);
+            n.updateValue(oldValue);
             decChangeCount();
             return Status.OK_STATUS;
         }
@@ -98,21 +100,21 @@ public class SimEditor extends EditorPart implements SimProject.NodeListener {
         }
 
         public IStatus execute(IProgressMonitor monitor, IAdaptable info) throws ExecutionException {
-            oldName = n.getNodeName();
-            n.setNodeName(name);
+            oldName = n.getNameDisplay();
+            n.updateName(name);
             incChangeCount();
             return Status.OK_STATUS;
         }
 
         public IStatus redo(IProgressMonitor monitor, IAdaptable info) throws ExecutionException {
-            oldName = n.getNodeName();
-            n.setNodeName(name);
+            oldName = n.getNameDisplay();
+            n.updateName(name);
             incChangeCount();
             return Status.OK_STATUS;
         }
 
         public IStatus undo(IProgressMonitor monitor, IAdaptable info) throws ExecutionException {
-            n.setNodeName(oldName);
+            n.updateName(oldName);
             decChangeCount();
             return Status.OK_STATUS;
         }
@@ -346,6 +348,17 @@ public class SimEditor extends EditorPart implements SimProject.NodeListener {
 			    String[] choices;
 			    if ("scripts".equals(n.getChoicesId())) { //$NON-NLS-1$
 			        choices = nature.getLslScripts();
+			    } else if ("avatars".equals(n.getChoicesId())) {
+			        SimProject.Node root = n.findRoot();
+			        final LinkedList avnames = new LinkedList();
+			        root.accept(new SimProject.NodeVisitor() {
+                        public void visit(Node n) {
+                            if (n instanceof SimProject.AvatarNode) {
+                                avnames.add(n.getNameDisplay());
+                            }
+                        }
+			        });
+			        choices = (String[]) avnames.toArray(new String[avnames.size()]);
 			    } else {
 			        choices = new String[0];
 			    }
@@ -440,7 +453,7 @@ public class SimEditor extends EditorPart implements SimProject.NodeListener {
 
         protected Object getValue(Object element) {
             SimProject.Node n = (SimProject.Node) element;
-            return n.getNodeName();
+            return n.getNameDisplay();
         }
 
         protected void setValue(Object element, Object value) {
@@ -448,7 +461,7 @@ public class SimEditor extends EditorPart implements SimProject.NodeListener {
             
             SimProject.Status status = n.checkNameString((String)value);
             if (!status.isOk()) return;
-            if (value.equals(n.getNodeName())) return;
+            if (value.equals(n.getNameDisplay())) return;
             UpdateNameOperation operation = new UpdateNameOperation(n, (String)value);
             operation.addContext(undoContext);
             try {
@@ -595,7 +608,7 @@ public class SimEditor extends EditorPart implements SimProject.NodeListener {
                 SimProject.Node n = (SimProject.Node) cell.getElement();
                 cell.setImage(fLabelProvider.getColumnImage(n,0));
                 if (n == null) cell.setText(BLANK);
-                else cell.setText(n.getNodeName());
+                else cell.setText(n.getNameDisplay());
             }
         });
 		

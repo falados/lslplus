@@ -1,5 +1,9 @@
 package lslplus.simview;
 
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.LinkedList;
+
 import lslplus.LslPlusPlugin;
 import lslplus.SimListener;
 import lslplus.SimManager;
@@ -7,6 +11,7 @@ import lslplus.sim.SimEvent;
 import lslplus.sim.SimEventDefinition;
 import lslplus.sim.SimMetaDataListener;
 import lslplus.sim.SimStatuses;
+import lslplus.sim.SimStatuses.SimState;
 import lslplus.util.Util;
 
 import org.eclipse.jface.action.Action;
@@ -52,6 +57,40 @@ public class SimWatcherViewPart extends ViewPart implements SimListener, SimMeta
         }
     }
 
+    private class UserEventAction extends Action {
+        private Shell parentShell;
+        private String userEventName;
+        public UserEventAction(Shell parentShell, String userEventName, String text, String toolTip,
+                String iconPath) {
+            this.parentShell = parentShell;
+            this.userEventName = userEventName;
+            setText(text); 
+            setToolTipText(toolTip);
+            ImageDescriptor descriptor = LslPlusPlugin
+                    .imageDescriptorFromPlugin("icons/chat.gif"); //$NON-NLS-1$
+            setHoverImageDescriptor(descriptor);
+            setImageDescriptor(descriptor);
+            setEnabled(false);
+        }
+
+        public void run() {
+            SimEventDefinition def = simManager.getAnEventDefinition(userEventName);
+            
+            if (def == null) {
+                Util.error("event definition not found: " + userEventName);
+                return;
+            }
+            EventDialog dlg = //new TouchDialog(parentShell);
+                    new EventDialog(parentShell, def);
+            dlg.open();
+            
+            SimEvent event = dlg.getEvent();
+            if (event != null) {
+                simManager.putEvent(event);
+            }
+        }
+    }
+    
     private class TouchAction extends Action {
         private Shell parentShell;
         public TouchAction(Shell parentShell) {
@@ -76,13 +115,6 @@ public class SimWatcherViewPart extends ViewPart implements SimListener, SimMeta
                     new EventDialog(parentShell, def);
             dlg.open();
             
-//            if (dlg.getReturnCode() == Window.OK) {
-//                SimEvent event = new SimEvent("Touch Prim", 0,
-//                        new SimEventArg[] {
-//                            new SimEventArg("Prim", "20000000-0000-0000-0000-000000000000"),
-//                            new SimEventArg("Avatar", "10000000-0000-0000-0000-000000000000"),
-//                            new SimEventArg("Duration", "1.0")
-//                        });
             SimEvent event = dlg.getEvent();
             if (event != null) {
                 simManager.putEvent(event);
@@ -108,6 +140,9 @@ public class SimWatcherViewPart extends ViewPart implements SimListener, SimMeta
     private StopAction stopAction;
     private TreeColumn fColumn3;
     private LogViewerLabelProvider labelProvider;
+    private Label timeText;
+    private UserEventAction chatAction;
+    private LinkedList actions;
 
     public SimWatcherViewPart() {
         simManager = LslPlusPlugin.getDefault().getSimManager();
@@ -142,7 +177,7 @@ public class SimWatcherViewPart extends ViewPart implements SimListener, SimMeta
 //        layout.verticalSpacing = convertVerticalDLUsToPixels(IDialogConstants.VERTICAL_SPACING);
 //        layout.horizontalSpacing = convertHorizontalDLUsToPixels(IDialogConstants.HORIZONTAL_SPACING);
         comp.setLayout(layout);
-        comp.setLayoutData(new GridData(GridData.FILL_BOTH));
+        comp.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
 
         Label label0 = new Label(comp, SWT.SHADOW_NONE|SWT.RIGHT|SWT.HORIZONTAL);
         label0.setText("Send an event");
@@ -157,7 +192,7 @@ public class SimWatcherViewPart extends ViewPart implements SimListener, SimMeta
                 eventsButton.setEnabled(simManager.isSimActive() && eventsCombo.getSelectionIndex() >= 0);
             }
         });
-        
+        eventsCombo.setLayoutData(new GridData(SWT.FILL,SWT.CENTER,true,false));
         eventsButton = new Button(comp, SWT.PUSH|SWT.CENTER);
         eventsButton.setText("Go...");
         eventsButton.setEnabled(false);
@@ -180,6 +215,21 @@ public class SimWatcherViewPart extends ViewPart implements SimListener, SimMeta
             }
             
         });
+        
+        Composite comp1 = new Composite(parent, SWT.NONE);
+        GridLayout layout1 = new GridLayout();
+        layout1.numColumns = 2;
+//        layout.marginHeight = convertVerticalDLUsToPixels(IDialogConstants.VERTICAL_MARGIN);
+//        layout.marginWidth = convertHorizontalDLUsToPixels(IDialogConstants.HORIZONTAL_MARGIN);
+//        layout.verticalSpacing = convertVerticalDLUsToPixels(IDialogConstants.VERTICAL_SPACING);
+//        layout.horizontalSpacing = convertHorizontalDLUsToPixels(IDialogConstants.HORIZONTAL_SPACING);
+        comp1.setLayout(layout1);
+        comp1.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
+
+        Label timeLabel = new Label(comp1, SWT.SHADOW_NONE|SWT.RIGHT|SWT.HORIZONTAL);
+        timeLabel.setText("Simulation time:");
+        timeText = new Label(comp1, SWT.SHADOW_ETCHED_IN|SWT.RIGHT|SWT.HORIZONTAL);
+        timeText.setText("00:00:00.000");
         
         SashForm sashForm = createSashForm(parent);
         sashForm.setLayoutData(new GridData(GridData.FILL_BOTH));
@@ -254,17 +304,28 @@ public class SimWatcherViewPart extends ViewPart implements SimListener, SimMeta
     private void configureToolBar() {
         IActionBars actionBars = getViewSite().getActionBars();
         IToolBarManager toolBar = actionBars.getToolBarManager();
-        
+        actions = new LinkedList();
+        chatAction = new UserEventAction(this.getSite().getShell(),
+                "Chat", "Chat", "Chat in Sim",
+                "icons/chat.gif"); //$NON-NLS-1$
         touchAction = new TouchAction(this.getSite().getShell());
         stopAction = new StopAction(this.getSite().getShell());
-        touchAction.setEnabled(simManager.isSimActive());
-        stopAction.setEnabled(simManager.isSimActive());
+        toolBar.add(chatAction);
         toolBar.add(touchAction);
         toolBar.add(stopAction);
-
+        Collections.addAll(actions, new Action[] { chatAction, touchAction, stopAction });
+        enableActions(simManager.isSimActive());
+        
         toolBar.add(new Separator());
 
         actionBars.updateActionBars();
+    }
+
+    private void enableActions(boolean enabled) {
+        for (Iterator i = actions.iterator(); i.hasNext();) {
+            Action action = (Action) i.next();
+            action.setEnabled(enabled);
+        }
     }
 
     public void newLogMessages(SimStatuses.Message[] result) {
@@ -273,8 +334,7 @@ public class SimWatcherViewPart extends ViewPart implements SimListener, SimMeta
     }
 
     public void simLaunched() {
-        touchAction.setEnabled(true);
-        stopAction.setEnabled(true);
+        enableActions(true);
         if (logViewerModel != null) {
             this.logViewerModel.clear();
             refreshAsync();
@@ -296,8 +356,7 @@ public class SimWatcherViewPart extends ViewPart implements SimListener, SimMeta
     }
 
     public void simEnded() {
-        touchAction.setEnabled(false);
-        stopAction.setEnabled(false);
+        enableActions(false);
     }
 
     public void metaDataReady() {
@@ -313,6 +372,7 @@ public class SimWatcherViewPart extends ViewPart implements SimListener, SimMeta
     private void asyncExec(Runnable r) {
         LslPlusPlugin.getDefault().getWorkbench().getDisplay().asyncExec(r);
     }
+    
     private void populateEventsCombo() {
         SimEventDefinition[] eventDefs = simManager.getAllEventDefinitions();
         if (eventDefs == null) eventDefs = new SimEventDefinition[0];
@@ -323,5 +383,38 @@ public class SimWatcherViewPart extends ViewPart implements SimListener, SimMeta
         }
         
         eventsCombo.setItems(names);
+    }
+
+    public void newSimState(final SimState state) {
+        asyncExec(new Runnable() {
+            public void run() {
+                int msTime = state.getTime();
+                timeText.setText(formatTime(msTime));
+            }
+        });
+    }
+    
+    private static String padInt(int w, int v) {
+        String s = Integer.toString(v);
+        int pad = w - s.length();
+        
+        if (pad <= 0) return s;
+        StringBuilder buf = new StringBuilder();
+        
+        for (int i = 0; i < pad; i++) buf.append('0');
+        buf.append(s);
+        return buf.toString();
+    }
+
+    public static String formatTime(int msTime) {
+        int milli = msTime % 1000;
+        int hours = msTime / (60 * 60 * 1000);
+        int minutes = (msTime / (60 * 1000)) % 60;
+        int seconds = (msTime / 1000) % 60;
+        StringBuilder buf = new StringBuilder(padInt(2,hours));
+        buf.append(':').append(padInt(2,minutes));
+        buf.append(':').append(padInt(2,seconds));
+        buf.append('.').append(padInt(3,milli));
+        return buf.toString();
     }
 }

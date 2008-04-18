@@ -178,8 +178,17 @@ public class SimManager implements SimEventListener {
             listener.simEnded();
         }
     }
+
+    private void fireNewSimState() {
+        for (Iterator i = listeners.iterator(); i.hasNext(); ) {
+            SimListener listener = (SimListener) i.next();
+            listener.newSimState(simState);
+        }
+    }
+    
     public synchronized void setSimState(SimState state) {
         this.simState = state;
+        fireNewSimState();
     }
     
     public synchronized SimState getSimState() { return simState; }

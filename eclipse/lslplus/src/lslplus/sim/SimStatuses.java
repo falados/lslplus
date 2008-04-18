@@ -60,9 +60,11 @@ public class SimStatuses {
     }
     
     public static class SimState {
+        private int time;
         private SimPrim[] prims;
         private SimAvatar[] avatars;
         
+        public int getTime() { return time; }
         public SimPrim[] getPrims() { return prims; }
         public SimAvatar[] getAvatars() { return avatars; }
     }

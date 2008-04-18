@@ -38,7 +38,8 @@ public class LogViewerLabelProvider implements ITableLabelProvider {
     public String getColumnText(Object element, int columnIndex) {
         if (element instanceof SimStatuses.Message) {
             SimStatuses.Message message = (SimStatuses.Message) element;
-            if (columnIndex == 0) return message.getTime();
+            if (columnIndex == 0) 
+                return SimWatcherViewPart.formatTime(Integer.parseInt(message.getTime()));
             else if (columnIndex == 1) return message.getSource();
             else return message.getText();
         } else {
