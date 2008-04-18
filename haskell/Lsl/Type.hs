@@ -12,17 +12,23 @@ module Lsl.Type(
     lslTypeString,
     lslShowVal,
     toSVal,
+    lslValueElement,
     defaultValue,
     vecMulScalar,
     rotMulVec,
     rotMul,
     invRot,
     vcross,
-    toFloat) where
+    toFloat,
+    vVal2Vec,
+    vec2VVal,
+    liftV1,
+    liftV2) where
     
 import Lsl.NumberParsing
 import Lsl.Key
 import Lsl.Util
+import Lsl.DOMProcessing
 
 import Text.Printf
 
@@ -167,6 +173,38 @@ toSVal (LVal l) =
 comp2Str :: Float -> String
 comp2Str f = printf "%.5f" f
 
+lslValueElement :: Monad m => ElemAcceptor m LSLValue
+lslValueElement =
+    let f e@(Elem _ attrs contents) = do
+            valType <- lookupM "class" attrs
+            case attrString valType of
+                "string" -> simple e >>= return . SVal
+                "key" -> simple e >>= return . KVal
+                "int" -> simple e >>= readM >>= return . IVal
+                "float" -> simple e >>= readM >>= return . FVal
+                "vector" -> acceptVector e >>= return
+                "rotation" -> acceptRotation e >>= return
+                "list" -> acceptLslList e >>= return
+                _ -> fail "unrecognized value element"
+    in ElemAcceptor "value" f
+ 
+acceptVector (Elem _ _ contents) = do
+            (x,c1) <- findValue "x" (elementsOnly contents)
+            (y,c2) <- findValue "y" (elementsOnly c1)
+            (z,[]) <- findValue "z" (elementsOnly c2)
+            return $ VVal x y z
+            
+acceptRotation (Elem _ _ contents) = do
+            (x,c1) <- findValue "x" (elementsOnly contents)
+            (y,c2) <- findValue "y" (elementsOnly c1)
+            (z,c3) <- findValue "z" (elementsOnly c2)
+            (s,[]) <- findValue "s" (elementsOnly c3)
+            return $ RVal x y z s
+        
+acceptLslList e = do
+        l <- acceptList lslValueElement e
+        return $ LVal l
+
 -- vector and rotation operations
 vecMulScalar (VVal x y z) f = (VVal (x*f) (y*f) (z*f))
 rotMul (RVal x1 y1 z1 s1) (RVal x2 y2 z2 s2) = 
@@ -183,3 +221,9 @@ vcross (VVal x1 y1 z1) (VVal x2 y2 z2) =
     
 toFloat (FVal f) = f
 toFloat (IVal i) = fromInt i
+
+vVal2Vec (VVal x y z) = (x,y,z)
+vec2VVal (x,y,z) = VVal x y z
+liftV1 f = vec2VVal . f . vVal2Vec
+liftV2 f = \ x y -> vec2VVal $ f (vVal2Vec x) (vVal2Vec y)
+

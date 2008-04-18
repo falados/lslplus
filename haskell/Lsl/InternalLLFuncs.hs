@@ -183,7 +183,7 @@ internalLLFuncs = [
     ("llToUpper",llToUpper),
     ("llUnescapeURL",llUnescapeURL),
     ("llVecDist",llVecDist),
-    ("llVecMag",llVecNorm),
+    ("llVecMag",llVecMag),
     ("llVecNorm",llVecNorm),
     ("llXorBase64Strings",llXorBase64Strings),
     ("llXorBase64StringsCorrect", llXorBase64StringsCorrect)]
@@ -367,15 +367,14 @@ llRotBetween n [VVal x1 y1 z1,VVal x2 y2 z2] =
         angle = acos (x1*x2 + y1*y2 + z1*z2) 
     in llAxisAngle2Rot n [VVal x y z,FVal angle]
     
-llVecMag _ [VVal x y z] = 
-    continueWith $ FVal $ sqrt (x*x + y*y + z*z)
+llVecMag _ [v@(VVal x y z)] = 
+    continueWith $ FVal $ mag3d (vVal2Vec v)
 
-llVecDist _ [VVal x1 y1 z1,VVal x2 y2 z2] =
-    let (x',y',z') = (x2 - x1, y2 - y1, z2 - z1)
-    in continueWith $ FVal $ sqrt (x' * x' + y' * y' + z' * z')
+llVecDist _ [v1@(VVal x1 y1 z1),v2@(VVal x2 y2 z2)] =
+    continueWith $ FVal $ dist3d (vVal2Vec v1) (vVal2Vec v2)
 
-llVecNorm _ [VVal x y z] =
-    let mag2 = (x * x + y * y + z * z) in
+llVecNorm _ [v@(VVal x y z)] = 
+    let mag2 = mag3d2 (vVal2Vec v) in
         continueWith $ if mag2 == 0.0 then VVal 0.0 0.0 0.0
                        else let mag = sqrt mag2 in
                            VVal (x/mag) (y/mag) (z/mag)
@@ -523,27 +522,6 @@ llList2Vector _ [LVal l, IVal index] =
             Just v@(VVal _ _ _) -> v
             _ -> let (Just v) = findConstVal "ZERO_VECTOR" in v
             
--- 
-
--- llEuler2Rot _ [VVal roll pitch yaw] =
---     let sinPitch = sin pitch
---         cosPitch = cos pitch
---         sinYaw = sin yaw
---         cosYaw = cos yaw
---         sinRoll = sin roll
---         cosRoll = cos roll
---         r1 = (sinRoll,0.0,0.0,cosRoll)
---         r2 = (0.0,sinPitch,0.0,cosPitch)
---         r3 = (0.0,0.0,sinYaw,cosYaw)
---         (x,y,z,s) = (r3 `quaternionMultiply` r2) `quaternionMultiply` r1 
---     in continueWith $ RVal x y z s
---         cosPitchCosYaw = cosPitch * cosYaw
---         sinPitchSinYaw = sinPitch * sinYaw
---     in continueWith $
---        RVal (sinRoll * cosPitchCosYaw - cosRoll * sinPitchSinYaw)
---             (cosRoll * sinPitch * cosYaw + sinRoll * cosPitch * sinYaw)
---             (cosRoll * cosPitch * sinYaw - sinRoll * sinPitch * cosYaw)
---             (cosRoll * cosPitchCosYaw     + sinRoll * sinPitchSinYaw)
             
 base64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 

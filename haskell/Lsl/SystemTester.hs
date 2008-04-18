@@ -17,9 +17,6 @@ import Lsl.Util
 import Lsl.World1
 import Lsl.WorldDef
 import Lsl.XmlCreate
-import Text.XML.HaXml hiding (when)
-import Text.XML.HaXml.Posn
-import Text.XML.HaXml.Pretty
 import Debug.Trace
 
 initializationFromXML xml = let doc = xmlParse "" xml in parseInitialization doc
@@ -100,7 +97,8 @@ emitMessage logMessage =
                         emitSimple "text" [] (logMessageText logMessage)]
 
 emitState state =
-    emit "state" [] [ emitPrims (simStateInfoPrims state),
+    emit "state" [] [ emitSimple "time" [] (show $ simStateInfoTime state),
+                      emitPrims (simStateInfoPrims state),
                       emitAvatars (simStateInfoAvatars state) ]
 emitPrims prims = emitList "prims" emitPrim prims
 emitAvatars avatars = emitList "avatars" emitAvatar avatars

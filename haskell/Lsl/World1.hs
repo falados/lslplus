@@ -7,6 +7,7 @@ import Control.Monad.Error
 import Data.List
 import Data.Bits
 import Data.Map(Map)
+import Data.Maybe
 import qualified Data.Map as M
 import Debug.Trace
 
@@ -73,7 +74,7 @@ doPredef name info@(ScriptInfo oid pid sid pkey event) args =
            -- return a default value
            Nothing -> do
                (_,rettype,argtypes) <- findM (\ (x,y,z) -> x == name) funcSigs
-               logAMessage ("called " ++ name ++ (show args))
+               logAMessage LogDebug (pkey ++ ":" ++ sid) ("called " ++ name ++ (show args))
                return (EvalIncomplete,case rettype of
                       LLVoid -> VoidVal
                       LLInteger -> IVal 0
@@ -142,6 +143,19 @@ setWorldScripts s = updateWorld (\w -> w { worldScripts = s })
 setWorldBreakpointManager m = updateWorld (\w -> w { worldBreakpointManager = m })
 setWorldSuspended v = updateWorld (\w -> w { worldSuspended = v })
 
+insertPrimData key path value = do
+    prims <- getPrims
+    case M.lookup key prims of
+        Nothing -> logAMessage LogWarn "sim" ("key " ++ key ++ " not found")
+        Just prim -> 
+            setPrims $ M.insert key (prim { primData = (insertDB path value (primData prim)) }) prims
+
+lookupPrimData key path = do
+    prims <- getPrims
+    case M.lookup key prims of
+        Nothing -> return Nothing
+        Just prim -> return $ lookupDB path (primData prim)
+ 
 insertWorldDB path value = do
     wdb <- getWorldDB
     setWorldDB (insertDB path value wdb)
@@ -191,7 +205,7 @@ llMessageLinked :: Monad m => ScriptInfo -> [LSLValue] -> WorldM m (EvalResult,L
 llMessageLinked (ScriptInfo oid pid sid pkey _) [IVal link,IVal val,SVal msg,KVal key] =
     do mNumPrims <- queryObject oid (\ o -> return $ length (primKeys o))
        case mNumPrims of
-           Nothing -> do logAMessage ("object " ++ oid ++ " not found!")
+           Nothing -> do logAMessage LogWarn "sim" ("object " ++ oid ++ " not found!")
                          return (EvalIncomplete,VoidVal)
            Just n ->
               let targetList =
@@ -209,30 +223,110 @@ llMessageLinked (ScriptInfo oid pid sid pkey _) [IVal link,IVal val,SVal msg,KVa
 llSleep info@(ScriptInfo oid pid sid pkey event) [FVal f] =
     do tick <- getTick
        return $ (YieldTil (tick + durationToTicks f),VoidVal)
-llSay info@(ScriptInfo oid pid sid pkey event) [IVal chan, SVal message] =
+       
+
+llSay info params= chat (Just 20.0) info params
+llWhisper info params = chat (Just 10.0) info params
+llShout info params = chat (Just 100.0) info params
+llRegionSay info params@[IVal chan, SVal message] =
+    if (chan == 0) 
+       then do logAMessage LogWarn (scriptInfoPrimKey info ++ ": " ++ scriptInfoScriptName info) "attempt to llRegionSay on channel 0"
+               return (EvalIncomplete,VoidVal)
+       else chat Nothing info params
+       
+chat range info@(ScriptInfo oid pid sid pkey event) [IVal chan, SVal message] =
     do logFromScript info $ concat ["chan = ", show chan, ", message = ", message]
+       (VVal x y z) <- getPos pkey
+       region <- getRegion pkey
        tick <- getTick
        Just name <- queryPrim pkey primName
-       putWorldEvent tick $ Chat chan name pkey message
+       putWorldEvent tick $ Chat chan name pkey message (region,(x,y,z)) (Just 20.0)
        return (EvalIncomplete,VoidVal)
 llListen (ScriptInfo oid pid sid pkey event) [IVal chan, SVal sender, KVal key, SVal msg] =
     do lid <- registerListener $ Listener pkey sid chan sender key msg
        return (EvalIncomplete,IVal lid)
-
+llListen info params = do
+    logAMessage LogError "sim" ("invalid call to llListen.  info = " ++ (show info) ++ ", params = " ++ (show params))
+    return (EvalIncomplete, IVal 0)
+    
 llFrand _ [FVal maxval] =
     do r <- wrand
        continueWith $ FVal (maxval * r)
 
-llSetPos (ScriptInfo oid pid sid pkey event) [val] =
-    do insertWorldDB ["prim", pkey, "pos" ] val
-       continueWith VoidVal
+llGetPermissions (ScriptInfo oid pid sid pk event) [] =  fromErrorT (IVal 0) $ do
+    db <- lift getWorldDB
+    Right val <- lookupDB ["script","permission",pk,sid,"lastmask"] db
+    return val
 
-llGetPos (ScriptInfo oid pid sid pkey event) [] =
-    do val <- lookupWorldDB ["prim", pkey, "pos" ]
-       case val of
-           Just (Right v@(VVal _ _ _)) -> continueWith v
-           _ -> continueWith (VVal 0.0 0.0 0.0)
+llRequestPermissions (ScriptInfo _ _ sid pk _) [KVal k, IVal mask] =
+    do avatars <- getWorldAvatars
+       case lookup k avatars of
+           Nothing -> logAMessage LogInfo (pk ++ ":" ++ sid) ("Invalid permissions request: no such avatar: " ++ k)
+           _ -> getTick >>= flip putWorldEvent (PermissionRequestEvent pk sid k mask)
+
+llSetPos (ScriptInfo oid pid sid pkey event) [val] = 
+    if oid == pkey 
+        then setRootPos pkey val >> continueWith VoidVal
+        else do
+            -- i'm a child prim...
+            rootPos <- getPos oid
+            -- TODO: limit link distance...
+            setPos pkey (liftV2 add3d rootPos val)
+            continueWith VoidVal
+            
+-- updates the world coordinates of the root prim and all its child prims
+-- does NOT consider region boundaries (TODO: fix!)
+setRootPos oid v =
+   fromErrorTWithErrAction (logAMessage LogWarn "sim") () $ do 
+      vOld <- lift $ getPos oid
+      let vec0 = vVal2Vec vOld
+      let vec1 = vVal2Vec v
+      let vec = diff3d vec1 vec0
+      let dist = mag3d vec
+      let vec' = if dist <= 10.0 
+              then vec
+              else scale3d 10.0 $ norm3d vec
+      objects <- lift getObjects
+      (LSLObject keys) <- M.lookup oid objects
+      lift $ mapM_ (flip addPos (vec2VVal vec')) keys
+
+addPos key v = getPos key >>= (setPos key) . (liftV2 add3d v)
+setPos key v = insertPrimData key ["pos"] v
+
+llGetOwner info [] =
+    do val <- lookupPrimData (scriptInfoPrimKey info) ["owner"]
+       continueWith $ case val of 
+           Just (Right (KVal k)) -> KVal k
+           Just (Right (SVal s)) -> KVal s
+           _ -> KVal nullKey
            
+-- TODO: should check for av/prim in same region
+-- TODO: no concept of online/offline for av           
+llKey2Name info [KVal k] =
+    do avs <- getWorldAvatars
+       case lookup k avs of
+           Just av -> continueWith $ SVal (avatarName av)
+           _ -> do
+               prims <- getPrims
+               case M.lookup k prims of
+                   Just prim -> continueWith $ SVal (primName prim)
+                   Nothing -> continueWith (SVal "")
+llOwnerSay info [SVal s] =
+    do logAMessage LogInfo (infoToLogSource info) ("Owner Say: " ++ s)
+       continueWith VoidVal
+       
+llGetPos info [] =
+    do val <- getPos (scriptInfoPrimKey info)
+       continueWith val
+
+getPos pkey =
+    do val <- lookupPrimData pkey ["pos"]
+       case val of
+           Just (Right v@(VVal _ _ _)) -> return v
+           _ -> return (VVal 0.0 0.0 0.0)
+
+getRegion pkey = return (0,0)
+
 groupList _ [] = []
 groupList n l | n > 0 = take n l : groupList n (drop n l)
               | otherwise = groupList 1 l
@@ -266,17 +360,22 @@ defaultPredefs :: Monad m => [PredefFunc m]
 defaultPredefs = map (\(x,y) -> defaultPredef x y) 
     ([
         ("llFrand",llFrand),
+        ("llGetOwner", llGetOwner),
+        ("llGetPos", llGetPos),
+        ("llKey2Name", llKey2Name),
         ("llListRandomize",llListRandomize),
         ("llListen", llListen),
         ("llMessageLinked", llMessageLinked),
+        ("llOwnerSay", llOwnerSay),
         ("llSay",llSay),
-        ("llSleep", llSleep),
-        ("llGetPos", llGetPos),
-        ("llSetPos",llSetPos)
+        ("llSetPos",llSetPos),
+        ("llSleep", llSleep)
     ] ++ internalLLFuncs)
 
 logFromScript :: Monad m => ScriptInfo -> String -> WorldM m ()
-logFromScript scriptInfo msg = logAMessage (scriptInfoPrimKey scriptInfo ++ ": " ++ msg)
+logFromScript scriptInfo msg = logAMessage LogInfo (infoToLogSource scriptInfo) msg
+
+infoToLogSource info = (scriptInfoPrimKey info ++ ": " ++ scriptInfoScriptName info)
 
 indent n = showString $ (replicate (4 * n) ' ')
 niceShowsList n l = showString "[\n" . indent (n+1) . 
@@ -289,29 +388,6 @@ niceShowsWorld w =
     indent 1 . showString "msglog: " . niceShowsList 1 (reverse $ msglog w) . showString "\n"
 niceShowWorld w = niceShowsWorld w ""
     
--- data LSLObject = LSLObject { primKeys :: [String] } deriving (Show)
-
--- data Prim = Prim {
---                     primName :: String,
---                     primKey :: String,
---                     primParent :: Maybe String,
---                     primScripts :: [String],
---                     notecards :: [(String,[String])],
---                     animations :: [String],
---                     textures :: [String],
---                     sounds :: [String],
---                     inventoryObjects :: [LSLObject] } deriving (Show)
-
-emptyPrim name key =
-    Prim { primName = name,
-           primKey = key,
-           primParent = Nothing,
-           primScripts = [],
-           notecards = [],
-           animations = [],
-           textures = [],
-           sounds = [],
-           inventoryObjects = [] }
 addScript prim name = prim { primScripts = (name:(primScripts prim)) }
          
 data Listener = Listener {
@@ -340,36 +416,45 @@ getPrimInfo pkey =
                                case elemIndex pkey plist of
                                    Nothing -> return Nothing
                                    Just i -> return $ Just (p1Key, i, primName p)
-                                   
-pushEvents oid pid e =
-    do objects <- getObjects
-       case M.lookup oid objects of
-           Nothing -> return ()
-           Just o ->
-               case lookupByIndex pid (primKeys o) of
-                   Nothing -> return ()
-                   Just key -> do
-                       prims <- getPrims
-                       case M.lookup key prims of
-                           Nothing -> return ()
-                           Just p -> mapM_ (pushEvent e key) (primScripts p)
-       
+
+maybeM m = case m of Nothing -> fail "nothing"; (Just v) -> return v
+
+evalErrorT :: ErrorT String m v -> m (Either String v)
+evalErrorT = runErrorT
+
+fromErrorT def val = evalErrorT val >>= (return . either (const def) id)
+    
+fromErrorTWithErrAction action def val = do
+    result <- evalErrorT val
+    case result of 
+        Left s -> action s >> return def
+        Right v -> return v
+
+pushEvents oid pid e = do
+    fromErrorT () $ do
+            objects <- lift getObjects
+            o <- M.lookup oid objects
+            key <- lookupByIndex pid (primKeys o)
+            prims <- lift $ getPrims
+            p <- M.lookup key prims
+            lift $ mapM_ (pushEvent e key) (primScripts p)
+    
 pushEvent e key sid =
     do scripts <- getWorldScripts
        case M.lookup (key,sid) scripts of
-           Nothing -> logAMessage ("no such script: " ++ (show (key, sid)))
+           Nothing -> logAMessage LogWarn "sim" ("no such script: " ++ (show (key, sid)))
            Just (s,q) -> setWorldScripts (M.insert (key,sid) (s,q ++ [e]) scripts)
 
 pushEventToPrim e key =
     do prims <- getPrims
        case M.lookup key prims of
-           Nothing -> logAMessage ("no such prim: " ++ key)
+           Nothing -> logAMessage LogWarn "sim" ("no such prim: " ++ key)
            Just p -> mapM_ (pushEvent e key) (primScripts p)
            
 pushEventToObject e key =
     do objects <- getObjects
        case M.lookup key objects of
-           Nothing -> logAMessage("no such object: " ++ key)
+           Nothing -> logAMessage LogWarn "sim" ("no such object: " ++ key)
            Just o ->  mapM_ (pushEventToPrim e) (primKeys o)
 
 getObjectNames :: (Monad m) => WorldM m [String]
@@ -406,11 +491,12 @@ newWorld' slice maxt iq lib scripts avatars =
         wscripts = scripts, 
         wlibrary = lib,
         worldAvatars = avatars }
-newWorld'' slice maxt iq lib scripts avatars objs prims activeScripts =
+newWorld'' slice maxt iq lib scripts avatars objs prims activeScripts valueDB =
     (newWorld' slice maxt iq lib scripts avatars) {
         wobjects = objs,
         wprims = prims,
-        worldScripts = activeScripts }
+        worldScripts = activeScripts,
+        worldDB = valueDB }
         
 addObjectToInventory name obj world = world { inventory = (name,obj):(inventory world) }
 
@@ -422,7 +508,13 @@ data WorldEventType = CreatePrim { wePrimName :: String, wePrimKey :: String }
                     | ResetScript String String -- prim key, script name
                     | ResetScripts String -- object name
                     | WorldSimEvent { worldSimEventName :: String, worldSimEventArgs :: [SimEventArg] }
-                    | Chat { chatChannel :: Int, chatterName :: String, chatterKey :: String, chatMessage :: String }
+                    | Chat { chatChannel :: Int, chatterName :: String, chatterKey :: String, chatMessage :: String,
+                             chatLocation :: ((Int,Int),(Float,Float,Float)),
+                             chatRange :: Maybe Float }
+                    | PermissionRequestEvent { permissionRequestPrim :: String,
+                                               permissionRequestScript :: String,
+                                               permissionRequestAgent :: String,
+                                               permissionRequestMask :: Int }
     deriving (Show)
     
 type WorldEvent = (Int,WorldEventType) -- time, event
@@ -450,10 +542,10 @@ checkBp bp sm =
         setWorldBreakpointManager bpm'
         return (result,sm')
        
-logAMessage s =
+logAMessage logLevel source s =
     do log <- getMsgLog
        tick <- getTick
-       let message = LogMessage tick LogInfo "" s 
+       let message = LogMessage tick logLevel source s 
        setMsgLog (message:log)
 
 logTrace source s =
@@ -465,14 +557,14 @@ logTrace source s =
 updateObject f name = 
     do objects <- getObjects
        case M.lookup name objects of
-           Nothing -> logAMessage ("object " ++ name ++ " not found")
+           Nothing -> logAMessage LogWarn "sim" ("object " ++ name ++ " not found")
            Just o -> do o' <- f o
                         setObjects (M.insert name o' objects)
 
 updatePrim f key =
     do  prims <- getPrims
         case M.lookup key prims of
-            Nothing -> logAMessage ("prim " ++ key ++ " not found")
+            Nothing -> logAMessage LogWarn "sim" ("prim " ++ key ++ " not found")
             Just p -> do p' <- f p
                          setPrims (M.insert key p' prims)
 
@@ -522,7 +614,7 @@ processEvent (CreatePrim name key) =
 processEvent (AddScript (name,script) key active) =
        do scripts <- getWScripts
           case lookup script scripts of
-              Nothing -> logAMessage ("no such script: " ++ script)
+              Nothing -> logAMessage LogWarn "sim" ("no such script: " ++ script)
               Just (Invalid s) -> do
                   updatePrim (\ p -> return $ addScript p name) key
                   scripts <- getWorldScripts
@@ -532,25 +624,44 @@ processEvent (AddScript (name,script) key active) =
                   let sstate = initLSLScript code
                   scripts <- getWorldScripts
                   setWorldScripts (M.insert (key,name) (Valid sstate,[Event "state_entry" [] []]) scripts)
-processEvent chat@(Chat chan name key msg) =
-    do listeners <- getListeners    
-       let listeners'= filter (matchListener chat) $ map snd listeners
+processEvent chat@(Chat chan name key msg location range) =
+    do listeners <- getListeners 
+       locatedListeners <- mapM locateListener (map snd listeners)
+       let listeners'= [ l | (l,_) <- filter (matchListener chat) locatedListeners]
        -- event goes to all UNIQUE addresses in list
        let addresses = nub $ map listenAddress listeners'
        mapM (\ (key,sid) -> pushEvent (Event "listen" [IVal chan, SVal name, KVal key, SVal msg] []) key sid) addresses
        return ()
+    where locateListener listener = do
+              (VVal x y z) <- getPos (listenerPrimKey listener)
+              region <- getRegion (listenerPrimKey listener)
+              return (listener,(region,(x,y,z)))
 processEvent (WorldSimEvent name args) = 
     case M.lookup name eventDescriptors of
-        Nothing -> logAMessage ("event " ++ name ++ " not understood")
+        Nothing -> logAMessage LogWarn "sim" ("event " ++ name ++ " not understood")
         Just def -> handleSimInputEvent def args
+processEvent (PermissionRequestEvent pk sname ak mask) = 
+    do  db <- getWorldDB
+        let db' = insertDB ["script","permission",pk,sname,"avatar"] (KVal ak) $
+                  insertDB ["script","permission",pk,sname,"mask"] (IVal mask) $
+                  insertDB ["script","permission",pk,sname,"lastavatar"] (KVal ak) $
+                  insertDB ["script","permission",pk,sname,"lastmask"] (IVal mask) db
+        setWorldDB db'
+        getTick >>= flip putWorldEvent (mkRunTimePermissionsEvent pk sname mask)
+        
+    
 processEvent _ = error "not implemented"
 
-matchListener (Chat chan' sender' key' msg') (Listener pkey sid chan sender key msg) =
+matchListener (Chat chan' sender' key' msg' (region,position) range) ((Listener pkey sid chan sender key msg),(region',position')) =
+    region == region' &&
     chan == chan' &&
-    (key' /= pkey) &&
+    key' /= pkey &&
     (sender == "" || sender == sender') &&
     (key == nullKey || key == key') &&
-    (msg == "" || msg == msg')
+    (msg == "" || msg == msg') &&
+    (case range of
+        Nothing -> True
+        Just dist -> dist3d2 position position' <= dist^2)
 
 listenAddress l = (listenerPrimKey l, listenerScriptName l)
 
@@ -574,7 +685,7 @@ checkAndRunScript k@(pkey,sname) (Valid img, q) =
                                     | otherwise -> return ()
    where run pInfo =
              case pInfo of
-                 Nothing -> logAMessage ("script " ++ (show k) ++ ": prim not found!")
+                 Nothing -> logAMessage LogWarn "sim" ("script " ++ (show k) ++ ": prim not found!")
                  Just (parent, index, primName) -> runScript parent index pkey sname primName img q
 runScript parent index pkey sname primName img q =
     do slice <- getSliceSize
@@ -584,7 +695,7 @@ runScript parent index pkey sname primName img q =
        --let checkBp _ sm = return (False,sm)
        result <- executeLsl img' parent index sname pkey doPredef log getTick setTick checkBp q (tick + slice)
        case result of
-           Left s -> logAMessage ("execution error in script " ++ "(" ++ pkey ++ "," ++ sname ++ ") ->" ++ s)
+           Left s -> logAMessage LogWarn "sim" ("execution error in script " ++ "(" ++ pkey ++ "," ++ sname ++ ") ->" ++ s)
            Right (img'',q') -> do
                scripts <- getWorldScripts
                setWorldScripts (M.insert (pkey,sname) (Valid img'',q') scripts)
@@ -631,13 +742,15 @@ data SimStatus = SimEnded { simStatusMessage :: String, simStatusLog :: [LogMess
                                 simStatusState :: SimStateInfo }
 
 data SimStateInfo = SimStateInfo {
+        simStateInfoTime :: Int,
         simStateInfoPrims :: [(String,String)],
         simStateInfoAvatars :: [(String,String)]
     }
-nullSimState = SimStateInfo [] []
+nullSimState = SimStateInfo 0 [] []
 
 stateInfoFromWorld world =
     SimStateInfo {
+        simStateInfoTime = tick world,
         simStateInfoPrims = map (\ p -> (primKey p, primName p)) (M.elems $ wprims world),
         simStateInfoAvatars = map (\ (_,a) -> (avatarKey a, avatarName a)) (worldAvatars world)
     }
@@ -650,21 +763,16 @@ data SimInputEventDefinition m = SimInputEventDefinition {
 
 data SimParam = SimParam { simParamName :: String, simParamDescription :: String,
                            simParamType :: SimParamType }
+     deriving (Show)
 data SimParamType = SimParamPrim | SimParamAvatar | SimParamLSLValue LSLType | SimParamRootPrim | SimParamKey |
                     SimParamScript
-                    
+     deriving (Show)
+     
 data SimEvent = SimEvent { simEventName :: String, simEventArgs :: [SimEventArg], simEventDelay :: Int }
     deriving (Show)
 data SimEventArg = SimEventArg { simEventArgName :: String, simEventArgValue :: String }
     deriving (Show)
     
--- initWorld def scripts lib = 
---     newWorld' 1000 1000000 iq lib scripts [(avKey, defaultAvatar avKey)]
---     where avKey = nextKey nullKey
---           primKey = nextKey avKey
---           iq = [(1,CreatePrim "object" primKey),
---                 (2,AddScript ("script1",worldDefScript def) primKey True)]
-
 initWorld def scripts lib = worldFromFullWorldDef newWorld'' def lib scripts
 
 simStep init@(Left (worldDef, scripts, lib)) command =
@@ -691,18 +799,18 @@ simStep (Right world) command =
                  in M.insert (k,s) (Valid img',eq) (worldScripts world)
         simEventToWorldEvent (SimEvent name args delay) = (t + delay, WorldSimEvent name args)
         wq' = putManyWQ (map simEventToWorldEvent events) (wqueue world)
-        world' = trace ("breakpoints: " ++ show newBreakpointManager) $ world { wqueue = wq', 
+        world' = world { wqueue = wq', 
                          nextPause = t + slice,
                          worldBreakpointManager = newBreakpointManager,
                          worldScripts = newScripts }
         (_,world'') = runIdentity $ runStateT simulate world'
         log = msglog world''
         world''' = world'' { msglog = [] } in
-        if trace1 "tick" (tick world''') < trace1 "maxTick" (maxTick world''') 
+        if (tick world''') < (maxTick world''') 
             then case worldSuspended world''' of
                 Nothing ->
                      (SimInfo { simStatusEvents = [], 
-                                simStatusLog = reverse log,
+                                simStatusLog = log,
                                 simStatusState = stateInfoFromWorld world''' }, Right world''')
                 Just (k,s) ->
                      let (Just (Valid img,eq)) = M.lookup (k,s) (worldScripts world''') -- TODO: non-exhaustive but MUST succeed
@@ -732,7 +840,10 @@ checkEventArg (SimParam _ _ SimParamRootPrim) (Just arg) = return $ KVal (simEve
 checkEventArg (SimParam _ _ SimParamScript) (Just arg) = return $ SVal (simEventArgValue arg)
 checkEventArg (SimParam name _ SimParamAvatar) (Just arg) = return $ KVal (simEventArgValue arg)
 checkEventArg (SimParam name _ SimParamKey) (Just arg) = return $ KVal (simEventArgValue arg)
-checkEventArg (SimParam name _ (SimParamLSLValue t)) (Just arg) = evaluateExpression t (simEventArgValue arg)
+checkEventArg (SimParam name _ (SimParamLSLValue t)) (Just arg) = 
+    case evaluateExpression t (simEventArgValue arg) of
+        Nothing -> fail $ ("invalid " ++ (lslTypeString t) ++ " expression" )
+        Just v -> return v
 checkEventArg (SimParam name _ _) Nothing = fail ("event argument " ++ name ++ " not found")
 
 validSimInputEvent simEvent =
@@ -745,9 +856,11 @@ validSimInputEvent simEvent =
                
 handleSimInputEvent def args = 
   case checkEventArgs def args of
-      Left s -> logAMessage s
+      Left s -> logAMessage LogWarn "sim" s
       Right argValues -> (simInputEventHandler def) (simInputEventName def) argValues
 
+mkRunTimePermissionsEvent pk sn perm = 
+    WorldSimEvent "run_time_permissions" [SimEventArg "Prim Key" pk, SimEventArg "Script" sn, SimEventArg "perm" (show perm)]
 mkTouchStartEvent pk nd ak = WorldSimEvent "touch_start" [SimEventArg "Prim Key" pk, SimEventArg "num_detected" nd, SimEventArg "Avatar key" ak]
 mkTouchEvent pk nd ak = WorldSimEvent "touch" [SimEventArg "Prim Key" pk, SimEventArg "num_detected" nd, SimEventArg "Avatar key" ak, SimEventArg "Grab vector" "<0.0,0.0,0.0>"]
 mkTouchEndEvent pk nd ak = WorldSimEvent "touch_end" [SimEventArg "Prim Key" pk, SimEventArg "num_detected" nd, SimEventArg "Avatar key" ak]
@@ -756,7 +869,7 @@ userTouchEventDef :: Monad m => SimInputEventDefinition m
 userTouchEventDef =
     SimInputEventDefinition {
         simInputEventName = "Touch Prim",
-        simInputEventDescription = "Avatar touches a prim for a duraction",
+        simInputEventDescription = "Avatar touches a prim for a duration",
         simInputEventParameters = [
             SimParam "Prim" "The prim the avatar should touch" SimParamPrim,
             SimParam "Avatar" "The avatar that should do the touching" SimParamAvatar,
@@ -769,12 +882,33 @@ userTouchEventDef =
                     let tticks = [(t + 1),(t + 1 + 500)..(t + tdur)]
                     mapM_ ((flip putWorldEvent) (mkTouchEvent pk "1" ak)) tticks
                     putWorldEvent (t + tdur) (mkTouchEndEvent pk "1" ak)
-                f name _ = logAMessage ("invalid event activation: " ++ name)
+                f name _ = logAMessage LogWarn "sim" ("invalid event activation: " ++ name)
+            in f
+    }
+        
+userChatEventDef :: Monad m => SimInputEventDefinition m
+userChatEventDef =
+    SimInputEventDefinition {
+        simInputEventName = "Chat",
+        simInputEventDescription = "Avatar chats",
+        simInputEventParameters = [
+            SimParam "Avatar" "The avatar that should do the chatting" SimParamAvatar,
+            SimParam "Message" "What the avatar should say" (SimParamLSLValue LLString),
+            SimParam "Channel" "The channel to chat on" (SimParamLSLValue LLInteger)],
+        simInputEventHandler = 
+            let f _ [KVal ak, SVal message, IVal chan] = do
+                    t <- getTick
+                    avatars <- getWorldAvatars
+                    case lookup ak avatars of
+                        Nothing -> logAMessage LogWarn "sim" ("avatar with key " ++ ak ++ " not found")
+                        Just av -> do
+                            putWorldEvent t $ Chat chan (avatarName av) ak message (avatarRegion av,avatarPosition av) (Just 20.0)
+                f name _ = logAMessage LogWarn "sim" ("invalid event activation: " ++ name)
             in f
     }
         
 eventDescriptors :: Monad m => Map [Char] (SimInputEventDefinition m)
-eventDescriptors = M.fromList $ mkEventDefList ([userTouchEventDef] ++ rawLslEventDescriptors)
+eventDescriptors = M.fromList $ mkEventDefList ([userTouchEventDef,userChatEventDef] ++ rawLslEventDescriptors)
 
 mkEventDefList eventDefs = map (\ e -> (simInputEventName e, e)) eventDefs
 

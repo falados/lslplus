@@ -1,7 +1,12 @@
 module Lsl.DOMProcessing(ElemAcceptor(..),
                          findElement,
                          findOptionalElement,
+                         findOrDefault,
                          findSimple,
+                         findSimpleOrDefault,
+                         findValueOrDefault,
+                         findValue,
+                         valueAcceptor, -- String -> ElemAcceptor m t
                          ctxelem,
                          simple,
                          simpleElement,
@@ -10,12 +15,17 @@ module Lsl.DOMProcessing(ElemAcceptor(..),
                          cmatch,
                          match,
                          attValueString,
+                         acceptList, -- 
                          elementList,
-                         elementsOnly) where
+                         elementsOnly,
+                         attrString,
+                         module Text.XML.HaXml,
+                         module Text.XML.HaXml.Posn) where
 
 import Control.Monad
 import Control.Monad.Error
 import Data.List
+import Lsl.Util
 import Text.XML.HaXml hiding (when)
 import Text.XML.HaXml.Posn
 import Text.XML.HaXml.Pretty
@@ -37,7 +47,13 @@ findOptionalElement (ElemAcceptor tag acceptor) list =
                                                         return (Just val, reverse bs ++ cs)
                                                  | otherwise = find' (ce:bs) cs
     in find' [] list
-                                                                
+
+findOrDefault def acceptor list =
+    do (v,rest) <- findOptionalElement acceptor list
+       return $ case v of Nothing -> (def, rest); Just v' -> (v',rest)
+
+findSimpleOrDefault def tag = findOrDefault def (simpleElement tag)
+                                                                     
 ctxelem f (CElem e i) =
     case f e of
         Left s -> fail ("at " ++ (show i) ++ ": " ++ s)
@@ -83,8 +99,35 @@ matchMaybe e@(Elem n a c) (ElemAcceptor name f) | n /= name = return Nothing
 
 attValueString (AttValue list) = concat [ s | Left s <- list ]
 
-elementList name itemAcceptor =
-    let f (Elem _ _ contents) = mapM (cmatch itemAcceptor) [ e | e@(CElem _ _) <- contents ]
-    in ElemAcceptor name f
+acceptList itemAcceptor (Elem _ _ contents) = mapM (cmatch itemAcceptor) (elementsOnly contents)
+
+elementList name itemAcceptor = ElemAcceptor name (acceptList itemAcceptor)
     
 elementsOnly cs = [ e | e@(CElem _ _) <- cs]
+
+acceptValue e = do
+   s <- simple e
+   value <- readM s
+   return value
+   
+valueAcceptor s = ElemAcceptor s acceptValue
+
+findValue name contents =
+    do (sval,rest) <- findSimple name contents
+       value <- readM sval
+       return (value,rest)
+
+findValueOrDefault def name contents =
+    do (sval,rest) <- findOptionalElement (simpleElement name) contents
+       case sval of
+           Nothing -> return (def, contents)
+           Just s -> do
+               value <- readM s
+               return (value, contents)
+                     
+-- for backwards compatibility
+attrString (AttValue v) = concatMap decode v
+    where
+      decode (Left  v)               = v
+      decode (Right (RefEntity ent)) = "&"++ent++";"
+      decode (Right (RefChar cref))  = "&"++show cref++";"

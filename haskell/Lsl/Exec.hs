@@ -23,6 +23,7 @@ import Data.Bits
 import Data.List
 import Lsl.Breakpoint hiding (checkBreakpoint)
 import Lsl.CodeHelper
+import Lsl.FuncSigs
 import Lsl.Log
 import Lsl.Util
 import Lsl.Structure
@@ -209,6 +210,10 @@ initVar name LLKey Nothing = (name,SVal "")
 initVar name LLList Nothing = (name,LVal [])
 initVar name LLVector Nothing = (name,VVal 0.0 0.0 0.0)
 initVar name LLRot Nothing = (name,RVal 0.0 0.0 0.0 1.0)
+initVar name LLKey (Just (SVal s)) = (name,KVal s)
+initVar name LLString (Just (KVal k)) = (name, SVal k)
+initVar name LLFloat (Just (IVal i)) = (name,FVal $ fromInt i)
+initVar name LLInteger (Just (FVal f)) = (name,IVal $ floor f)
 initVar name _ (Just v) = (name,v)
 
 writeMem :: Monad m => String -> LSLValue -> MemRegion -> m MemRegion
@@ -1022,16 +1027,25 @@ pushModBy var evalElement expr = pushElements [EvSet $ ctxVr2Vr var,evalElement,
 
 evalPredef' name = 
     do (LVal args) <- popVal
+       let args' = case find (\ (fname,_,_) -> name == fname) funcSigs of
+                   Nothing -> args
+                   Just (_,_,argTypes) -> convertArgs argTypes args
        key <- getMyPrimKey
        sid <- getScriptName
        oid <- getObjectId
        pid <- getPrimId
        event <- getCurrentEvent
        let scriptInfo = ScriptInfo oid pid sid key event
-       (evalResult,retval) <- doAction name scriptInfo args
+       (evalResult,retval) <- doAction name scriptInfo args'    
        pushVal retval
        return evalResult
-
+    where convertArgs argTypes args = zipWith convertArg argTypes args
+          convertArg LLFloat (IVal i) = FVal $ fromInt i
+          convertArg LLInteger (FVal f) = IVal $ floor f
+          convertArg LLKey (SVal s) = KVal s
+          convertArg LLString (KVal k) = SVal k
+          convertArg _ v = v
+          
 ctxList es = map (Ctx UnknownSourceContext) es
 
 data ExecutionInfo = ExecutionInfo String Int FrameInfo

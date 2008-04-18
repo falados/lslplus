@@ -13,6 +13,8 @@ data ScriptInfo = ScriptInfo { scriptInfoObjectKey :: String,
                                scriptInfoScriptName :: String,
                                scriptInfoPrimKey :: String,
                                scriptInfoCurrentEvent :: Maybe Event }
+    deriving (Show)
+    
 data EvalResult = EvalIncomplete | EvalComplete (Maybe String) | YieldTil Int
                 | BrokeAt Breakpoint
     deriving (Show)

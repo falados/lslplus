@@ -2,14 +2,11 @@ module Lsl.DOMUnitTestDescriptor(testsElement) where
 
 import Control.Monad
 import Data.List
-import Lsl.DOMProcessing
+import Lsl.DOMProcessing hiding (find)
 import Lsl.ExpressionHandler
 import Lsl.Type
 import Lsl.UnitTest
 import Lsl.Util
-import Text.XML.HaXml hiding (when,find)
-import Text.XML.HaXml.Posn
-import Text.XML.HaXml.Pretty
 
 import Debug.Trace
 trace1 v = trace (show v) v

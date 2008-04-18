@@ -5,16 +5,13 @@ import Data.Bits
 import IO
 
 import Lsl.Constants
-import Lsl.DOMProcessing
+import Lsl.DOMProcessing hiding (xmlEscape)
 import Lsl.Parse
 import Lsl.Structure
 import Lsl.Type
 import Lsl.Util
 import Lsl.XmlCreate hiding (emit)
 import qualified Lsl.XmlCreate as E
-
-import Text.XML.HaXml hiding (when,xmlEscape)
-import Text.XML.HaXml.Posn
 
 emit s = E.emit s []
 
