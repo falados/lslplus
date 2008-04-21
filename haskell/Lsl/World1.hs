@@ -129,6 +129,37 @@ getWorldBreakpointManager = queryWorld worldBreakpointManager
 getWorldSuspended :: Monad m => WorldM m (Maybe (String,String))
 getWorldSuspended = queryWorld worldSuspended
 
+getPrim k = (lift getPrims >>= M.lookup k)
+getPrimVal k f = (lift getPrims >>= M.lookup k >>= return . f)
+getPrimName k = getPrimVal k primName
+getPrimPosition k = getPrimVal k primPosition
+getPrimParent k = getPrimVal k primParent
+getPrimDescription k = getPrimVal k primDescription
+getPrimOwner k = getPrimVal k primOwner
+getPrimRotation k = getPrimVal k primRotation
+getPrimScale k = getPrimVal k primScale
+getPrimFaces k = getPrimVal k primFaces
+getPrimFlexibility k = getPrimVal k primFlexibility
+getPrimMaterial k = getPrimVal k primMaterial
+getPrimStatus k = getPrimVal k primStatus
+getPrimLight k = getPrimVal k primLight
+getPrimTempOnRez k = getPrimVal k primTempOnRez
+getPrimTypeInfo k = getPrimVal k primTypeInfo
+getPrimPermissions k = getPrimVal k primPermissions
+
+-- TODO: temp until introduce region into Prim definition
+getPrimRegion :: Monad m => a -> m (Int,Int)
+getPrimRegion _ = return (0,0)
+primRegion :: a -> (Int,Int)
+primRegion _ = (0,0)
+
+runErrFace k i defaultVal = runAndLogIfErr 
+    ("face " ++ (show i) ++ " or prim " ++ k ++ " not found") defaultVal
+
+getPrimFace k i = getPrimFaces k >>= (lookupByIndex i)
+getPrimFaceAlpha k i = getPrimFace k i >>= return . faceAlpha
+getPrimFaceColor k i = getPrimFace k i >>= return . faceColor
+
 setListeners l = updateWorld (\w -> w { wlisteners = l })   
 setNextListenerId i = updateWorld (\w -> w { nextListenerId = i })
 setObjects os = updateWorld (\w -> w { wobjects = os })
@@ -142,6 +173,35 @@ setWorldAvatars l = updateWorld (\w -> w { worldAvatars = l })
 setWorldScripts s = updateWorld (\w -> w { worldScripts = s })
 setWorldBreakpointManager m = updateWorld (\w -> w { worldBreakpointManager = m })
 setWorldSuspended v = updateWorld (\w -> w { worldSuspended = v })
+
+setPrim k p = (getPrims >>= return . (M.insert k p) >>= setPrims)
+updatePrimVal k f = (lift getPrims >>= M.lookup k >>= return . f >>= lift . (setPrim k))
+
+runErrPrim k defaultVal = runAndLogIfErr ("prim " ++ k ++ " not found") defaultVal
+setPrimPosition k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primPosition = v } )
+setPrimRotation k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primRotation = v } )
+setPrimScale k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primScale = v } )
+setPrimDescription k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primDescription = v } )
+setPrimName k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primName = v } )
+setPrimParent k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primParent = v } )
+setPrimFaces k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primFaces = v } )
+setPrimFlexibility k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primFlexibility = v } )
+setPrimMaterial k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primMaterial = v } )
+setPrimOwner k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primOwner = v } )
+setPrimStatus k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primStatus = v } )
+setPrimLight k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primLight = v } )
+setPrimTempOnRez k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primTempOnRez = v } )
+setPrimTypeInfo k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primTypeInfo = v } )
+setPrimPermissions k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primPermissions = v } )
+
+
+updatePrimFace k i f = do
+    faces <- getPrimFaces k
+    let faces' = zipWith (\ face index -> if (index == i) then f face else face) faces [0..]
+    lift $ setPrimFaces k faces'
+    
+setPrimFaceAlpha k i v = runErrFace k i () $ updatePrimFace k i (\ f -> f { faceAlpha = v })
+setPrimFaceColor k i v = runErrFace k i () $ updatePrimFace k i (\ f -> f { faceColor = v })
 
 insertPrimData key path value = do
     prims <- getPrims
@@ -179,7 +239,11 @@ wrand = do g <- getRandGen
            
 instance Monad m => Show (ScriptInfo -> [LSLValue] -> WorldM m (EvalResult,LSLValue)) where
     showsPrec _ _ = showString "(function :: ScriptInfo -> [LSLValue] -> WorldM m (EvalResult,LSLValue))"
-    
+
+------------------------------------------------------------------------------------------------------    
+--- Predefined function implementation stuff ---------------------------------------------------------
+--
+--    
 data PredefFunc m = PredefFunc { predefFuncName :: String, 
                                predefAllowedKey :: Maybe String,
                                predefAllowedSID :: Maybe String,
@@ -277,7 +341,7 @@ llSetPos (ScriptInfo oid pid sid pkey event) [val] =
 -- updates the world coordinates of the root prim and all its child prims
 -- does NOT consider region boundaries (TODO: fix!)
 setRootPos oid v =
-   fromErrorTWithErrAction (logAMessage LogWarn "sim") () $ do 
+   runAndLogIfErr "" () $ do 
       vOld <- lift $ getPos oid
       let vec0 = vVal2Vec vOld
       let vec1 = vVal2Vec v
@@ -291,14 +355,10 @@ setRootPos oid v =
       lift $ mapM_ (flip addPos (vec2VVal vec')) keys
 
 addPos key v = getPos key >>= (setPos key) . (liftV2 add3d v)
-setPos key v = insertPrimData key ["pos"] v
+setPos key v = setPrimPosition key (vVal2Vec v)
 
-llGetOwner info [] =
-    do val <- lookupPrimData (scriptInfoPrimKey info) ["owner"]
-       continueWith $ case val of 
-           Just (Right (KVal k)) -> KVal k
-           Just (Right (SVal s)) -> KVal s
-           _ -> KVal nullKey
+llGetOwner info [] = 
+    let k = scriptInfoPrimKey info in (runErrPrim k nullKey $ getPrimOwner k) >>= continueWith . KVal
            
 -- TODO: should check for av/prim in same region
 -- TODO: no concept of online/offline for av           
@@ -315,15 +375,62 @@ llOwnerSay info [SVal s] =
     do logAMessage LogInfo (infoToLogSource info) ("Owner Say: " ++ s)
        continueWith VoidVal
        
-llGetPos info [] =
-    do val <- getPos (scriptInfoPrimKey info)
-       continueWith val
+llGetPos (ScriptInfo _ _ _ pk _) [] = getPos pk >>= continueWith
 
-getPos pkey =
-    do val <- lookupPrimData pkey ["pos"]
-       case val of
-           Just (Right v@(VVal _ _ _)) -> return v
-           _ -> return (VVal 0.0 0.0 0.0)
+llGetLocalPos (ScriptInfo oid _ _ pk _) [] | oid == pk = getPos oid >>= continueWith
+                                           | otherwise =
+    (runAndLogIfErr ("parent " ++ oid ++ " or child " ++ pk ++ " not found") 
+                    (0,0,0) 
+                    (liftM2 diff3d (getPrimPosition pk) (getPrimPosition oid))) >>= 
+                    continueWith . vec2VVal
+                    
+llGetAlpha (ScriptInfo _ _ _ pkey _) [IVal side] =
+    computeAlpha >>= continueWith
+    where computeAlpha = if (side /= -1) 
+            then runErr $ (getPrimFaceAlpha pkey side >>= return . FVal)
+            else runErr $ do
+                faces <- getPrimFaces pkey
+                let n = length faces
+                let alpha = if n > 0 then sum (map faceAlpha faces) / (fromInt $ length faces)
+                                     else 1.0
+                return $ FVal alpha
+          runErr = runErrFace pkey side (FVal 1.0)
+
+llSetAlpha (ScriptInfo _ _ _ pkey _) [FVal alpha, IVal face] =
+    if face == -1
+        then runErrFace pkey face (EvalIncomplete,VoidVal) $ do 
+                faces <- getPrimFaces pkey
+                let faces' = map (\ face -> face { faceAlpha = alpha }) faces
+                lift $ setPrimFaces pkey faces'
+                continueWith VoidVal
+        else setPrimFaceAlpha pkey face alpha >> continueWith VoidVal
+
+llGetColor (ScriptInfo _ _ _ pkey _) [IVal side] =
+    computeColor >>= continueWith
+    where computeColor = if (side /= -1)
+            then runErr $ (getPrimFaceColor pkey side >>= return . vec2VVal)
+            else runErr $ do
+                faces <- getPrimFaces pkey
+                let n = length faces
+                let color = if n > 0 then scale3d (1.0/ (fromInt $ length faces) ) 
+                                                  (foldr add3d (0.0,0.0,0.0) (map faceColor faces))
+                                          else (1.0,1.0,1.0)
+                return $ vec2VVal color
+          runErr = runErrFace pkey side (VVal 1.0 1.0 1.0)
+
+llSetColor (ScriptInfo _ _ _ pkey _) [color, IVal face] =
+    if face == -1
+        then runErrFace pkey face (EvalIncomplete,VoidVal) $ do
+                faces <- getPrimFaces pkey
+                let colorVal = vVal2Vec color
+                let faces' = map (\ face -> face { faceColor = colorVal }) faces
+                lift $ setPrimFaces pkey faces'
+                continueWith VoidVal
+        else setPrimFaceColor pkey face (vVal2Vec color) >> continueWith VoidVal
+        
+getPos pkey = runErrPrim pkey
+                  (VVal 0.0 0.0 0.0)
+                  (getPrimPosition pkey >>= return . vec2VVal)
 
 getRegion pkey = return (0,0)
 
@@ -353,6 +460,94 @@ llListRandomize _ [LVal list, IVal stride] =
            let list' = generatePermutation list permutation
            continueWith $ LVal list'
         
+llGetNumberOfPrims (ScriptInfo oid _ _ pkey _) [] = 
+    do result <- runAndLogIfErr ("object " ++ oid ++ " not found") (IVal 1) $
+            do objects <- lift getObjects
+               (LSLObject prims) <- M.lookup oid objects
+               return $ IVal (length prims)
+       continueWith result
+
+llGetObjectPrimCount info@(ScriptInfo oid _ _ pkey _) [KVal k] =
+    do result <- runAndLogIfErr ("object " ++ oid ++ " not found") (IVal 0) $ do
+            region <- getPrimRegion oid
+            p <- lift $ evalErrorT $ getPrim k
+            case p of
+                Left _ -> lift (logFromScript info ("object " ++ k ++ " does not exist")) >> return (IVal 0)
+                Right prim -> if region /= primRegion prim 
+                                    then return (IVal 0)
+                                    else case primParent prim of
+                                        Nothing -> primCount k
+                                        Just k' -> primCount k'
+       continueWith result   
+    where primCount oid = do
+            objects <- lift getObjects
+            case M.lookup oid objects of
+                Nothing -> lift (logAMessage LogWarn "sim" ("object prim " ++ oid ++ "not found"))
+                    >> return (IVal 0)
+                Just (LSLObject l) -> return $ IVal $ length l                               
+
+llGetNumberOfSides (ScriptInfo _ _ _ pkey _) [] =
+     (runErrPrim pkey (IVal 1)
+        (getPrimFaces pkey >>= return . IVal . length)) >>= continueWith
+     
+llGetObjectDesc (ScriptInfo _ _ _ pkey _) [] =
+    (runErrPrim pkey (SVal "default description")
+        (getPrimDescription pkey >>= return . SVal)) >>= continueWith
+llGetObjectName (ScriptInfo _ _ _ pkey _) [] =
+    (runErrPrim pkey (SVal "default name")
+        (getPrimName pkey >>= return . SVal)) >>= continueWith
+
+llSetObjectName (ScriptInfo _ _ _ pkey _) [SVal name] =
+    setPrimName pkey (take 255 name) >> continueWith VoidVal
+    
+llSetObjectDesc (ScriptInfo _ _ _ pkey _) [SVal desc] =
+    setPrimDescription pkey (take 127 desc) >> continueWith VoidVal
+    
+llGetObjectPermMask (ScriptInfo oid _ _ _ _) [IVal maskId] =
+    do result <- runAndLogIfErr ("object " ++ oid ++ " not found") (IVal 0) $ do 
+           masks <- getPrimPermissions oid
+           let base = if null masks then 0x0008e000 else masks !! 0
+           let n = length masks
+           let mask = if maskId < n then masks !! maskId else 
+                          if maskId == 3 then 0 else base
+           return (IVal mask)
+       continueWith result
+       
+llGetScale (ScriptInfo _ _ _ pkey _) [] =
+    runErrPrim pkey (1.0, 1.0, 1.0) (getPrimScale pkey) >>= continueWith . vec2VVal
+    
+llSetScale (ScriptInfo _ _ _ pk _) [scale] =
+    if tooSmall then continueWith VoidVal
+       else setPrimScale pk clippedVec >> continueWith VoidVal
+    where (x,y,z) = vVal2Vec scale
+          tooSmall = (x < 0.01 || y < 0.01 || z < 0.01)
+          clippedVec = (min x 10.0, min y 10.0, min z 10.0) 
+  
+llGetBoundingBox _ [KVal k] =
+    do 
+        logAMessage LogInfo "sim" "note: llGetBoundingBox does not return accurate results (yet)"
+        avatars <- getWorldAvatars
+        case lookup k avatars of
+            Just avatar -> let pos = avatarPosition avatar in
+                continueWith (LVal $ map (vec2VVal . (add3d pos)) [(-1.0,-1.0,-1.0),(1.0,1.0,1.0)])
+            Nothing -> do
+                result <- evalErrorT (getPrimParent k)
+                case result of
+                    Left _ -> continueWith $ LVal [VVal 0.0 0.0 0.0]
+                    Right Nothing ->  primBox k
+                    Right (Just oid) -> primBox oid        
+    where primBox pk = do
+            (pos,(xs,ys,zs)) <- fromErrorT ((128,128,0),(1,1,1)) $ do
+                pos <- getPrimPosition k
+                scale <- getPrimScale k
+                return (pos,scale)
+            continueWith (LVal $ map (vec2VVal . (add3d pos)) [(-1.0 * xs, -1.0 * ys, -1.0 * zs),
+                                                               (1.0 * xs, 1.0 * ys, 1.0 * zs)])
+
+--------------
+-- get/set prim parameters
+
+
 continueWith val = return (EvalIncomplete,val)
 
 -- all the predefined functions for which implementations have been created
@@ -360,18 +555,34 @@ defaultPredefs :: Monad m => [PredefFunc m]
 defaultPredefs = map (\(x,y) -> defaultPredef x y) 
     ([
         ("llFrand",llFrand),
+        ("llGetAlpha",llGetAlpha),
+        ("llGetBoundingBox",llGetBoundingBox),
+        ("llGetColor",llGetColor),
+        ("llGetLocalPos",llGetLocalPos),
+        ("llGetNumberOfPrims",llGetNumberOfPrims),
+        ("llGetNumberOfSides",llGetNumberOfSides),
+        ("llGetObjectDesc", llGetObjectDesc),
+        ("llGetObjectName", llGetObjectName),
+        ("llGetObjectPermMask", llGetObjectPermMask),
+        ("llGetObjectPrimCount", llGetObjectPrimCount),
         ("llGetOwner", llGetOwner),
         ("llGetPos", llGetPos),
+        ("llGetScale", llGetScale),
         ("llKey2Name", llKey2Name),
         ("llListRandomize",llListRandomize),
         ("llListen", llListen),
         ("llMessageLinked", llMessageLinked),
         ("llOwnerSay", llOwnerSay),
         ("llSay",llSay),
+        ("llSetAlpha", llSetAlpha),
+        ("llSetColor", llSetColor),
+        ("llSetObjectName",llSetObjectName),
+        ("llSetObjectDesc",llSetObjectDesc),
         ("llSetPos",llSetPos),
+        ("llSetScale",llSetScale),
         ("llSleep", llSleep)
     ] ++ internalLLFuncs)
-
+---------------------------------------------------------------------------------------------------
 logFromScript :: Monad m => ScriptInfo -> String -> WorldM m ()
 logFromScript scriptInfo msg = logAMessage LogInfo (infoToLogSource scriptInfo) msg
 
@@ -428,6 +639,12 @@ fromErrorTWithErrAction action def val = do
     result <- evalErrorT val
     case result of 
         Left s -> action s >> return def
+        Right v -> return v
+
+runAndLogIfErr msg def val = do
+    result <- evalErrorT val
+    case result of
+        Left s -> logAMessage LogWarn "sim" (msg ++ " (" ++ s ++ ")") >> return def
         Right v -> return v
 
 pushEvents oid pid e = do
@@ -730,7 +947,7 @@ trace1 s val = trace (s ++ ": " ++ show val) val
 data SimCommand = SimContinue { simCmdBreakpoints :: [Breakpoint], simCmdEvents :: [SimEvent] }
                 | SimStep { simCmdBreakpoints :: [Breakpoint], simCmdEvents :: [SimEvent] }
                 | SimStepOver { simCmdBreakpoints :: [Breakpoint], simCmdEvents :: [SimEvent] }
-                | SimStepOut { simCmdBreakpoints :: [Breakpoint], simCmdEvents :: [SimEvent] }
+                | SimStepOut { simCmdBreakpoints :: [Breakpoint], simCmdEvents :: [SimEvent] } deriving (Show)
 
 data WorldDef = WorldDef { worldDefScript :: String }
 
@@ -739,13 +956,14 @@ data SimStatus = SimEnded { simStatusMessage :: String, simStatusLog :: [LogMess
                  SimSuspended { simStatusEvents :: [SimEvent], 
                                 simStatusSuspendInfo :: ExecutionInfo,
                                 simStatusLog :: [LogMessage],
-                                simStatusState :: SimStateInfo }
+                                simStatusState :: SimStateInfo } deriving (Show)
 
 data SimStateInfo = SimStateInfo {
         simStateInfoTime :: Int,
         simStateInfoPrims :: [(String,String)],
         simStateInfoAvatars :: [(String,String)]
-    }
+    } deriving (Show)
+    
 nullSimState = SimStateInfo 0 [] []
 
 stateInfoFromWorld world =

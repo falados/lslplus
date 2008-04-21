@@ -119,6 +119,7 @@ data ScriptImage = ScriptImage {
                  } deriving (Show)
 
 data FrameInfo = FrameInfo { frameInfoImageName :: String, frameInfoFrames :: [(String,SourceContext,Maybe Int,[(String,LSLValue)])] }
+    deriving (Show)
 
 frameInfo scriptImage = FrameInfo (scriptImageName scriptImage) $
     frames ++ [("glob", bottomContext, Nothing, glob scriptImage)]
@@ -1048,4 +1049,4 @@ evalPredef' name =
           
 ctxList es = map (Ctx UnknownSourceContext) es
 
-data ExecutionInfo = ExecutionInfo String Int FrameInfo
+data ExecutionInfo = ExecutionInfo String Int FrameInfo deriving (Show)

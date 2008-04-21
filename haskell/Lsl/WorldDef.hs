@@ -29,7 +29,7 @@ data FullWorldDef = FullWorldDef {
                         fullWorldDefActiveScripts :: [((String,String),(String))], -- [((primKey,invName),(scriptID))]
                         fullWorldDefObjects :: [LSLObject],
                         fullWorldDefPrims :: [Prim],
-                        fullWorldDefAvatars :: [Avatar] }
+                        fullWorldDefAvatars :: [Avatar] } deriving (Show)
                         
 data LSLObject = LSLObject { primKeys :: [String] } deriving (Show)
 

@@ -268,6 +268,7 @@ funcSigs = [
     ("llSetCameraAtOffset",LLVoid,[LLVector]),
     ("llSetCameraEyeOffset",LLVoid,[LLVector]),
     ("llSetCameraParams",LLVoid,[LLList]),
+    ("llSetClickAction",LLVoid,[LLInteger]),
     ("llSetColor",LLVoid,[LLVector,LLInteger]),
     ("llSetDamage",LLVoid,[LLFloat]),
     ("llSetForce",LLVoid,[LLVector,LLInteger]),
