@@ -259,7 +259,7 @@ callExpr = do
               
 castExpr = ctxify $
            do t <- parens typeName
-              e <- atomicExpr
+              e <- choice [try postfixExpr, atomicExpr]
               return $ Cast t e
 
 ctxify f = do
