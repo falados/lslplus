@@ -22,6 +22,8 @@ module Lsl.Type(
     toFloat,
     vVal2Vec,
     vec2VVal,
+    rVal2Rot,
+    rot2RVal,
     liftV1,
     liftV2) where
     
@@ -227,3 +229,5 @@ vec2VVal (x,y,z) = VVal x y z
 liftV1 f = vec2VVal . f . vVal2Vec
 liftV2 f = \ x y -> vec2VVal $ f (vVal2Vec x) (vVal2Vec y)
 
+rot2RVal (x,y,z,s) = RVal x y z s
+rVal2Rot (RVal x y z s) = (x,y,z,s)

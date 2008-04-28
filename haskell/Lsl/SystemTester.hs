@@ -31,13 +31,6 @@ initSimElement =
                return (sources,worldDef)
     in ElemAcceptor "sim-descriptor" f
 
-worldDefElement :: Monad m => ElemAcceptor m WorldDef
-worldDefElement = 
-    let f (Elem _ _ contents) =
-            do (script,[]) <- findElement (ElemAcceptor "script" simple) [ e | e@(CElem _ _) <- contents]
-               return $ WorldDef script
-    in ElemAcceptor "worldDef" f
-    
 commandFromXML xml = 
      let (Document _ _ root _) = xmlParse "" xml in 
          case simCommand root of

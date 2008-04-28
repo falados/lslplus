@@ -1,10 +1,19 @@
 module Lsl.WorldDef(Prim(..),
                     PrimFace(..),
+                    TextureInfo(..),
+                    Flexibility(..),
+                    LightInfo(..),
                     LSLObject(..),
+                    PrimType(..),
                     FullWorldDef(..),
+                    Region(..),
+                    Parcel(..),
                     emptyPrim,
+                    primPhantomBit,
+                    primPhysicsBit,
                     worldFromFullWorldDef,
-                    worldElement
+                    worldElement,
+                    defaultRegions
                    ) where
 
 import Control.Monad
@@ -29,9 +38,16 @@ data FullWorldDef = FullWorldDef {
                         fullWorldDefActiveScripts :: [((String,String),(String))], -- [((primKey,invName),(scriptID))]
                         fullWorldDefObjects :: [LSLObject],
                         fullWorldDefPrims :: [Prim],
-                        fullWorldDefAvatars :: [Avatar] } deriving (Show)
+                        fullWorldDefAvatars :: [Avatar],
+                        fullWorldDefRegions :: [((Int,Int),Region)] } deriving (Show)
                         
 data LSLObject = LSLObject { primKeys :: [String] } deriving (Show)
+
+-- these are bit INDEXES not MASKS (0 == least significant bit)
+primPhantomBit :: Int
+primPhantomBit = 4
+primPhysicsBit :: Int
+primPhysicsBit = 0
 
 data Prim = Prim {
                     primName :: String,
@@ -56,7 +72,10 @@ data Prim = Prim {
                     primTempOnRez :: Bool,
                     primTypeInfo :: PrimType,
                     primPermissions :: [Int],
-                    primData :: ValueDB } deriving (Show)
+                    primData :: ValueDB,
+                    primAllowInventoryDrop :: Bool,
+                    primSitTarget :: Maybe ((Float,Float,Float),(Float,Float,Float,Float)),
+                    primSittingAvatar :: Maybe String } deriving (Show)
 
 data PrimType = PrimTypeUnknown
               | PrimType {
@@ -69,13 +88,15 @@ data PrimType = PrimTypeUnknown
                    primTopshear :: (Float, Float, Float),
                    primHollow :: Float,
                    primTaper :: (Float,Float,Float),
+                   primAdvancedCut :: (Float,Float,Float),
                    primRadiusOffset :: Float,
                    primRevolutions :: Float,
                    primSkew :: Float,
-                   primSculptTexture :: Maybe String 
+                   primSculptTexture :: Maybe String,
+                   primSculptType :: Int
                 } deriving (Show)
                    
-basicBox = PrimType 9 0 0 (0,0,0) (0,0,0) (0,0,0) (0,0,0) 0 (0,0,0) 0 0 0 Nothing
+basicBox = PrimType 9 0 0 (0,0.0,0) (0,0,0) (0,0,0) (0,0,0) 0 (0,0,0) (0,0,0) 0 0 0 Nothing 0
 
 data LightInfo = LightInfo {
         lightColor :: (Float,Float,Float),
@@ -138,8 +159,29 @@ emptyPrim name key =
            primTempOnRez = False,
            primTypeInfo = basicBox,
            primPermissions = [0],            
-           primData = emptyDB }
-                    
+           primData = emptyDB,
+           primAllowInventoryDrop = False,
+           primSitTarget = Nothing,
+           primSittingAvatar = Nothing }
+
+data Region = Region {
+        regionName :: String,
+        regionParcels :: [Parcel]
+    } deriving (Show)
+    
+data Parcel = Parcel {
+        parcelName :: String,
+        parcelBoundaries :: (Int,Int,Int,Int), -- bottom, top, left, right aka south,north,west,east
+        parcelOwner :: String,
+        parcelBanList :: [(String,Maybe Int)],
+        parcelPassList :: [(String,Maybe Int)]
+    } deriving (Show)
+
+defaultRegions :: String -> [((Int,Int),Region)]
+defaultRegions owner = [
+    ((0,0), Region { regionName = "Region_0_0", regionParcels = [Parcel "parcel_0" (0,256,0,256) owner [] []] })
+    ]
+    
 worldFromFullWorldDef worldBuilder fwd lib scripts =
     do let primMap = mkPrimMap (fullWorldDefPrims fwd)
        primMap' <- checkObjects primMap (fullWorldDefObjects fwd) -- prove all the prims in all the objects exists
@@ -152,6 +194,7 @@ worldFromFullWorldDef worldBuilder fwd lib scripts =
                              primMap'
                              (M.fromList activatedScripts)
                              emptyDB
+                             (M.fromList (fullWorldDefRegions fwd))
 
 fctx :: Monad m => String -> Either String a -> m a
 fctx s (Left s') = fail s
@@ -198,7 +241,7 @@ worldElement =
         (avatars,[]) <- findElement avatarsElement c5
         --maxTime <- readM maxTimeStr
         sliceSize <- readM sliceSizeStr
-        return $ (FullWorldDef maxTime sliceSize activeScripts objects prims avatars)
+        return $ (FullWorldDef maxTime sliceSize activeScripts objects prims avatars (defaultRegions ""))
     in ElemAcceptor "world-def" f
     
 activeScriptsElement :: Monad m => ElemAcceptor m [((String,String),String)]
@@ -243,7 +286,8 @@ primElement = ElemAcceptor "prim" $
             (tempOnRez, c14) <- findValueOrDefault False "tempOnRez" c13
             (typeInfo, c15) <- findOrDefault basicBox (primTypeAcceptor "typeInfo") c14
             (permissions, c16) <- findOrDefault [0] (elementList "permissions" (valueAcceptor "int")) c15
-            (pData,[]) <- findElement (dbAcceptor "data") c16
+            (pData,c17) <- findElement (dbAcceptor "data") c16
+            (dropAllowed,[]) <- findValueOrDefault False "dropAllowed" c17
             return $ Prim { primName = name, 
                             primKey = key, 
                             primParent = Nothing,
@@ -266,7 +310,10 @@ primElement = ElemAcceptor "prim" $
                             primTempOnRez = tempOnRez,
                             primTypeInfo = typeInfo,
                             primPermissions = permissions,
-                            primData = pData }
+                            primData = pData,
+                            primAllowInventoryDrop = dropAllowed,
+                            primSitTarget = Nothing ,
+                            primSittingAvatar = Nothing }
 
 faceAcceptor s = ElemAcceptor s $
     \ (Elem _ _ contents) -> do
@@ -346,10 +393,12 @@ primTypeAcceptor s = ElemAcceptor s $
         (topshear, c7) <- findOrDefault (0.0,0.0,0.0) (vecAcceptor "topshear") c6
         (hollow, c8) <- findValueOrDefault 0.0 "hollow" c7
         (taper, c9) <- findOrDefault (0.0,0.0,0.0) (vecAcceptor "taper") c8
-        (radiusOffset, c10) <- findValueOrDefault 0.0 "radiusOffset" c9
-        (revolutions, c11) <- findValueOrDefault 0.0 "revolutions" c10
-        (skew, c12) <- findValueOrDefault 0.0 "skew" c11
-        (sculptTexture, []) <- findOptionalElement (simpleElement "sculptTexture") c12
+        (advancedCut, c10) <- findOrDefault (0.0,0.0,0.0) (vecAcceptor "advancedCut") c9
+        (radiusOffset, c11) <- findValueOrDefault 0.0 "radiusOffset" c10
+        (revolutions, c12) <- findValueOrDefault 0.0 "revolutions" c11
+        (skew, c13) <- findValueOrDefault 0.0 "skew" c12
+        (sculptTexture, c14) <- findOptionalElement (simpleElement "sculptTexture") c13
+        (sculptType, []) <- findValueOrDefault 0 "sculptType" c14
         return $ PrimType {
                    primVersion = version, -- 1 or 9
                    primTypeCode = typeCode,
@@ -360,10 +409,12 @@ primTypeAcceptor s = ElemAcceptor s $
                    primTopshear = topshear,
                    primHollow = hollow,
                    primTaper =  taper,
+                   primAdvancedCut = advancedCut,
                    primRadiusOffset = radiusOffset,
                    primRevolutions = revolutions,
                    primSkew = skew,
-                   primSculptTexture = sculptTexture 
+                   primSculptTexture = sculptTexture,
+                   primSculptType = sculptType
                 }
                 
 avatarsElement :: Monad m => ElemAcceptor m [Avatar]

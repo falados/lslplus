@@ -70,6 +70,7 @@ module Lsl.InternalLLFuncs(
     llModPow,
     llListStatistics,
     -- Math Vector/Rotation
+    llAngleBetween,
     llEuler2Rot,
     llAxisAngle2Rot,
     llRot2Angle,
@@ -124,6 +125,7 @@ internalLLFuncs :: (Monad m) => [(String, a -> [LSLValue] -> m (EvalResult,LSLVa
 internalLLFuncs = [
     ("llAbs",llAbs),
     ("llAcos",llAcos),
+    ("llAngleBetween",llAngleBetween),
     ("llAsin",llAsin),
     ("llAtan2",llAtan2),
     ("llAxes2Rot",llAxes2Rot),
@@ -366,7 +368,12 @@ llRotBetween n [VVal x1 y1 z1,VVal x2 y2 z2] =
     let (x,y,z) = (x1,y1,z1) `cross` (x2,y2,z2)
         angle = acos (x1*x2 + y1*y2 + z1*z2) 
     in llAxisAngle2Rot n [VVal x y z,FVal angle]
-    
+
+llAngleBetween _ [RVal aX aY aZ aS,RVal bX bY bZ bS] =
+    continueWith $ FVal $ 2 * acos ((aX * bX + aY * bY + aZ * bZ + aS * bS)
+                  / sqrt ((aX^2 + aY^2 + aZ^2 + aS^2) * 
+                           (bX^2 + bY^2 + bZ^2 + bS^2)))
+                           
 llVecMag _ [v@(VVal x y z)] = 
     continueWith $ FVal $ mag3d (vVal2Vec v)
 
