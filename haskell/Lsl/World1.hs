@@ -10,6 +10,7 @@ import Data.Map(Map)
 import Data.Maybe
 import qualified Data.Map as M
 import qualified Data.Set as S
+import qualified Data.IntMap as IM
 import Debug.Trace
 
 import Lsl.Avatar
@@ -19,7 +20,7 @@ import Lsl.CodeHelper
 import Lsl.Constants
 import Lsl.Evaluation
 import Lsl.EventSigs
-import Lsl.Exec
+import Lsl.Exec hiding (scriptImage)
 import Lsl.ExpressionHandler
 import Lsl.FuncSigs
 import Lsl.InternalLLFuncs
@@ -34,37 +35,9 @@ import Lsl.WorldDef
 import Lsl.WorldState
 
 import System.Random
+import System.Time
 import Test.QuickCheck
-
--- a data type that defines the state of the 'world'
--- data World m = World {
---                     sliceSize :: Int,
---                     maxTick :: Int,
---                     nextPause :: Int,
---                     wqueue :: WorldEventQueue,
---                     wlisteners :: [(Int,(Listener,Bool))],
---                     nextListenerId :: Int,
---                     wobjects :: Map String LSLObject,
---                     wprims :: Map String Prim,
---                     worldScripts :: Map (String,String) (Validity ScriptImage,[Event]), 
---                     inventory :: [(String,LSLObject)],
---                     tick :: Int,
---                     msglog :: [LogMessage],
---                     predefs :: [PredefFunc m],
---                     randGen :: StdGen,
---                     wlibrary :: [(String,Validity LModule)],
---                     wscripts :: [(String,Validity CompiledLSLScript)],
---                     worldDB :: ValueDB,
---                     worldAvatars :: [(String,Avatar)],
---                     worldBreakpointManager :: BreakpointManager,
---                     worldSuspended :: Maybe (String,String), -- prim-key, script-name, image
---                     worldRegions :: Map (Int,Int) Region
---                 } deriving (Show)
-
--- -- a state monad for the World
--- type WorldM m = StateT (World m) m
-
--- worldM f = StateT (\ s -> return (f s))
+import Text.Printf
 
 -- execute a predefined ('ll') function
 doPredef :: Monad m => String -> ScriptInfo -> [LSLValue] -> WorldM m (EvalResult,LSLValue)
@@ -90,156 +63,6 @@ doPredef name info@(ScriptInfo oid pid sid pkey event) args =
                       LLVector -> VVal 0.0 0.0 0.0
                       LLRot -> RVal 0.0 0.0 0.0 1.0)
 
--- extracting/updating the world state -----------------------------------------------------                   
--- queryWorld q = worldM (\w -> (q w, w))
--- updateWorld u = worldM (\w -> ((), u w))
-
--- getWorldDB :: Monad m => WorldM m ValueDB
--- getWorldDB = queryWorld worldDB
--- setWorldDB db = updateWorld (\ w -> w { worldDB = db })
-
--- getSliceSize :: Monad m => WorldM m Int
--- getSliceSize = queryWorld sliceSize
--- getListeners :: Monad m => WorldM m [(Int,(Listener,Bool))]
--- getListeners = queryWorld wlisteners
--- getMaxTick :: Monad m => WorldM m Int
--- getMaxTick = queryWorld maxTick
--- getNextPause :: Monad m => WorldM m Int
--- getNextPause = queryWorld nextPause
--- getTick :: Monad m => WorldM m Int
--- getTick = queryWorld tick
--- getNextListenerId :: Monad m => WorldM m Int
--- getNextListenerId = queryWorld nextListenerId
--- getObjects :: Monad m => WorldM m (Map String LSLObject)
--- getObjects = (queryWorld wobjects)
--- getPrims :: Monad m => WorldM m (Map String Prim)
--- getPrims = queryWorld wprims
--- getWorldScripts :: Monad m => WorldM m (Map (String,String) (Validity ScriptImage, [Event]))
--- getWorldScripts = queryWorld worldScripts
--- getInventory :: Monad m => WorldM m [(String,LSLObject)]
--- getInventory = queryWorld inventory
--- getMsgLog :: Monad m => WorldM m [LogMessage]
--- getMsgLog = queryWorld msglog
--- getWQueue :: Monad m => WorldM m WorldEventQueue
--- getWQueue = queryWorld wqueue
--- getPredefFuncs :: Monad m => WorldM m [PredefFunc m]
--- getPredefFuncs = queryWorld predefs
--- getRandGen :: Monad m => WorldM m StdGen
--- getRandGen = queryWorld randGen
--- getWScripts :: Monad m => WorldM m  [(String,Validity CompiledLSLScript)]
--- getWScripts = queryWorld wscripts
--- getWorldAvatars :: Monad m => WorldM m [(String,Avatar)]
--- getWorldAvatars = queryWorld worldAvatars
--- getWorldBreakpointManager :: Monad m => WorldM m BreakpointManager
--- getWorldBreakpointManager = queryWorld worldBreakpointManager
--- getWorldSuspended :: Monad m => WorldM m (Maybe (String,String))
--- getWorldSuspended = queryWorld worldSuspended
--- getWorldRegions :: Monad m => WorldM m (Map (Int,Int) Region)
--- getWorldRegions = queryWorld worldRegions
-
--- getRegion index = (lift getWorldRegions >>= M.lookup index)
-
--- getPrim k = (lift getPrims >>= M.lookup k)
--- getPrimVal k f = (lift getPrims >>= M.lookup k >>= return . f)
--- getPrimName k = getPrimVal k primName
--- getPrimPosition k = getPrimVal k primPosition
--- getPrimParent k = getPrimVal k primParent
--- getPrimDescription k = getPrimVal k primDescription
--- getPrimOwner k = getPrimVal k primOwner
--- getPrimRotation k = getPrimVal k primRotation
--- getPrimScale k = getPrimVal k primScale
--- getPrimFaces k = getPrimVal k primFaces
--- getPrimFlexibility k = getPrimVal k primFlexibility
--- getPrimMaterial k = getPrimVal k primMaterial
--- getPrimStatus k = getPrimVal k primStatus
--- getPrimLight k = getPrimVal k primLight
--- getPrimTempOnRez k = getPrimVal k primTempOnRez
--- getPrimTypeInfo k = getPrimVal k primTypeInfo
--- getPrimPermissions k = getPrimVal k primPermissions
--- getPrimSitTarget k = getPrimVal k primSitTarget
--- getPrimSittingAvatar k = getPrimVal k primSittingAvatar
-
--- -- TODO: temp until introduce region into Prim definition
--- getPrimRegion :: Monad m => a -> m (Int,Int)
--- getPrimRegion _ = return (0,0)
--- primRegion :: a -> (Int,Int)
--- primRegion _ = (0,0)
-
--- runErrFace k i defaultVal = runAndLogIfErr 
---     ("face " ++ (show i) ++ " or prim " ++ k ++ " not found") defaultVal
-
--- getPrimFace k i = getPrimFaces k >>= (lookupByIndex i)
--- getPrimFaceAlpha k i = getPrimFace k i >>= return . faceAlpha
--- getPrimFaceColor k i = getPrimFace k i >>= return . faceColor
--- getPrimFaceTextureInfo k i = getPrimFace k i >>= return . faceTextureInfo
-
--- setListeners l = updateWorld (\w -> w { wlisteners = l })   
--- setNextListenerId i = updateWorld (\w -> w { nextListenerId = i })
--- setObjects os = updateWorld (\w -> w { wobjects = os })
--- setPrims ps = updateWorld (\w -> w { wprims = ps })
--- setInventory i = updateWorld (\w -> w { inventory = i })
--- setTick t = updateWorld (\w -> w { tick = t })
--- setMsgLog l = updateWorld (\w -> w { msglog = l })
--- setWQueue q = updateWorld (\w -> w { wqueue = q })
--- setRandGen g = updateWorld (\w -> w { randGen = g })
--- setWorldAvatars l = updateWorld (\w -> w { worldAvatars = l })
--- setWorldScripts s = updateWorld (\w -> w { worldScripts = s })
--- setWorldBreakpointManager m = updateWorld (\w -> w { worldBreakpointManager = m })
--- setWorldSuspended v = updateWorld (\w -> w { worldSuspended = v })
--- setWorldRegions r = updateWorld (\ w -> w { worldRegions = r })
-
--- setPrim k p = (getPrims >>= return . (M.insert k p) >>= setPrims)
--- updatePrimVal k f = (lift getPrims >>= M.lookup k >>= return . f >>= lift . (setPrim k))
-
--- runErrPrim k defaultVal = runAndLogIfErr ("prim " ++ k ++ " not found") defaultVal
--- setPrimPosition k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primPosition = v } )
--- setPrimRotation k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primRotation = v } )
--- setPrimScale k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primScale = v } )
--- setPrimDescription k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primDescription = v } )
--- setPrimName k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primName = v } )
--- setPrimParent k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primParent = v } )
--- setPrimFaces k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primFaces = v } )
--- setPrimFlexibility k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primFlexibility = v } )
--- setPrimMaterial k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primMaterial = v } )
--- setPrimOwner k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primOwner = v } )
--- setPrimStatus k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primStatus = v } )
--- setPrimLight k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primLight = v } )
--- setPrimTempOnRez k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primTempOnRez = v } )
--- setPrimTypeInfo k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primTypeInfo = v } )
--- setPrimPermissions k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primPermissions = v } )
--- setPrimSitTarget k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primSitTarget = v })
--- setPrimSittingAvatar k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primSittingAvatar = v } )
-
--- setRegion regionIndex region = getWorldRegions >>= return . (M.insert regionIndex region) >>= setWorldRegions
-
--- updatePrimFace k i f = do
---     faces <- getPrimFaces k
---     let faces' = zipWith (\ face index -> if (index == i) then f face else face) faces [0..]
---     lift $ setPrimFaces k faces'
---     
--- setPrimFaceAlpha k i v = runErrFace k i () $ updatePrimFace k i (\ f -> f { faceAlpha = v })
--- setPrimFaceColor k i v = runErrFace k i () $ updatePrimFace k i (\ f -> f { faceColor = v })
-
--- insertPrimData key path value = do
---     prims <- getPrims
---     case M.lookup key prims of
---         Nothing -> logAMessage LogWarn "sim" ("key " ++ key ++ " not found")
---         Just prim -> 
---             setPrims $ M.insert key (prim { primData = (insertDB path value (primData prim)) }) prims
-
--- lookupPrimData key path = do
---     prims <- getPrims
---     case M.lookup key prims of
---         Nothing -> return Nothing
---         Just prim -> return $ lookupDB path (primData prim)
---  
--- insertWorldDB path value = do
---     wdb <- getWorldDB
---     setWorldDB (insertDB path value wdb)
-
--- lookupWorldDB path = do
---     wdb <- getWorldDB
---     return $ lookupDB path wdb
     
 nextTick :: Monad m => WorldM m Int
 nextTick = do
@@ -277,20 +100,6 @@ putParcel regionIndex index parcel = do
     let parcels' = if null after then parcel : before else before ++ (parcel : tail after)
     lift $ setRegion regionIndex $ region { regionParcels = parcels' }
                 
--- instance Monad m => Show (ScriptInfo -> [LSLValue] -> WorldM m (EvalResult,LSLValue)) where
---     showsPrec _ _ = showString "(function :: ScriptInfo -> [LSLValue] -> WorldM m (EvalResult,LSLValue))"
-
-------------------------------------------------------------------------------------------------------    
---- Predefined function implementation stuff ---------------------------------------------------------
---
---    
--- data PredefFunc m = PredefFunc { predefFuncName :: String, 
---                                predefAllowedKey :: Maybe String,
---                                predefAllowedSID :: Maybe String,
---                                predefExpectedArgs :: [Maybe LSLValue],
---                                predef :: ScriptInfo -> [LSLValue] -> WorldM m (EvalResult,LSLValue) }
---     deriving (Show)
-
 tryPredef name key sid args (PredefFunc pname pkey psid pargs predef) =
     if (name == pname &&
         pkey `elem` [Nothing,Just key] &&
@@ -305,7 +114,89 @@ defaultPredef name predef =
         Nothing -> error ("undefined predef " ++ name)
         Just numParams -> PredefFunc name Nothing Nothing (replicate numParams Nothing) predef
 
-        
+--- INVENTORY related functions ----------------------------------------------
+sortByInvName = sortBy (\ (InventoryItemIdentification (n,_),_) (InventoryItemIdentification (n',_),_) -> compare n n')
+
+getAllInventoryInfo k = 
+    sequence (map ($k) invGetters) >>= return . sortByInvName . concat
+    where invGetters = [getPrimAnimationInfo,getPrimBodyPartInfo,getPrimClothingInfo,getPrimGestureInfo,
+                        getPrimNotecardInfo,getPrimObjectInfo,getPrimSoundInfo,getPrimTextureInfo,getPrimScriptInfo]
+
+getAnInventory f k = f k >>= return . sortByInvName
+
+getPrimInventoryInfo info@(ScriptInfo _ _ _ pk _) invType =
+    case invType of
+        i | i == llcInventoryAll -> getAllInventoryInfo pk
+          | i == llcInventoryAnimation -> getAnInventory getPrimAnimationInfo pk
+          | i == llcInventoryBodyPart -> getAnInventory getPrimBodyPartInfo pk
+          | i == llcInventoryClothing -> getAnInventory getPrimClothingInfo pk
+          | i == llcInventoryGesture -> getAnInventory getPrimGestureInfo pk
+          | i == llcInventoryNotecard -> getAnInventory getPrimNotecardInfo pk
+          | i == llcInventoryObject -> getAnInventory getPrimObjectInfo pk
+          | i == llcInventoryScript -> getAnInventory getPrimScriptInfo pk
+          | i == llcInventorySound -> getAnInventory getPrimSoundInfo pk
+          | i == llcInventoryTexture -> getAnInventory getPrimTextureInfo pk
+          | otherwise -> do lift $ logFromScript info ("invalid inventory type: " ++ lslValString invType)
+                            return []
+
+llGetInventoryNumber info@(ScriptInfo _ _ _ pk _) [invType@(IVal _)] = do
+    runErrPrim pk [] (getPrimInventoryInfo info invType) >>= continueWith . IVal . length
+
+llGetInventoryCreator info@(ScriptInfo _ _ _ pk _) [SVal name] =
+    do result <- runErrPrim pk nullKey $ do
+           all <- getAllInventoryInfo pk
+           case findByInvName name all of
+               Nothing -> (lift $ putChat (Just 20.0) pk 0 ("no item named '" ++ name ++ "'")) >> return nullKey
+               Just (_,invInfo) -> return $ inventoryInfoCreator invInfo
+       continueWith $ KVal result 
+
+llGetInventoryKey info@(ScriptInfo _ _ _ pk _) [SVal name] =
+    do result <- runErrPrim pk nullKey $ do
+           all <- getAllInventoryInfo pk
+           case findByInvName name all of
+               Nothing -> return nullKey
+               Just (InventoryItemIdentification (_,key),invInfo) -> 
+                   if inventoryInfoTransferPerm invInfo && inventoryInfoModifyPerm invInfo && inventoryInfoCopyPerm invInfo then
+                       return key
+                   else return nullKey
+       continueWith $ KVal result
+       
+llGetInventoryName info@(ScriptInfo _ _ _ pk _) [invType@(IVal _), IVal index] =
+    runErrPrim pk "" (getPrimInventoryInfo info invType >>= return . map (\ (InventoryItemIdentification  (n,_),_) -> n) >>=
+                      return . fromMaybe "" . lookupByIndex index) >>= continueWith . SVal
+
+llGetInventoryType info@(ScriptInfo _ _ _ pk _) [SVal name] = do
+        result <- runErrPrim pk (IVal (-1)) $ do
+            val <- foldM findIt Nothing gettersAndTypes
+            case val of
+                Nothing -> return (IVal (-1))
+                Just i -> return i
+        continueWith result
+    where findIt Nothing (f,t) =do
+              list <- f pk
+              case findByInvName name list of
+                  Nothing -> return Nothing
+                  Just _ -> return (Just t) 
+          findIt v _ = return v
+          gettersAndTypes = [(getPrimAnimationInfo,llcInventoryAnimation),(getPrimBodyPartInfo,llcInventoryBodyPart),
+                             (getPrimClothingInfo,llcInventoryClothing),(getPrimGestureInfo,llcInventoryGesture),
+                             (getPrimNotecardInfo,llcInventoryNotecard),(getPrimObjectInfo,llcInventoryObject),
+                             (getPrimSoundInfo,llcInventorySound),(getPrimTextureInfo,llcInventoryTexture),
+                             (getPrimScriptInfo,llcInventoryScript)]
+------------------------------------------------------------------------------
+llCloud info [v@(VVal x y z)] =
+    do logFromScript info "llCloud currently returns default density"
+       continueWith $ FVal 0
+
+llWind info [v@(VVal x y z)] =
+    do logFromScript info "llWind currently returns default density"
+       continueWith $ VVal 0 0 0
+
+llWater info [v@(VVal x y z)] =
+    do logFromScript info "llWater currently returns default water elevation"
+       continueWith $ FVal 0
+
+
 llSitTarget (ScriptInfo _ _ _ pk _) [v@(VVal _ _ _),r@(RVal _ _ _ _)] =
     (setPrimSitTarget pk (Just (vVal2Vec v, rVal2Rot r)) >> continueWith VoidVal)
     
@@ -367,12 +258,16 @@ llRegionSay info params@[IVal chan, SVal message] =
        
 chat range info@(ScriptInfo oid pid sid pkey event) [IVal chan, SVal message] =
     do logFromScript info $ concat ["chan = ", show chan, ", message = ", message]
-       (VVal x y z) <- getPos pkey
-       region <- getRegionIndex pkey
-       tick <- getTick
-       Just name <- queryPrim pkey primName
-       putWorldEvent tick $ Chat chan name pkey message (region,(x,y,z)) (Just 20.0)
+       putChat range pkey chan message
        return (EvalIncomplete,VoidVal)
+       
+putChat range pk chan message = do
+    (VVal x y z) <- getPos pk
+    region <- getRegionIndex pk
+    tick <- getTick
+    Just name <- queryPrim pk primName
+    putWorldEvent tick $ Chat chan name pk message (region,(x,y,z)) (Just 20.0)
+    
 llListen (ScriptInfo oid pid sid pkey event) [IVal chan, SVal sender, KVal key, SVal msg] =
     do lid <- registerListener $ Listener pkey sid chan sender key msg
        return (EvalIncomplete,IVal lid)
@@ -390,14 +285,160 @@ llFrand _ [FVal maxval] =
     do r <- wrand
        continueWith $ FVal (maxval * r)
 
-llGetPermissions (ScriptInfo oid pid sid pk event) [] =  fromErrorT (IVal 0) $ do
-    db <- lift getWorldDB
-    Right val <- lookupDB ["script","permission",pk,sid,"lastmask"] db
-    return val
+llEjectFromLand info@(ScriptInfo _ _ _ pk _) [KVal user] =
+    runErrPrim pk () (do
+        owner <- getPrimOwner pk
+        regionIndex <- getPrimRegion pk
+        (_,parcel) <- getPrimPosition pk >>= getParcelByPosition regionIndex
+        if parcelOwner parcel == owner 
+            then lift $ logFromScript info ("llEjectFromLand: user " ++ user ++ " ejected (in theory)")
+            else lift $ logFromScript info ("llEjectFromLand: not permitted to eject from this parcel")
+    ) >> continueWith VoidVal
+llBreakLink info@(ScriptInfo oid _ sid pk _) [IVal link] = 
+    runErrPrim pk () (do
+            perm <- getPermissions pk sid
+            if perm .&. cPermissionChangeLinks /= 0
+                then do
+                    objects <- lift getObjects
+                    LSLObject links <- M.lookup oid objects
+                    attachment <- getPrimAttachment oid
+                    case attachment of
+                        Nothing ->
+                            if link < 1 || link > length links then lift $ logFromScript info ("llBreakLink: invalid link id")
+                                else do
+                                    let (xs,y:ys) = splitAt (link - 1) links
+                                    let (linkSet1,linkSet2) = (xs ++ ys, [y])
+                                    let objects' = if null linkSet1 then objects else M.insert (head linkSet1) (LSLObject linkSet1) objects
+                                    lift $ setObjects (M.insert (head linkSet2) (LSLObject linkSet2) objects')
+                                    t <- lift getTick
+                                    when (not (null linkSet1)) $ lift $ putWorldEvent t (mkChangedEvent (head linkSet1) cChangedLink)
+                                    lift $ putWorldEvent t (mkChangedEvent (head linkSet2) cChangedLink)
+                        _ -> lift $ logFromScript info ("llBreakLink: can't change links of attached object")
+                else lift $ logFromScript info ("llBreakLink: no permission") 
+        ) >> continueWith VoidVal
+
+llBreakAllLinks info@(ScriptInfo oid _ sid pk _) [] =
+    runErrPrim pk () (do
+            perm <- getPermissions pk sid
+            if perm .&. cPermissionChangeLinks /= 0
+                then do
+                    objects <- lift getObjects
+                    LSLObject links <- M.lookup oid objects
+                    attachment <- getPrimAttachment oid
+                    case attachment of
+                        Nothing ->
+                            if length links > 1 
+                                then do
+                                    -- order of parameters to union is vital: union is left biased, so we want the 
+                                    -- new objects (in the left argument) to replace the old (in the right) where
+                                    -- both exist (the root key of the old object is found in both)
+                                    let objects' = M.union (M.fromList $ map (\ k -> (k, LSLObject [k])) links) objects
+                                    lift $ setObjects objects'
+                                    t <- lift getTick
+                                    lift $ mapM_ (putWorldEvent t . (flip mkChangedEvent cChangedLink)) links
+                                else return ()
+                        _ -> lift $ logFromScript info ("llBreakAllLinks: can't change links of attached object")
+                else lift $ logFromScript info ("llBreakAllLinks: no permission")
+        ) >> continueWith VoidVal
+        
+-- TODO: verify link order
+llCreateLink info@(ScriptInfo oid _ sid pk _) [KVal target, IVal iparent] =
+    runErrPrim oid () (do
+        perm <- getPermissions pk sid
+        if perm .&. cPermissionChangeLinks /= 0
+            then do
+                objects <- lift getObjects
+                LSLObject (link:links) <- M.lookup oid objects
+                case M.lookup target objects of
+                    Nothing -> lift $ logFromScript info "llCreateLink: target not found"
+                    Just (LSLObject (link':links')) -> do
+                        attachment0 <- getPrimAttachment oid
+                        attachment1 <- getPrimAttachment target
+                        case (attachment0,attachment1) of
+                            (Nothing,Nothing) -> do
+                                mask <- getObjectPermMask target cMaskOwner
+                                ownerTarget <- getPrimOwner target
+                                owner <- getPrimOwner oid
+                                if mask .&. cPermModify /= 0 && owner == ownerTarget 
+                                   then do
+                                        let (newLinkset,deleteKey) = if parent 
+                                                then ((link:link':links') ++ links, link')
+                                                else ((link':link:links) ++ links', link)
+                                        lift $ setObjects (M.insert (head newLinkset) (LSLObject newLinkset) $ M.delete deleteKey objects)
+                                        t <- lift getTick
+                                        lift $ putWorldEvent t (mkChangedEvent (head newLinkset) cChangedLink)
+                                    else lift $ logFromScript info "llCreateLink: no modify permission on target"
+                            _ -> lift $ logFromScript info ("llCreateLink: can't change links of attached object")
+            else lift $ logFromScript info ("llCreateLink: no permission to change links")
+        ) >> continueWith VoidVal
+    where parent = iparent /= 0
+
+llDie info@(ScriptInfo oid _ _ pk _) [] =
+     runErrPrim oid (EvalIncomplete,VoidVal) $ do
+         attachment <- getPrimAttachment oid
+         case attachment of
+             Nothing -> do
+                     objects <- lift getObjects
+                     LSLObject (links) <- M.lookup oid objects
+                     allScriptInfo <- mapM getPrimScriptInfo links
+                     let primsWithScriptNames = zip links (map (map (fst . inventoryItemNameKey . fst)) allScriptInfo)
+                     let skeys = concat $ map ( \ (k,list) -> map ((,)k) list) primsWithScriptNames
+                     lift $ mapM_ delScript skeys
+                     lift $ mapM_ (\ link -> (getPrims >>= return . M.delete link >>= setPrims)) links
+                     lift $ setObjects (M.delete oid objects)
+                     lift $ logFromScript info ("object, and therefore this script, is dying")
+                     return (EvalComplete Nothing,VoidVal)
+                 where delScript (k,s) = getWorldScripts >>= return . M.delete (k,s) >>= setWorldScripts
+             _ -> do lift $ logFromScript info ("llDie: attachment cannot die") 
+                     return (EvalIncomplete,VoidVal)
+        
+llAttachToAvatar info@(ScriptInfo oid _ sid pk _) [IVal attachPoint] =
+    if attachPoint `elem` validAttachmentPoints then
+            runErrPrim pk () (do
+                script <- (lift getWorldScripts >>= M.lookup (pk,sid))
+                attachment <- getPrimAttachment oid
+                case attachment of
+                    Just _ -> lift $ logFromScript info "llAttachToAvatar: already attached"
+                    Nothing ->
+                        case scriptLastPerm script of
+                            Nothing -> lift $ logFromScript info "llAttachToAvatar: no permission to attach"
+                            Just k -> do
+                                owner <- getPrimOwner pk
+                                if (k /= pk)
+                                    then lift $ putChat (Just 20.0) pk 0 ("Script trying to attach to someone other than owner!")
+                                    else do 
+                                        avatars <- lift getWorldAvatars
+                                        let av = M.lookup k avatars
+                                        case av of 
+                                            Nothing -> lift $ logFromScript info ("llAttatchToAvatar: avatar not present in sim")
+                                            Just av ->
+                                                let attachments = avatarAttachments av in
+                                                    case IM.lookup attachPoint attachments of
+                                                        Nothing -> let av' = av { avatarAttachments = IM.insert attachPoint oid attachments } in
+                                                            do lift $ setWorldAvatars (M.insert k av' avatars)
+                                                               lift $ setPrimAttachment oid (Just $ Attachment k attachPoint)
+                                                        Just _ -> lift $ logFromScript info ("llAttachToAvatar: attachment point already occupied")
+            ) >> continueWith VoidVal
+        else logFromScript info ("llAttachToAvatar: invalid attachment point: " ++ show attachPoint) >> continueWith VoidVal
+
+llGetAttached info@(ScriptInfo oid _ _ _ _) [] = 
+    runErrPrim oid 0 (getPrimAttachment oid >>= return . maybe 0 attachmentPoint) >>= continueWith . IVal
+    
+llGetPermissionsKey (ScriptInfo _ _ sid pk _) [] =
+    fromErrorT nullKey (lift getWorldScripts >>= M.lookup (pk,sid) >>= return . fromMaybe nullKey . scriptLastPerm) >>= continueWith . KVal
+    
+llGetPermissions (ScriptInfo _ _ sid pk _) [] =  
+    fromErrorT 0 (getPermissions pk sid) >>= continueWith . IVal
+
+getPermissions pk s = do
+    script <- (lift getWorldScripts >>= M.lookup (pk,s))
+    case scriptLastPerm script of
+        Nothing -> return 0
+        Just k -> M.lookup k (scriptPermissions script)
 
 llRequestPermissions (ScriptInfo _ _ sid pk _) [KVal k, IVal mask] =
     do avatars <- getWorldAvatars
-       case lookup k avatars of
+       case M.lookup k avatars of
            Nothing -> logAMessage LogInfo (pk ++ ":" ++ sid) ("Invalid permissions request: no such avatar: " ++ k)
            _ -> getTick >>= flip putWorldEvent (PermissionRequestEvent pk sid k mask)
        continueWith VoidVal
@@ -465,7 +506,9 @@ setPos key v = setPrimPosition key (vVal2Vec v)
 
 llGetOwner info [] = 
     let k = scriptInfoPrimKey info in (runErrPrim k nullKey $ getPrimOwner k) >>= continueWith . KVal
-           
+llGetCreator info [] =
+    let k = scriptInfoPrimKey info in runErrPrim k nullKey (getPrimCreator k) >>= continueWith . KVal
+    
 llGetLinkKey (ScriptInfo oid _ _ _ _) [IVal link] = do
     result <- runAndLogIfErr ("object " ++ oid ++ " or link " ++ show link ++ "not found") nullKey $ do
         LSLObject pkeys <- getObject oid
@@ -485,7 +528,7 @@ llGetLinkName (ScriptInfo oid _ _ _ _) [IVal link] = do
 -- TODO: no concept of online/offline for av           
 llKey2Name info [KVal k] =
     do avs <- getWorldAvatars
-       case lookup k avs of
+       case M.lookup k avs of
            Just av -> continueWith $ SVal (avatarName av)
            _ -> do
                prims <- getPrims
@@ -497,6 +540,7 @@ llOwnerSay info [SVal s] =
        continueWith VoidVal
        
 llGetPos (ScriptInfo _ _ _ pk _) [] = getPos pk >>= continueWith
+llGetRootPosition (ScriptInfo oid _ _ _ _) [] = getPos oid >>= continueWith
 
 llGetLocalPos (ScriptInfo oid _ _ pk _) [] | oid == pk = getPos oid >>= continueWith
                                            | otherwise =
@@ -580,6 +624,17 @@ llGetTextureRot (ScriptInfo _ _ _ pkey _) [IVal face] =
         
 llSetTexture (ScriptInfo _ _ _ pkey _) [SVal texture,IVal face] = setTexture texture face pkey
 
+-- TODO: worry about texture permissions
+llGetTexture (ScriptInfo _ _ _ pkey _) [IVal face] =
+    let face' = if face == -1 then 0 else face in
+        runErrFace pkey face "" (do
+            info <- getPrimFaceTextureInfo pkey face
+            invTextures <- getPrimTextureInfo pkey
+            let tname = textureName info
+            case find ((tname==) . snd . inventoryItemNameKey . fst) invTextures of
+                 Nothing -> return tname
+                 Just (idInfo,_) -> return $ fst $ inventoryItemNameKey idInfo) >>= continueWith . SVal
+                 
 llSetLinkTexture (ScriptInfo oid pid _ _ _) [IVal link, SVal texture,IVal face] = do
     pks <- getTargetPrimKeys oid link pid
     mapM (setTexture texture face) pks
@@ -677,15 +732,16 @@ llSetObjectDesc (ScriptInfo _ _ _ pkey _) [SVal desc] =
     setPrimDescription pkey (take 127 desc) >> continueWith VoidVal
     
 llGetObjectPermMask (ScriptInfo oid _ _ _ _) [IVal maskId] =
-    do result <- runAndLogIfErr ("object " ++ oid ++ " not found") (IVal 0) $ do 
-           masks <- getPrimPermissions oid
-           let base = if null masks then 0x0008e000 else masks !! 0
-           let n = length masks
-           let mask = if maskId < n then masks !! maskId else 
-                          if maskId == 3 then 0 else base
-           return (IVal mask)
-       continueWith result
-       
+    do result <- runAndLogIfErr ("object " ++ oid ++ " not found") 0 (getObjectPermMask oid maskId) 
+       continueWith $ IVal result
+
+getObjectPermMask oid maskId = do
+       masks <- getPrimPermissions oid
+       let base = if null masks then 0x0008e000 else masks !! 0
+       let n = length masks
+       return (if maskId `elem` [0..(n-1)] then masks !! maskId else 
+                      if maskId == 3 then 0 else base)
+          
 llGetScale (ScriptInfo _ _ _ pkey _) [] =
     runErrPrim pkey (1.0, 1.0, 1.0) (getPrimScale pkey) >>= continueWith . vec2VVal
     
@@ -700,7 +756,7 @@ llGetBoundingBox _ [KVal k] =
     do 
         logAMessage LogInfo "sim" "note: llGetBoundingBox does not return accurate results (yet)"
         avatars <- getWorldAvatars
-        case lookup k avatars of
+        case M.lookup k avatars of
             Just avatar -> let pos = avatarPosition avatar in
                 continueWith (LVal $ map (vec2VVal . (add3d pos)) [(-1.0,-1.0,-1.0),(1.0,1.0,1.0)])
             Nothing -> do
@@ -1023,7 +1079,7 @@ llGetObjectDetails _ [KVal k, LVal params] =
          continueWith $ LVal result
      where getAvatarDetails k params = 
                do  avs <- lift getWorldAvatars
-                   av <- lookupM k avs
+                   av <- M.lookup k avs
                    return $ map (avq av) params
                where avq av i | i == llcObjectName = SVal $ avatarName av
                               | i == llcObjectDesc = SVal ""
@@ -1069,7 +1125,7 @@ addToLandACLList aclType aclFromParcel aclIntoParcel info@(ScriptInfo _ _ _ pk _
         whenParcelPermitted info pk $ \ regionIndex parcelIndex parcel -> do
             lift $ runAndLogIfErr ("attempt to change " ++ aclType ++ " unknown avatar " ++ ak) parcel $ do
                 avs <- lift getWorldAvatars
-                _ <- lookupM ak avs
+                _ <- M.lookup ak avs
                 when (duration < 0.0) $ lift $ logFromScript info (aclType ++ " change attempted with invalid duration: " ++ show duration)
                 t <- lift getTick
                 let acl = (ak, if duration == 0 then Nothing else Just $ t + durationToTicks duration)
@@ -1088,7 +1144,101 @@ llAddToLandBanList info args =
     let aclFromParcel = parcelBanList
         aclIntoParcel = (\ parcel list -> parcel { parcelBanList = list })
     in addToLandACLList "ban" aclFromParcel aclIntoParcel info args
+
+llSound info@(ScriptInfo _ _ _ pk _) [SVal sound, FVal vol, IVal q, IVal loop] =
+    runErrPrim pk (EvalIncomplete, VoidVal) $ do 
+        lift $ logFromScript info ("call to deprecated function 'llSound'")
+        sounds <- getPrimSoundInfo pk
+        when (isNothing $ findByInvName sound sounds) $ lift $ logFromScript info ("sound " ++ sound ++ " does not exist")
+        continueWith VoidVal
+
+llGetKey (ScriptInfo _ _ _ pk _) [] = continueWith $ KVal pk
+
+llGetOwnerKey info@(ScriptInfo _ _ _ pk _) [KVal k] = 
+    runErrPrim pk k (do
+        regionIndex <- getPrimRegion pk
+        mRegionIndex  <- fromErrorT Nothing (getPrimRegion k >>= return . Just)
+        case mRegionIndex of 
+            Nothing -> (lift $ logFromScript info "llGetOwnerKey: object key not found") >> return k
+            Just regionIndex' | regionIndex /= regionIndex' -> (lift $ logFromScript info "llGetOwnerKey: object in different simulator") >> return k
+                              | otherwise -> getPrimOwner k
+    ) >>= continueWith . KVal
     
+llGetLinkNumber (ScriptInfo oid pid _ pk _) [] =
+     if pid /= 0 then continueWith (IVal $ pid + 1) else
+         runErrPrim oid 0 (do
+             LSLObject links <- getObject oid
+             return (if length links == 1 then 0 else 1)
+         ) >>= continueWith . IVal
+        
+llGetUnixTime (ScriptInfo _ _ _ _ _) [] = 
+    getUnixTime >>= continueWith . IVal
+
+llGetTimestamp (ScriptInfo _ _ _ _ _) [] = do
+    cal <- getTimeOfDay >>= return . toUTCTime
+    continueWith $ SVal $ printf "%04d-%02d-%02dT%02d:%02d:%02.6f"
+         (ctYear cal) (1 + (fromEnum $ ctMonth cal)) (ctDay cal) (ctHour cal) (ctMin cal) 
+         (((fromIntegral $ ctSec cal) / (10.0^12 * (fromIntegral $ ctPicosec cal))) :: Float)
+         
+llGetDate (ScriptInfo _ _ _ _ _) [] = getUTCDate >>= continueWith . SVal
+llGetGMTclock (ScriptInfo _ _ _ _ _) [] = do
+    cal <- getTimeOfDay >>= return . toUTCTime
+    continueWith $ IVal $ (24 * ctHour cal) + (60 * ctMin cal) + (ctSec cal)
+    
+llGetWallclock (ScriptInfo _ _ _ _ _) [] = do
+    cal <- getLocalTimeOfDay (-8) >>= return . toUTCTime
+    continueWith $ IVal $ (24 * ctHour cal) + (60 * ctMin cal) + (ctSec cal)
+llGetTimeOfDay (ScriptInfo _ _ _ _ _) [] = do
+    t <- getTick
+    continueWith $ FVal $ (ticksToDuration (t `mod` durationToTicks 4.0))
+getUnixTime :: (Monad (StateT (World a) a), Monad a) => StateT (World a) a Int
+getUnixTime = (liftM2 (+) (getWorldZeroTime) (getTick >>= return . floor . ticksToDuration))
+getTimeOfDay :: (Monad (StateT (World a) a), Monad a) => StateT (World a) a ClockTime
+getTimeOfDay = getUnixTime >>= return . (flip TOD 0) . fromIntegral 
+
+getLocalTimeOfDay offset = getTimeOfDay >>= return . (addToClockTime (TimeDiff 0 0 0 offset 0 0 0))
+    
+getUTCDate :: (Monad (StateT (World a) a), Monad a, PrintfType (Int -> Int -> Int -> b)) => StateT (World a) a b
+getUTCDate = do
+    cal <- getTimeOfDay >>= return . toUTCTime
+    return $ printf "%04d-%02d-%02d" (ctYear cal) (1 + fromEnum (ctMonth cal)) (ctDay cal)    
+
+llGetRegionFPS _ _ = continueWith $ FVal 45.0
+llGetRegionTimeDilation _ _ = continueWith $ FVal 1.0
+
+llGetTime (ScriptInfo _ _ sid pk _) [] = 
+     runErrPrim pk 0 (do
+         t <- lift getTick
+         script <- lift getWorldScripts >>= M.lookup (pk,sid)
+         return $ ticksToDuration (t - scriptLastResetTick script)
+     ) >>= continueWith . FVal
+
+getAndResetTick pk sid =
+    do
+        scripts <- lift getWorldScripts
+        script <- M.lookup (pk,sid) scripts
+        let t = scriptLastResetTick script
+        t' <- lift getTick
+        lift $ setWorldScripts (M.insert (pk,sid) (script { scriptLastResetTick = t' } ) scripts)
+        return $ t' - t
+    
+llGetAndResetTime (ScriptInfo _ _ sid pk _) [] =
+    runErrPrim pk 0 (getAndResetTick pk sid) >>= continueWith . FVal . ticksToDuration
+    
+llResetTime (ScriptInfo _ _ sid pk _) [] =
+    runErrPrim pk 0 (getAndResetTick pk sid) >> continueWith VoidVal
+    
+llSetText info [SVal text, VVal r g b, FVal alpha] = setText "llSetText" 254 info text
+llSetSitText info [SVal text] = setText "llSetSitText" 9 info text
+llSetTouchText info [SVal text] = setText "llSetTouchText" 9 info text
+
+setText func lim info text =
+    do logFromScript info (func ++ ": setting text to " ++ text)
+       when (length text > lim) $ logFromScript info (func ++ ": text exceeds " ++ show lim ++ " character limit")
+       continueWith VoidVal
+
+llGetScriptName (ScriptInfo _ _ sid _ _) [] = continueWith (SVal sid)
+
 continueWith val = return (EvalIncomplete,val)
 
 -- all the predefined functions for which implementations have been created
@@ -1099,15 +1249,34 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llAddToLandPassList",llAddToLandPassList),
         ("llAdjustSoundVolume",llAdjustSoundVolume),
         ("llAllowInventoryDrop",llAllowInventoryDrop),
+        ("llAttachToAvatar",llAttachToAvatar),
         ("llAvatarOnSitTarget",llAvatarOnSitTarget),
+        ("llBreakAllLinks",llBreakAllLinks),
+        ("llBreakLink",llBreakLink),
+        ("llCloud",llCloud),
+        ("llCreateLink",llCreateLink),
+        ("llDie",llDie),
+        ("llEjectFromLand",llEjectFromLand),
         ("llFrand",llFrand),
         ("llGetAlpha",llGetAlpha),
+        ("llGetAndResetTime", llGetAndResetTime),
+        ("llGetAttached",llGetAttached),
         ("llGetBoundingBox",llGetBoundingBox),
         ("llGetColor",llGetColor),
+        ("llGetCreator",llGetCreator),
+        ("llGetDate",llGetDate),
+        ("llGetGMTclock",llGetGMTclock),
+        ("llGetInventoryCreator",llGetInventoryCreator),
+        ("llGetInventoryKey",llGetInventoryKey),
+        ("llGetInventoryName",llGetInventoryName),
+        ("llGetInventoryNumber",llGetInventoryNumber),
+        ("llGetInventoryType",llGetInventoryType),
+        ("llGetKey",llGetKey),
         ("llGetLocalPos",llGetLocalPos),
         ("llGetNumberOfPrims",llGetNumberOfPrims),
         ("llGetNumberOfSides",llGetNumberOfSides),
         ("llGetLinkKey",llGetLinkKey),
+        ("llGetLinkNumber", llGetLinkNumber),
         ("llGetLocalRot", llGetLocalRot),
         ("llGetObjectDesc", llGetObjectDesc),
         ("llGetObjectDetails", llGetObjectDetails),
@@ -1115,14 +1284,27 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llGetObjectPermMask", llGetObjectPermMask),
         ("llGetObjectPrimCount", llGetObjectPrimCount),
         ("llGetOwner", llGetOwner),
+        ("llGetOwnerKey",llGetOwnerKey),
+        ("llGetPermissions",llGetPermissions),
+        ("llGetPermissionsKey",llGetPermissionsKey),
         ("llGetPos", llGetPos),
         ("llGetPrimitiveParams", llGetPrimitiveParams),
+        ("llGetRegionFPS", llGetRegionFPS),
+        ("llGetRegionTimeDilation", llGetRegionTimeDilation),
         ("llGetRot",llGetRot),
+        ("llGetRootPosition",llGetRootPosition),
         ("llGetRootRotation",llGetRootRotation),
         ("llGetScale", llGetScale),
+        ("llGetScriptName", llGetScriptName),
+        ("llGetTexture", llGetTexture),
         ("llGetTextureOffset", llGetTextureOffset),
         ("llGetTextureRot", llGetTextureRot),
         ("llGetTextureScale", llGetTextureScale),
+        ("llGetTime",llGetTime),
+        ("llGetTimeOfDay",llGetTimeOfDay),
+        ("llGetTimestamp",llGetTimestamp),
+        ("llGetUnixTime",llGetUnixTime),
+        ("llGetWallclock",llGetWallclock),
         ("llKey2Name", llKey2Name),
         ("llListRandomize",llListRandomize),
         ("llListen", llListen),
@@ -1132,6 +1314,7 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llOwnerSay", llOwnerSay),
         ("llRegionSay", llRegionSay),
         ("llRequestPermissions",llRequestPermissions),
+        ("llResetTime",llResetTime),
         ("llSay",llSay),
         ("llSetAlpha", llSetAlpha),
         ("llSetColor", llSetColor),
@@ -1139,19 +1322,25 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llSetLinkColor",llSetLinkColor),
         ("llSetLinkPrimitiveParams",llSetLinkPrimitiveParams),
         ("llSetLinkTexture",llSetLinkTexture),
+        ("llSetLocalRot",llSetLocalRot),
         ("llSetObjectName",llSetObjectName),
         ("llSetObjectDesc",llSetObjectDesc),
         ("llSetPos",llSetPos),
         ("llSetPrimitiveParams",llSetPrimitiveParams),
         ("llSetRot",llSetRot),
-        ("llSetLocalRot",llSetLocalRot),
         ("llSetScale",llSetScale),
+        ("llSetSitText",llSetSitText),
+        ("llSetText",llSetText),
+        ("llSetTouchText",llSetTouchText),
         ("llSitTarget",llSitTarget),
         ("llShout",llShout),
         ("llSleep", llSleep),
         ("llSetTimerEvent",llSetTimerEvent),
+        ("llSound",llSound),
         ("llUnSit",llUnSit),
-        ("llWhisper",llWhisper)
+        ("llWhisper",llWhisper),
+        ("llWind",llWind),
+        ("llWater",llWater)
     ] ++ internalLLFuncs)
     
 allFuncs = (map (\ (name,_,_) -> name) funcSigs)
@@ -1177,15 +1366,6 @@ niceShowWorld w = niceShowsWorld w ""
     
 addScript prim name = prim { primScripts = (name:(primScripts prim)) }
          
--- data Listener = Listener {
---                        listenerPrimKey :: String,
---                        listenerScriptName :: String,
---                        listenerChannel :: Int,
---                        listenerName :: String,
---                        listenerKey :: String,
---                        listenerMsg :: String }
---     deriving (Show)
-    
 
 -- should monadify further...
 getPrimInfo pkey =
@@ -1206,23 +1386,6 @@ getPrimInfo pkey =
 
 maybeM m = case m of Nothing -> fail "nothing"; (Just v) -> return v
 
--- evalErrorT :: ErrorT String m v -> m (Either String v)
--- evalErrorT = runErrorT
-
--- fromErrorT def val = evalErrorT val >>= (return . either (const def) id)
---     
--- fromErrorTWithErrAction action def val = do
---     result <- evalErrorT val
---     case result of 
---         Left s -> action s >> return def
---         Right v -> return v
-
--- runAndLogIfErr msg def val = do
---     result <- evalErrorT val
---     case result of
---         Left s -> logAMessage LogWarn "sim" (msg ++ " (" ++ s ++ ")") >> return def
---         Right v -> return v
-
 pushEvents oid pid e = do
     fromErrorT () $ do
             objects <- lift getObjects
@@ -1230,19 +1393,19 @@ pushEvents oid pid e = do
             key <- lookupByIndex pid (primKeys o)
             prims <- lift $ getPrims
             p <- M.lookup key prims
-            lift $ mapM_ (pushEvent e key) (primScripts p)
+            lift $ mapM_ (pushEvent e key) ((inventoryItemNames . primScripts) p)
     
 pushEvent e key sid =
     do scripts <- getWorldScripts
        case M.lookup (key,sid) scripts of
            Nothing -> logAMessage LogWarn "sim" ("no such script: " ++ (show (key, sid)))
-           Just (s,q) -> setWorldScripts (M.insert (key,sid) (s,q ++ [e]) scripts)
+           Just script -> setWorldScripts (M.insert (key,sid) (script { scriptEventQueue = (scriptEventQueue script) ++ [e] } ) scripts)
 
 pushEventToPrim e key =
     do prims <- getPrims
        case M.lookup key prims of
            Nothing -> logAMessage LogWarn "sim" ("no such prim: " ++ key)
-           Just p -> mapM_ (pushEvent e key) (primScripts p)
+           Just p -> mapM_ (pushEvent e key) ((inventoryItemNames . primScripts) p)
            
 pushEventToObject e key =
     do objects <- getObjects
@@ -1274,10 +1437,11 @@ newWorld slice maxt iq = World {
                wlibrary = [],
                wscripts = [],
                worldDB = emptyDB,
-               worldAvatars = [],
+               worldAvatars = M.empty,
                worldBreakpointManager = emptyBreakpointManager,
                worldSuspended = Nothing,
-               worldRegions = M.empty
+               worldRegions = M.empty,
+               worldZeroTime = 0
            }
            
 newWorld' slice maxt iq lib scripts avatars = 
@@ -1298,36 +1462,6 @@ addObjectToInventory name obj world = world { inventory = (name,obj):(inventory 
 ticksPerSecond :: Int
 ticksPerSecond = 1000
 
--- data WorldEventType = CreatePrim { wePrimName :: String, wePrimKey :: String }
---                     | AddScript (String,String) String Bool -- script, prim key, activate
---                     | ResetScript String String -- prim key, script name
---                     | ResetScripts String -- object name
---                     | WorldSimEvent { worldSimEventName :: String, worldSimEventArgs :: [SimEventArg] }
---                     | Chat { chatChannel :: Int, chatterName :: String, chatterKey :: String, chatMessage :: String,
---                              chatLocation :: ((Int,Int),(Float,Float,Float)),
---                              chatRange :: Maybe Float }
---                     | TimerEvent { timerEventInterval :: Float,
---                                    timerAddress :: (String,String) }
---                     | PermissionRequestEvent { permissionRequestPrim :: String,
---                                                permissionRequestScript :: String,
---                                                permissionRequestAgent :: String,
---                                                permissionRequestMask :: Int }
---     deriving (Show)
---     
--- type WorldEvent = (Int,WorldEventType) -- time, event
-
--- type WorldEventQueue = [WorldEvent]
-
--- takeWQ :: Int -> WorldEventQueue -> (Maybe WorldEventType,WorldEventQueue)
--- takeWQ i [] = (Nothing,[])
--- takeWQ i ((j,we):wes) | i >= j = (Just we,wes)
---                       | otherwise = (Nothing,wes)
-
--- putWQ tick we wes = before ++ ((tick,we):after)
---     where (before,after) = break ((>tick).fst) wes
-
--- putManyWQ [] wq = wq
--- putManyWQ ((tick,we):wes) wq = putWQ tick we (putManyWQ wes wq)
 
 putWorldEvent tick we = 
     do weq <- getWQueue
@@ -1339,18 +1473,6 @@ checkBp bp sm =
         setWorldBreakpointManager bpm'
         return (result,sm')
        
--- logAMessage logLevel source s =
---     do log <- getMsgLog
---        tick <- getTick
---        let message = LogMessage tick logLevel source s 
---        setMsgLog (message:log)
-
--- logTrace source s =
---     do log <- getMsgLog
---        tick <- getTick
---        let message = LogMessage tick LogTrace source s 
---        setMsgLog (message:log)
-              
 updateObject f name = 
     do objects <- getObjects
        case M.lookup name objects of
@@ -1422,17 +1544,18 @@ processEvent (CreatePrim name key) =
        setObjects (M.insert key (LSLObject [key]) objects)
 processEvent (AddScript (name,script) key active) =
        do scripts <- getWScripts
+          t <- getTick
           case lookup script scripts of
               Nothing -> logAMessage LogWarn "sim" ("no such script: " ++ script)
               Just (Invalid s) -> do
-                  updatePrim (\ p -> return $ addScript p name) key
+                  updatePrim (\ p -> return $ addScript p (scriptInventoryItem name)) key
                   scripts <- getWorldScripts
-                  setWorldScripts (M.insert (key,name) (Invalid s,[]) scripts)
+                  setWorldScripts (M.insert (key,name) (Script (Invalid s) M.empty Nothing t t []) scripts)
               Just (Valid code) -> do
-                  updatePrim (\ p -> return $ addScript p name) key
+                  updatePrim (\ p -> return $ addScript p (scriptInventoryItem name)) key
                   let sstate = initLSLScript code
                   scripts <- getWorldScripts
-                  setWorldScripts (M.insert (key,name) (Valid sstate,[Event "state_entry" [] []]) scripts)
+                  setWorldScripts (M.insert (key,name) (Script (Valid sstate) M.empty Nothing t t [Event "state_entry" [] []]) scripts)
 processEvent chat@(Chat chan name key msg location range) =
     do listeners <- getListeners 
        locatedListeners <- mapM locateListener (map snd listeners)
@@ -1450,13 +1573,13 @@ processEvent (WorldSimEvent name args) =
         Nothing -> logAMessage LogWarn "sim" ("event " ++ name ++ " not understood")
         Just def -> handleSimInputEvent def args
 processEvent (PermissionRequestEvent pk sname ak mask) = 
-    do  db <- getWorldDB
-        let db' = insertDB ["script","permission",pk,sname,"avatar"] (KVal ak) $
-                  insertDB ["script","permission",pk,sname,"mask"] (IVal mask) $
-                  insertDB ["script","permission",pk,sname,"lastavatar"] (KVal ak) $
-                  insertDB ["script","permission",pk,sname,"lastmask"] (IVal mask) db
-        setWorldDB db'
-        getTick >>= flip putWorldEvent (mkRunTimePermissionsEvent pk sname mask)
+    runAndLogIfErr ("can't find prim/script: " ++ pk ++ "/" ++ sname) () $ do
+        scripts <- lift getWorldScripts
+        script <- M.lookup (pk,sname) scripts
+        let script' = script { scriptPermissions = M.insert ak mask (scriptPermissions script), scriptLastPerm = Just ak }
+        lift $ setWorldScripts (M.insert (pk,sname) script' scripts)
+        t <- lift getTick
+        lift $ putWorldEvent t (mkRunTimePermissionsEvent pk sname mask)
 processEvent evt@(TimerEvent interval (primKey,scriptName)) =
     do pushEvent (Event "timer" [] []) primKey scriptName
        t <- getTick
@@ -1489,8 +1612,8 @@ findAndRunScript scriptKey =
        case M.lookup scriptKey scripts of
           Nothing -> return ()
           Just script -> checkAndRunScript scriptKey script
-checkAndRunScript _ (Invalid _,_) = return ()
-checkAndRunScript k@(pkey,sname) (Valid img, q) =
+checkAndRunScript _ (Script (Invalid _) _ _ _ _ _) = return ()
+checkAndRunScript k@(pkey,sname) (Script (Valid img) _ _ _ _ q) =
     do  pInfo <- getPrimInfo pkey
         suspenseInfo <- getWorldSuspended
         case suspenseInfo of
@@ -1512,10 +1635,15 @@ runScript parent index pkey sname primName img q =
            Left s -> logAMessage LogWarn "sim" ("execution error in script " ++ "(" ++ pkey ++ "," ++ sname ++ ") ->" ++ s)
            Right (img'',q') -> do
                scripts <- getWorldScripts
-               setWorldScripts (M.insert (pkey,sname) (Valid img'',q') scripts)
-               case executionState img'' of
-                   Suspended bp -> setWorldSuspended (Just (pkey,sname))
-                   _ -> setWorldSuspended Nothing
+               let result = M.lookup (pkey,sname) scripts
+               case result of
+                   Nothing -> do logAMessage LogInfo "sim" ("script seems to have disappeared while executing (result of llDie?)")
+                   Just script -> do
+                       let script' = script { scriptImage = Valid img'', scriptEventQueue = q' }
+                       setWorldScripts (M.insert (pkey,sname) script' scripts)
+                       case executionState img'' of
+                           Suspended bp -> setWorldSuspended (Just (pkey,sname))
+                           _ -> setWorldSuspended Nothing
 
 simulate :: Monad m => WorldM m ()
 simulate =
@@ -1565,7 +1693,7 @@ stateInfoFromWorld world =
     SimStateInfo {
         simStateInfoTime = tick world,
         simStateInfoPrims = map (\ p -> (primKey p, primName p)) (M.elems $ wprims world),
-        simStateInfoAvatars = map (\ (_,a) -> (avatarKey a, avatarName a)) (worldAvatars world)
+        simStateInfoAvatars = map (\ (_,a) -> (avatarKey a, avatarName a)) (M.toList $ worldAvatars world)
     }
     
 data SimInputEventDefinition m = SimInputEventDefinition { 
@@ -1581,11 +1709,6 @@ data SimParamType = SimParamPrim | SimParamAvatar | SimParamLSLValue LSLType | S
                     SimParamScript
      deriving (Show)
      
--- data SimEvent = SimEvent { simEventName :: String, simEventArgs :: [SimEventArg], simEventDelay :: Int }
---     deriving (Show)
--- data SimEventArg = SimEventArg { simEventArgName :: String, simEventArgValue :: String }
---     deriving (Show)
-    
 initWorld def scripts lib = worldFromFullWorldDef newWorld'' def lib scripts
 
 simStep init@(Left (worldDef, scripts, lib)) command =
@@ -1602,14 +1725,15 @@ simStep (Right world) command =
         newScripts = case worldSuspended world of
              Nothing -> worldScripts world
              Just (k,s) ->
-                 let (Just (Valid img,eq)) = M.lookup (k,s) (worldScripts world) -- TODO: non-exhaustive but MUST succeed
+                 let Just script = M.lookup (k,s) (worldScripts world) 
+                     Valid img = scriptImage script -- TODO: non-exhaustive but MUST succeed
                      stepMgr = stepManager img
                      img' = case command of
                                 SimStep _ _ -> img { stepManager = setStepBreakpoint stepMgr }
                                 SimStepOver _ _ -> img { stepManager = setStepOverBreakpoint stepMgr }
                                 SimStepOut _ _ -> img { stepManager = setStepOutBreakpoint stepMgr }
                                 _ -> img
-                 in M.insert (k,s) (Valid img',eq) (worldScripts world)
+                 in M.insert (k,s) (script { scriptImage = Valid img' }) (worldScripts world)
         simEventToWorldEvent (SimEvent name args delay) = (t + delay, WorldSimEvent name args)
         wq' = putManyWQ (map simEventToWorldEvent events) (wqueue world)
         world' = world { wqueue = wq', 
@@ -1626,7 +1750,8 @@ simStep (Right world) command =
                                 simStatusLog = log,
                                 simStatusState = stateInfoFromWorld world''' }, Right world''')
                 Just (k,s) ->
-                     let (Just (Valid img,eq)) = M.lookup (k,s) (worldScripts world''') -- TODO: non-exhaustive but MUST succeed
+                     let Just script = M.lookup (k,s) (worldScripts world''') -- TODO: non-exhaustive but MUST succeed
+                         Valid img = scriptImage script
                          (Suspended bp) = executionState img -- TODO: non-exhaustive but MUST succeed
                          executionInfo = ExecutionInfo (breakpointFile bp) (breakpointLine bp) (frameInfo img)
                      in
@@ -1677,6 +1802,7 @@ mkRunTimePermissionsEvent pk sn perm =
 mkTouchStartEvent pk nd ak = WorldSimEvent "touch_start" [SimEventArg "Prim Key" pk, SimEventArg "num_detected" nd, SimEventArg "Avatar key" ak]
 mkTouchEvent pk nd ak = WorldSimEvent "touch" [SimEventArg "Prim Key" pk, SimEventArg "num_detected" nd, SimEventArg "Avatar key" ak, SimEventArg "Grab vector" "<0.0,0.0,0.0>"]
 mkTouchEndEvent pk nd ak = WorldSimEvent "touch_end" [SimEventArg "Prim Key" pk, SimEventArg "num_detected" nd, SimEventArg "Avatar key" ak]
+mkChangedEvent oid change = WorldSimEvent "changed" [SimEventArg "Object Key" oid,SimEventArg "change" (show change)]
 
 userTouchEventDef :: Monad m => SimInputEventDefinition m
 userTouchEventDef =
@@ -1712,7 +1838,7 @@ userChatEventDef =
             let f _ [KVal ak, SVal message, IVal chan] = do
                     t <- getTick
                     avatars <- getWorldAvatars
-                    case lookup ak avatars of
+                    case M.lookup ak avatars of
                         Nothing -> logAMessage LogWarn "sim" ("avatar with key " ++ ak ++ " not found")
                         Just av -> do
                             putWorldEvent t $ Chat chan (avatarName av) ak message (avatarRegion av,avatarPosition av) (Just 20.0)
@@ -1762,9 +1888,10 @@ lslEventDescriptorToSimInputDef (name, params, delivery, additionalData, descrip
 
 ----- MISC ----
 durationToTicks dur = floor (1000.0 * dur)
+ticksToDuration ticks = fromInt ticks / 1000.0
 
 logInitialProblems world =
     let log = msglog world
         newLog = [LogMessage 0 LogWarn "init" ("script \"" ++ name ++ "\" in prim " ++ prim ++ " failed to activate because of error: " ++ s) |
-                          ((prim,name),(Invalid (_,s),_)) <- M.toList (worldScripts world) ] ++ log
+                          ((prim,name),Script (Invalid (_,s)) _ _ _ _ _) <- M.toList (worldScripts world) ] ++ log
     in world { msglog = newLog }

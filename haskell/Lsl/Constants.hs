@@ -7,7 +7,36 @@ import Lsl.Util
 
 data Constant = Constant { constName :: String, constVal :: LSLValue }
     deriving (Show)
-    
+
+llcInventoryAll = IVal (-1)
+llcInventoryAnimation = IVal 20
+llcInventoryBodyPart = IVal 13
+llcInventoryClothing = IVal 5
+llcInventoryGesture = IVal 21
+llcInventoryLandmark = IVal 3
+llcInventoryNotecard = IVal 7
+llcInventoryNone = IVal (-1)
+llcInventoryObject = IVal 6
+llcInventoryScript = IVal 10
+llcInventorySound = IVal 1
+llcInventoryTexture = IVal 0
+cPermissionChangeLinks = 0x80 :: Int
+llcPermissionChangeLinks = IVal cPermissionChangeLinks
+
+cChangedLink = 0x20 :: Int
+llcChangedLink = IVal cChangedLink
+
+cMaskOwner = 1 :: Int
+llcMaskOwner = IVal cMaskOwner
+
+cPermModify = 0x0004000 :: Int
+llcPermModify = IVal cPermModify
+
+validAttachmentPoints = [0..36]::[Int]
+
+cDebugChannel = 2147483647 :: Int
+llcDebugChannel = IVal cDebugChannel
+
 allConstants :: [Constant]
 allConstants = [
     Constant "ACTIVE" (IVal 0x2),
@@ -82,7 +111,7 @@ allConstants = [
     Constant "CHANGED_ALLOWED_DROP" (IVal 0x40),
     Constant "CHANGED_COLOR" (IVal 0x2),
     Constant "CHANGED_INVENTORY" (IVal 0x1),
-    Constant "CHANGED_LINK" (IVal 0x20),
+    Constant "CHANGED_LINK" llcChangedLink,
     Constant "CHANGED_OWNER" (IVal 0x80),
     Constant "CHANGED_REGION" (IVal 0x100),
     Constant "CHANGED_SCALE" (IVal 0x8),
@@ -107,7 +136,7 @@ allConstants = [
     Constant "DATA_SIM_POS" (IVal 5),
     Constant "DATA_SIM_RATING" (IVal 7),
     Constant "DATA_SIM_STATUS" (IVal 6),
-    Constant "DEBUG_CHANNEL" (IVal maxBound),
+    Constant "DEBUG_CHANNEL" llcDebugChannel,
     Constant "DEG_TO_RAD" (FVal 0.01745329238),
     Constant "EOF" (SVal "\n\n\n"),
     Constant "FALSE" (IVal 0),
@@ -116,18 +145,18 @@ allConstants = [
     Constant "HTTP_METHOD" (IVal 0),
     Constant "HTTP_MIMETYPE" (IVal 1),
     Constant "HTTP_VERIFY_CERT" (IVal 3),
-    Constant "INVENTORY_ALL" (IVal (-1)),
-    Constant "INVENTORY_ANIMATION" (IVal 20),
-    Constant "INVENTORY_BODYPART" (IVal 13),
-    Constant "INVENTORY_CLOTHING" (IVal 5),
-    Constant "INVENTORY_GESTURE" (IVal 21),
-    Constant "INVENTORY_LANDMARK" (IVal 3),
-    Constant "INVENTORY_NONE" (IVal (-1)),
-    Constant "INVENTORY_NOTECARD" (IVal 7),
-    Constant "INVENTORY_OBJECT" (IVal 6),
-    Constant "INVENTORY_SCRIPT" (IVal 10),
-    Constant "INVENTORY_SOUND" (IVal 1),
-    Constant "INVENTORY_TEXTURE" (IVal 0),
+    Constant "INVENTORY_ALL" llcInventoryAll,
+    Constant "INVENTORY_ANIMATION" llcInventoryAnimation,
+    Constant "INVENTORY_BODYPART" llcInventoryBodyPart,
+    Constant "INVENTORY_CLOTHING" llcInventoryClothing,
+    Constant "INVENTORY_GESTURE" llcInventoryGesture,
+    Constant "INVENTORY_LANDMARK" llcInventoryLandmark,
+    Constant "INVENTORY_NONE" llcInventoryNone,
+    Constant "INVENTORY_NOTECARD" llcInventoryNotecard,
+    Constant "INVENTORY_OBJECT" llcInventoryObject,
+    Constant "INVENTORY_SCRIPT" llcInventoryScript,
+    Constant "INVENTORY_SOUND" llcInventorySound,
+    Constant "INVENTORY_TEXTURE" llcInventoryTexture,
     Constant "LAND_LARGE_BRUSH" (IVal 3),
     Constant "LAND_LEVEL" (IVal 0),
     Constant "LAND_LOWER" (IVal 2),
@@ -157,7 +186,7 @@ allConstants = [
     Constant "MASK_EVERYONE" (IVal 3),
     Constant "MASK_GROUP" (IVal 2),
     Constant "MASK_NEXT" (IVal 4),
-    Constant "MASK_OWNER" (IVal 1),
+    Constant "MASK_OWNER" llcMaskOwner,
     Constant "NULL_KEY" (SVal "00000000-0000-0000-0000-000000000000"),
     Constant "OBJECT_CREATOR" (IVal 8),
     Constant "OBJECT_DESC" (IVal 2),
@@ -212,7 +241,7 @@ allConstants = [
     Constant "PAY_HIDE" (IVal (-1)),
     Constant "PERMISSION_ATTACH" (IVal 0x20),
     Constant "PERMISSION_CHANGE_JOINTS" (IVal 0x100),
-    Constant "PERMISSION_CHANGE_LINKS" (IVal 0x80),
+    Constant "PERMISSION_CHANGE_LINKS" llcPermissionChangeLinks,
     Constant "PERMISSION_CHANGE_PERMISSIONS" (IVal 0x200),
     Constant "PERMISSION_CONTROL_CAMERA" (IVal 0x800),
     Constant "PERMISSION_DEBIT" (IVal 0x2),
@@ -223,7 +252,7 @@ allConstants = [
     Constant "PERMISSION_TRIGGER_ANIMATION" (IVal 0x10),
     Constant "PERM_ALL" (IVal 0x7FFFFFFF),
     Constant "PERM_COPY" (IVal 0x8000),
-    Constant "PERM_MODIFY" (IVal 0x4000),
+    Constant "PERM_MODIFY" llcPermModify,
     Constant "PERM_MOVE" (IVal 0x80000),
     Constant "PERM_TRANSFER" (IVal 0x2000),
     Constant "PI" (FVal 3.14159274),

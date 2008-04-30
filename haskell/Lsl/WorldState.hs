@@ -45,7 +45,7 @@ data World m = World {
                     nextListenerId :: Int,
                     wobjects :: Map String LSLObject,
                     wprims :: Map String Prim,
-                    worldScripts :: Map (String,String) (Validity ScriptImage,[Event]), 
+                    worldScripts :: Map (String,String) Script, 
                     inventory :: [(String,LSLObject)],
                     tick :: Int,
                     msglog :: [LogMessage],
@@ -54,40 +54,17 @@ data World m = World {
                     wlibrary :: [(String,Validity LModule)],
                     wscripts :: [(String,Validity CompiledLSLScript)],
                     worldDB :: ValueDB,
-                    worldAvatars :: [(String,Avatar)],
+                    worldAvatars :: Map String Avatar,
                     worldBreakpointManager :: BreakpointManager,
                     worldSuspended :: Maybe (String,String), -- prim-key, script-name, image
-                    worldRegions :: Map (Int,Int) Region
+                    worldRegions :: Map (Int,Int) Region,
+                    worldZeroTime :: Int
                 } deriving (Show)
 
 -- a state monad for the World
 type WorldM m = StateT (World m) m
 
 worldM f = StateT (\ s -> return (f s))
-
--- -- execute a predefined ('ll') function
--- doPredef :: Monad m => String -> ScriptInfo -> [LSLValue] -> WorldM m (EvalResult,LSLValue)
--- doPredef name info@(ScriptInfo oid pid sid pkey event) args =
---     do predefs <- getPredefFuncs
---        -- find the correct function to execute
---        case tryPredefs name pkey sid args predefs of
---            -- if found, execute it
---            Just f -> f info args
---            -- otherwise, perform a default action:
---            -- log the fact that the function was called,
---            -- return a default value
---            Nothing -> do
---                (_,rettype,argtypes) <- findM (\ (x,y,z) -> x == name) funcSigs
---                logAMessage LogDebug (pkey ++ ":" ++ sid) ("unimplemented predefined function called: " ++ renderCall name args)
---                return (EvalIncomplete,case rettype of
---                       LLVoid -> VoidVal
---                       LLInteger -> IVal 0
---                       LLFloat -> FVal 0.0
---                       LLString -> SVal ""
---                       LLKey -> KVal nullKey
---                       LLList -> LVal []
---                       LLVector -> VVal 0.0 0.0 0.0
---                       LLRot -> RVal 0.0 0.0 0.0 1.0)
 
 -- extracting/updating the world state -----------------------------------------------------                   
 queryWorld q = worldM (\w -> (q w, w))
@@ -113,7 +90,7 @@ getObjects :: Monad m => WorldM m (Map String LSLObject)
 getObjects = (queryWorld wobjects)
 getPrims :: Monad m => WorldM m (Map String Prim)
 getPrims = queryWorld wprims
-getWorldScripts :: Monad m => WorldM m (Map (String,String) (Validity ScriptImage, [Event]))
+getWorldScripts :: Monad m => WorldM m (Map (String,String) Script)
 getWorldScripts = queryWorld worldScripts
 getInventory :: Monad m => WorldM m [(String,LSLObject)]
 getInventory = queryWorld inventory
@@ -127,7 +104,7 @@ getRandGen :: Monad m => WorldM m StdGen
 getRandGen = queryWorld randGen
 getWScripts :: Monad m => WorldM m  [(String,Validity CompiledLSLScript)]
 getWScripts = queryWorld wscripts
-getWorldAvatars :: Monad m => WorldM m [(String,Avatar)]
+getWorldAvatars :: Monad m => WorldM m (Map String Avatar)
 getWorldAvatars = queryWorld worldAvatars
 getWorldBreakpointManager :: Monad m => WorldM m BreakpointManager
 getWorldBreakpointManager = queryWorld worldBreakpointManager
@@ -135,6 +112,8 @@ getWorldSuspended :: Monad m => WorldM m (Maybe (String,String))
 getWorldSuspended = queryWorld worldSuspended
 getWorldRegions :: Monad m => WorldM m (Map (Int,Int) Region)
 getWorldRegions = queryWorld worldRegions
+getWorldZeroTime :: Monad m => WorldM m Int
+getWorldZeroTime = queryWorld worldZeroTime
 
 getRegion index = (lift getWorldRegions >>= M.lookup index)
 
@@ -145,6 +124,7 @@ getPrimPosition k = getPrimVal k primPosition
 getPrimParent k = getPrimVal k primParent
 getPrimDescription k = getPrimVal k primDescription
 getPrimOwner k = getPrimVal k primOwner
+getPrimCreator k = getPrimVal k primCreator
 getPrimRotation k = getPrimVal k primRotation
 getPrimScale k = getPrimVal k primScale
 getPrimFaces k = getPrimVal k primFaces
@@ -157,10 +137,33 @@ getPrimTypeInfo k = getPrimVal k primTypeInfo
 getPrimPermissions k = getPrimVal k primPermissions
 getPrimSitTarget k = getPrimVal k primSitTarget
 getPrimSittingAvatar k = getPrimVal k primSittingAvatar
+getPrimAttachment k = getPrimVal k primAttachment
+
+getPrimNotecards k = getPrimVal k notecards
+getPrimLandmarks k = getPrimVal k primLandmarks
+getPrimClothing k = getPrimVal k primClothing
+getPrimGestures k = getPrimVal k primGestures
+getPrimAnimations k = getPrimVal k animations
+getPrimTextures k = getPrimVal k textures
+getPrimSounds k = getPrimVal k sounds
+getPrimBodyParts k = getPrimVal k primBodyParts
+getPrimObjects k = getPrimVal k inventoryObjects
+getPrimScripts k = getPrimVal k primScripts
+
+getInventoryInfo f k = (f k >>= return . inventoryItemInfoMap)
+getPrimNotecardInfo k = getInventoryInfo getPrimNotecards k
+getPrimLandmarkInfo k = getInventoryInfo getPrimLandmarks k
+getPrimClothingInfo k = getInventoryInfo getPrimClothing k
+getPrimBodyPartInfo k = getInventoryInfo getPrimBodyParts k
+getPrimObjectInfo k = getInventoryInfo getPrimObjects k
+getPrimGestureInfo k = getInventoryInfo getPrimGestures k
+getPrimSoundInfo k = getInventoryInfo getPrimSounds k
+getPrimAnimationInfo k = getInventoryInfo getPrimAnimations k
+getPrimTextureInfo k = getInventoryInfo getPrimTextures k
+getPrimScriptInfo k = getInventoryInfo getPrimScripts k
 
 -- TODO: temp until introduce region into Prim definition
-getPrimRegion :: Monad m => a -> m (Int,Int)
-getPrimRegion _ = return (0,0)
+getPrimRegion _ = (lift (return (0 :: Int,0 :: Int)))
 primRegion :: a -> (Int,Int)
 primRegion _ = (0,0)
 
@@ -208,6 +211,7 @@ setPrimTypeInfo k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primTypeInfo
 setPrimPermissions k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primPermissions = v } )
 setPrimSitTarget k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primSitTarget = v })
 setPrimSittingAvatar k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primSittingAvatar = v } )
+setPrimAttachment k v = runErrPrim k () $ updatePrimVal k (\ p -> p { primAttachment = v } )
 
 setRegion regionIndex region = getWorldRegions >>= return . (M.insert regionIndex region) >>= setWorldRegions
 

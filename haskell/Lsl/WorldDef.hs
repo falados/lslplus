@@ -8,6 +8,15 @@ module Lsl.WorldDef(Prim(..),
                     FullWorldDef(..),
                     Region(..),
                     Parcel(..),
+                    InventoryItemIdentification(..),
+                    InventoryItem(..),
+                    InventoryInfo(..),
+                    Script(..),
+                    Attachment(..),
+                    inventoryItemInfoMap,
+                    inventoryItemNames,
+                    scriptInventoryItem,
+                    findByInvName,
                     emptyPrim,
                     primPhantomBit,
                     primPhysicsBit,
@@ -18,19 +27,21 @@ module Lsl.WorldDef(Prim(..),
 
 import Control.Monad
 import Control.Monad.Error
+import qualified Control.Monad.State as SM
 import Data.List
 import qualified Data.Map as M
+import Data.Maybe
 
 import Lsl.Avatar
-import Lsl.DOMProcessing
+import Lsl.DOMProcessing hiding (find)
 import Lsl.Evaluation
-import Lsl.Exec
-import Lsl.Structure
+import Lsl.Exec(ScriptImage,initLSLScript)
+import Lsl.Structure(Validity(..),State(..))
 import Lsl.Type
 import Lsl.ValueDB
-import Lsl.Util
+import Lsl.Util(readM,Permutation3(..),rotationsToQuaternion)
 
-import Text.XML.HaXml hiding (when)
+--import Text.XML.HaXml hiding (when,find)
 
 data FullWorldDef = FullWorldDef {
                         fullWorldDefMaxTime :: Int,
@@ -49,18 +60,39 @@ primPhantomBit = 4
 primPhysicsBit :: Int
 primPhysicsBit = 0
 
+newtype InventoryItemIdentification = InventoryItemIdentification { inventoryItemNameKey :: (String,String) } deriving (Show)
+data InventoryItem a = InventoryItem { inventoryItemIdentification :: InventoryItemIdentification, 
+                                       inventoryItemInfo :: InventoryInfo,
+                                       inventoryItemData :: a } deriving (Show)
+data InventoryInfo  = InventoryInfo {  inventoryInfoCreator :: String,
+                                       inventoryInfoOwner :: String,
+                                       inventoryInfoCopyPerm :: Bool,
+                                       inventoryInfoModifyPerm :: Bool,
+                                       inventoryInfoTransferPerm :: Bool } deriving (Show)
+
+inventoryItemInfoMap = map ( \ item -> (inventoryItemIdentification item, inventoryItemInfo item))
+inventoryItemNames = map (fst . inventoryItemNameKey . inventoryItemIdentification)
+scriptInventoryItem s = InventoryItem (InventoryItemIdentification (s,"")) (InventoryInfo "" "" True True True) ()
+inventoryItemIdentifications = map inventoryItemIdentification
+findByInvName name = find (\ (InventoryItemIdentification (n,_),_) -> n == name)
+
 data Prim = Prim {
                     primName :: String,
                     primKey :: String,
                     primParent :: Maybe String,
                     primDescription :: String,
-                    primScripts :: [String],
-                    notecards :: [(String,[String])],
-                    animations :: [String],
-                    textures :: [String],
-                    sounds :: [String],
-                    inventoryObjects :: [LSLObject],
+                    primScripts :: [InventoryItem ()],
+                    notecards :: [InventoryItem [String]],
+                    animations :: [InventoryItem ()],
+                    textures :: [InventoryItem ()],
+                    sounds :: [InventoryItem ()],
+                    primBodyParts :: [InventoryItem ()],
+                    primClothing :: [InventoryItem ()],
+                    primGestures :: [InventoryItem ()],
+                    primLandmarks :: [InventoryItem ((Int,Int),(Float,Float,Float))],
+                    inventoryObjects :: [InventoryItem LSLObject],
                     primOwner :: String,
+                    primCreator :: String,
                     primPosition :: (Float, Float, Float),
                     primRotation :: (Float, Float, Float, Float),
                     primScale :: (Float, Float, Float),
@@ -75,7 +107,8 @@ data Prim = Prim {
                     primData :: ValueDB,
                     primAllowInventoryDrop :: Bool,
                     primSitTarget :: Maybe ((Float,Float,Float),(Float,Float,Float,Float)),
-                    primSittingAvatar :: Maybe String } deriving (Show)
+                    primSittingAvatar :: Maybe String,
+                    primAttachment :: Maybe Attachment } deriving (Show)
 
 data PrimType = PrimTypeUnknown
               | PrimType {
@@ -97,6 +130,8 @@ data PrimType = PrimTypeUnknown
                 } deriving (Show)
                    
 basicBox = PrimType 9 0 0 (0,0.0,0) (0,0,0) (0,0,0) (0,0,0) 0 (0,0,0) (0,0,0) 0 0 0 Nothing 0
+
+data Attachment = Attachment { attachmentKey :: String, attachmentPoint :: Int } deriving (Show)
 
 data LightInfo = LightInfo {
         lightColor :: (Float,Float,Float),
@@ -146,8 +181,13 @@ emptyPrim name key =
            animations = [],
            textures = [],
            sounds = [],
+           primBodyParts = [],
+           primClothing = [],
+           primGestures = [],
+           primLandmarks = [],
            inventoryObjects = [],
            primOwner = "",
+           primCreator = "",
            primPosition = (0.0,0.0,0.0),
            primRotation = (0.0,0.0,0.0,1.0),
            primScale = (1.0,1.0,1.0),
@@ -162,7 +202,8 @@ emptyPrim name key =
            primData = emptyDB,
            primAllowInventoryDrop = False,
            primSitTarget = Nothing,
-           primSittingAvatar = Nothing }
+           primSittingAvatar = Nothing,
+           primAttachment = Nothing }
 
 data Region = Region {
         regionName :: String,
@@ -181,7 +222,14 @@ defaultRegions :: String -> [((Int,Int),Region)]
 defaultRegions owner = [
     ((0,0), Region { regionName = "Region_0_0", regionParcels = [Parcel "parcel_0" (0,256,0,256) owner [] []] })
     ]
-    
+
+data Script = Script { scriptImage :: Validity ScriptImage,
+                       scriptPermissions :: M.Map String Int,
+                       scriptLastPerm :: Maybe String,
+                       scriptStartTick :: Int,
+                       scriptLastResetTick :: Int,
+                       scriptEventQueue :: [Event] } deriving (Show)
+                       
 worldFromFullWorldDef worldBuilder fwd lib scripts =
     do let primMap = mkPrimMap (fullWorldDefPrims fwd)
        primMap' <- checkObjects primMap (fullWorldDefObjects fwd) -- prove all the prims in all the objects exists
@@ -189,7 +237,7 @@ worldFromFullWorldDef worldBuilder fwd lib scripts =
        return $ worldBuilder (fullWorldDefSliceSize fwd)
                              (fullWorldDefMaxTime fwd)
                              [] lib scripts 
-                             (mkAvatarLookup (fullWorldDefAvatars fwd))
+                             (M.fromList $ mkAvatarLookup (fullWorldDefAvatars fwd))
                              (mkObjectMap (fullWorldDefObjects fwd))
                              primMap'
                              (M.fromList activatedScripts)
@@ -225,10 +273,10 @@ activateScripts scriptIdInfo compiledScripts primMap = mapM (activateScript comp
 activateScript scripts primMap (k@(primKey,invName),(scriptID)) =
     do  script <- fctx ("looking up script " ++ scriptID ++ " failed") $ maybe2Either $ lookup scriptID scripts
         prim <- fctx ("looking up prim " ++ primKey ++ " failed") (M.lookup primKey primMap)
-        when (not (invName `elem` primScripts prim)) $ fail (invName ++ " doesn't exist in prim " ++ primKey)
+        when (isNothing (findByInvName invName $ inventoryItemInfoMap (primScripts prim))) $ fail (invName ++ " doesn't exist in prim " ++ primKey)
         case script of
-            Invalid s -> return (k,(Invalid s,[]))
-            Valid code -> return (k,(Valid $ initLSLScript code,[Event "state_entry" [] []]))
+            Invalid s -> return (k, Script (Invalid s) M.empty Nothing 0 0  [])
+            Valid code -> return (k,Script (Valid $ initLSLScript code) M.empty Nothing 0 0 [Event "state_entry" [] []])
             
 worldElement :: Monad m => ElemAcceptor m FullWorldDef
 worldElement =
@@ -274,6 +322,7 @@ primElement = ElemAcceptor "prim" $
             (key,c2) <- findSimple "key" c1
             (description, c3) <- findSimpleOrDefault "" "description" c2
             (scripts,c4) <- findElement (elementList "scripts" (simpleElement "string")) c3
+            let scripts' = map scriptInventoryItem scripts
             (owner,c5) <- findSimpleOrDefault "" "owner" c4
             (position,c6) <- findOrDefault (128.0,128.0,0.0) (vecAcceptor "position") c5
             (eulerRotation,c7) <- findOrDefault (0.0,0.0,0.0) (vecAcceptor "rotation") c6
@@ -292,13 +341,18 @@ primElement = ElemAcceptor "prim" $
                             primKey = key, 
                             primParent = Nothing,
                             primDescription = description,
-                            primScripts = scripts,
+                            primScripts = scripts',
                             notecards = [], 
                             animations = [],
                             textures = [],
                             sounds = [],
+                            primBodyParts = [],
+                            primClothing = [],
+                            primGestures = [],
+                            primLandmarks = [],
                             inventoryObjects = [],
                             primOwner = owner,
+                            primCreator = owner,
                             primPosition = position,
                             primRotation = rotationsToQuaternion P123 eulerRotation,
                             primScale = scale,
@@ -313,7 +367,8 @@ primElement = ElemAcceptor "prim" $
                             primData = pData,
                             primAllowInventoryDrop = dropAllowed,
                             primSitTarget = Nothing ,
-                            primSittingAvatar = Nothing }
+                            primSittingAvatar = Nothing,
+                            primAttachment = Nothing }
 
 faceAcceptor s = ElemAcceptor s $
     \ (Elem _ _ contents) -> do
