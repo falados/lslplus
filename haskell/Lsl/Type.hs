@@ -27,6 +27,7 @@ module Lsl.Type(
     liftV1,
     liftV2) where
     
+import Control.Monad.Error
 import Lsl.NumberParsing
 import Lsl.Key
 import Lsl.Util
@@ -175,7 +176,7 @@ toSVal (LVal l) =
 comp2Str :: Float -> String
 comp2Str f = printf "%.5f" f
 
-lslValueElement :: Monad m => ElemAcceptor m LSLValue
+lslValueElement :: MonadError String m => ElemAcceptor m LSLValue
 lslValueElement =
     let f e@(Elem _ attrs contents) = do
             valType <- lookupM "class" attrs

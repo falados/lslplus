@@ -1,6 +1,6 @@
 module Lsl.DOMUnitTestDescriptor(testsElement) where
 
-import Control.Monad
+import Control.Monad.Error
 import Data.List
 import Lsl.DOMProcessing hiding (find)
 import Lsl.ExpressionHandler
@@ -11,10 +11,10 @@ import Lsl.Util
 import Debug.Trace
 trace1 v = trace (show v) v
 
-testsElement :: Monad m => ElemAcceptor m [LSLUnitTest]
+testsElement :: MonadError String m => ElemAcceptor m [LSLUnitTest]
 testsElement = elementList "tests" testElement
 
-testElement :: Monad m => ElemAcceptor m LSLUnitTest
+testElement :: MonadError String m => ElemAcceptor m LSLUnitTest
 testElement =
     let f (Elem _ _ contents) =
             do  (nm,contents1) <- findElement nameElement (elementsOnly contents)
@@ -36,10 +36,10 @@ testElement =
                     }
     in ElemAcceptor "lsl-test" f
 
-nameElement :: Monad m => ElemAcceptor m String
+nameElement :: MonadError String m => ElemAcceptor m String
 nameElement = ElemAcceptor "name" simple
 
-entryPointElement :: Monad m => ElemAcceptor m EntryPoint
+entryPointElement :: MonadError String m => ElemAcceptor m EntryPoint
 entryPointElement = 
     let f (Elem _ _ contents) =
           do (fn,contents1) <- findElement fileNameElement (elementsOnly contents)
@@ -51,63 +51,63 @@ entryPointElement =
                    _ -> fail "invalid function/handler path"
     in ElemAcceptor "entryPoint" f  
 
-fileNameElement :: Monad m => ElemAcceptor m String
+fileNameElement :: MonadError String m => ElemAcceptor m String
 fileNameElement = ElemAcceptor "fileName" simple
-pathElement :: Monad m => ElemAcceptor m String
+pathElement :: MonadError String m => ElemAcceptor m String
 pathElement = ElemAcceptor "path" simple
 
-argumentsElement :: Monad m => ElemAcceptor m [LSLValue]
+argumentsElement :: MonadError String m => ElemAcceptor m [LSLValue]
 argumentsElement = 
     let f (Elem _ _ contents) = 
           mapM (matchChoice [lslString, lslInteger, lslFloat, lslVector, lslRotation, lslKey, lslList]) (elementsOnly contents)
     in ElemAcceptor "arguments" f
 
-lslString :: Monad m => ElemAcceptor m LSLValue    
+lslString :: MonadError String m => ElemAcceptor m LSLValue    
 lslString = ElemAcceptor "lsl-string" (\ e -> do
              s <- simple e
              case evaluateExpression LLString s of
                  Just k -> return k
                  Nothing -> fail "invalid content for lsl-string")
-lslKey :: Monad m => ElemAcceptor m LSLValue    
+lslKey :: MonadError String m => ElemAcceptor m LSLValue    
 lslKey = ElemAcceptor "lsl-key" (\ e -> do
              s <- simple e
              case evaluateExpression LLKey s of
                  Just k -> return k
                  Nothing -> fail "invalid content for lsl-key")
-lslInteger :: Monad m => ElemAcceptor m LSLValue    
+lslInteger :: MonadError String m => ElemAcceptor m LSLValue    
 lslInteger = ElemAcceptor "lsl-integer" (\ e -> do
                s <- simple e
                case evaluateExpression LLInteger s of
                    Just f -> return f
                    Nothing -> fail "invalid content for lsl-integer")
-lslFloat :: Monad m => ElemAcceptor m LSLValue
+lslFloat :: MonadError String m => ElemAcceptor m LSLValue
 lslFloat = ElemAcceptor "lsl-float" (\ e -> do
                s <- simple e
                case evaluateExpression LLFloat s of
                    Just f -> return f
                    Nothing -> fail "invalid content for lsl-float")
 
-lslVector :: Monad m => ElemAcceptor m LSLValue    
+lslVector :: MonadError String m => ElemAcceptor m LSLValue    
 lslVector = ElemAcceptor "lsl-vector" (\ e -> do
                s <- simple e
                case evaluateExpression LLVector s of
                    Just f -> return f
                    Nothing -> fail "invalid content for lsl-vector")
-lslRotation :: Monad m => ElemAcceptor m LSLValue    
+lslRotation :: MonadError String m => ElemAcceptor m LSLValue    
 lslRotation = ElemAcceptor "lsl-rotation" (\ e -> do
                s <- simple e
                case evaluateExpression LLRot s of
                    Just f -> return f
                    Nothing -> fail "invalid content for lsl-rotation")
 
-lslList :: Monad m => ElemAcceptor m LSLValue    
+lslList :: MonadError String m => ElemAcceptor m LSLValue    
 lslList =
     let f (Elem _ _ contents) =
           do list <- mapM (matchChoice [lslString,lslInteger,lslKey,lslVector,lslRotation,lslFloat]) (elementsOnly contents)
              return (LVal list)
     in ElemAcceptor "lsl-list" f
 
-lslVoid :: Monad m => ElemAcceptor m LSLValue
+lslVoid :: MonadError String m => ElemAcceptor m LSLValue
 lslVoid = 
     let f (Elem _ _ []) = return VoidVal
         f (Elem name _ _) = fail ("unexpected content in " ++ name ++ " tag.")
@@ -120,19 +120,19 @@ float (Elem name _ [CString _ s _]) =
 float (Elem name _ _) = fail ("invalid content in " ++ name ++ " tag.")
 
 
-xcomponent :: Monad m => ElemAcceptor m Float
+xcomponent :: MonadError String m => ElemAcceptor m Float
 xcomponent = ElemAcceptor "x" float
-ycomponent :: Monad m => ElemAcceptor m Float
+ycomponent :: MonadError String m => ElemAcceptor m Float
 ycomponent = ElemAcceptor "y" float
-zcomponent :: Monad m => ElemAcceptor m Float
+zcomponent :: MonadError String m => ElemAcceptor m Float
 zcomponent = ElemAcceptor "z" float
-scomponent :: Monad m => ElemAcceptor m Float
+scomponent :: MonadError String m => ElemAcceptor m Float
 scomponent = ElemAcceptor "s" float
 
-expectedReturnElement :: Monad m => ElemAcceptor m (Maybe LSLValue)
+expectedReturnElement :: MonadError String m => ElemAcceptor m (Maybe LSLValue)
 expectedReturnElement = maybeSomeVal "expectedReturn"
 
-expectationsElement :: Monad m => ElemAcceptor m FuncCallExpectations
+expectationsElement :: MonadError String m => ElemAcceptor m FuncCallExpectations
 expectationsElement =
     let f (Elem _ _ contents) = do
           (modeString,contents1) <- findElement modeElement (elementsOnly contents)
@@ -149,13 +149,13 @@ expectationsElement =
               }
     in ElemAcceptor "expectations" f
 
-modeElement :: Monad m => ElemAcceptor m String
+modeElement :: MonadError String m => ElemAcceptor m String
 modeElement = ElemAcceptor "mode" simple
 
-callsElement :: Monad m => ElemAcceptor m [((String, [Maybe LSLValue]),LSLValue)]
+callsElement :: MonadError String m => ElemAcceptor m [((String, [Maybe LSLValue]),LSLValue)]
 callsElement = elementList "calls" callElement
     
-callElement :: Monad m => ElemAcceptor m ((String, [Maybe LSLValue]),LSLValue)
+callElement :: MonadError String m => ElemAcceptor m ((String, [Maybe LSLValue]),LSLValue)
 callElement =
     let f (Elem _ _ contents) = do
           (name,contents1) <- findElement (ElemAcceptor "name" simple) (elementsOnly contents)
@@ -164,19 +164,19 @@ callElement =
           return ((name,args),retval)
     in ElemAcceptor "call" f
 
-callArgsElement :: Monad m => ElemAcceptor m [Maybe LSLValue]
+callArgsElement :: MonadError String m => ElemAcceptor m [Maybe LSLValue]
 callArgsElement = elementList "args" (maybeSomeVal "maybe-value")
 
-returnsElement :: Monad m => ElemAcceptor m LSLValue
+returnsElement :: MonadError String m => ElemAcceptor m LSLValue
 returnsElement = someVal "returns"
 
-initialBindingsElement :: Monad m => ElemAcceptor m [(String,LSLValue)]
+initialBindingsElement :: MonadError String m => ElemAcceptor m [(String,LSLValue)]
 initialBindingsElement = elementList "initialBindings" globalBindingElement
 
-finalBindingsElement :: Monad m => ElemAcceptor m [(String,LSLValue)]
+finalBindingsElement :: MonadError String m => ElemAcceptor m [(String,LSLValue)]
 finalBindingsElement = elementList "finalBindings" globalBindingElement
 
-globalBindingElement :: Monad m => ElemAcceptor m (String,LSLValue)
+globalBindingElement :: MonadError String m => ElemAcceptor m (String,LSLValue)
 globalBindingElement =
     let f (Elem _ _ contents) = do
         (name,contents1) <- findElement (ElemAcceptor "name" simple) (elementsOnly contents)

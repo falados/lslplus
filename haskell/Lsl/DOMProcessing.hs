@@ -33,7 +33,7 @@ import Text.XML.HaXml.Pretty
 data Monad m => ElemAcceptor m t = ElemAcceptor { acceptorTag :: String,  acceptorFunc :: (Element Posn -> m t) }
 
 findElement (ElemAcceptor tag acceptor) list =          
-    let find' _ [] = fail ("element not found: " ++ tag)
+    let find' _ [] = throwError ("element not found: " ++ tag)
         find' bs (ce@(CElem (Elem nm _ _) _):cs) | nm == tag  = 
                                                        do  val <- ctxelem acceptor ce
                                                            return (val, reverse bs ++ cs)
@@ -54,22 +54,17 @@ findOrDefault def acceptor list =
 
 findSimpleOrDefault def tag = findOrDefault def (simpleElement tag)
                                                                      
-ctxelem f (CElem e i) =
-    case f e of
-        Left s -> fail ("at " ++ (show i) ++ ": " ++ s)
-        Right v -> return v
+ctxelem f (CElem e i) = catchError (f e) handler
+    where handler s = throwError ("at " ++ (show i) ++ ": " ++ s)
 
-cmatch acceptor (CElem e@(Elem n _ _) i) =
-    case match acceptor e of
-        Left s -> fail ("at " ++ (show i) ++ ": " ++ s)
-        Right v -> return v
+cmatch acceptor (CElem e@(Elem n _ _) i) = catchError (match acceptor e) handler
+    where handler s = throwError ("at " ++ (show i) ++ ": " ++ s)
 
-match acceptor e@(Elem n _ _) | n /= acceptorTag acceptor = fail ("unexpected element " ++ n ++ " (expected " ++ acceptorTag acceptor ++ ")")
+match acceptor e@(Elem n _ _) | n /= acceptorTag acceptor = throwError ("unexpected element " ++ n ++ " (expected " ++ acceptorTag acceptor ++ ")")
                               | otherwise = acceptorFunc acceptor e
                               
 simple (Elem _ _ []) = return ""
 simple (Elem _ _ contents) = return (processContents contents)
---simple _ = fail "unexpected content in tag"
 
 simpleElement s = ElemAcceptor s simple
 
@@ -88,14 +83,11 @@ processContentItem (CMisc _ _) = error "unexpected content"
 matchChoice acceptors (CElem e@(Elem name _ _) i) =
     do  result <- foldl (liftM2 mplus) (return Nothing) $ map (matchMaybe e) acceptors
         case result of
-            Nothing -> fail ("at " ++ show i ++ ": unexpected element " ++ name)
+            Nothing -> throwError ("at " ++ show i ++ ": unexpected element " ++ name)
             Just val -> return val
 
-matchMaybe :: Monad m => Element Posn -> ElemAcceptor (Either String) t -> m (Maybe t)
 matchMaybe e@(Elem n a c) (ElemAcceptor name f) | n /= name = return Nothing
-                                                | otherwise = case f e of
-                                                                  Left s -> fail s
-                                                                  Right v -> return $ Just v
+                                                | otherwise = f e >>= return . Just
 
 attValueString (AttValue list) = concat [ s | Left s <- list ]
 

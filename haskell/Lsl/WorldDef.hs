@@ -36,12 +36,13 @@ import Lsl.Avatar
 import Lsl.DOMProcessing hiding (find)
 import Lsl.Evaluation
 import Lsl.Exec(ScriptImage,initLSLScript)
+import Lsl.Key(mkKey)
 import Lsl.Structure(Validity(..),State(..))
 import Lsl.Type
 import Lsl.ValueDB
 import Lsl.Util(readM,Permutation3(..),rotationsToQuaternion)
 
---import Text.XML.HaXml hiding (when,find)
+type KeyManagerM = ErrorT String (SM.State (M.Map String String,Integer))
 
 data FullWorldDef = FullWorldDef {
                         fullWorldDefMaxTime :: Int,
@@ -50,7 +51,8 @@ data FullWorldDef = FullWorldDef {
                         fullWorldDefObjects :: [LSLObject],
                         fullWorldDefPrims :: [Prim],
                         fullWorldDefAvatars :: [Avatar],
-                        fullWorldDefRegions :: [((Int,Int),Region)] } deriving (Show)
+                        fullWorldDefRegions :: [((Int,Int),Region)],
+                        fullWorldDefInitialKeyIndex :: Integer } deriving (Show)
                         
 data LSLObject = LSLObject { primKeys :: [String] } deriving (Show)
 
@@ -72,7 +74,7 @@ data InventoryInfo  = InventoryInfo {  inventoryInfoCreator :: String,
 
 inventoryItemInfoMap = map ( \ item -> (inventoryItemIdentification item, inventoryItemInfo item))
 inventoryItemNames = map (fst . inventoryItemNameKey . inventoryItemIdentification)
-scriptInventoryItem s = InventoryItem (InventoryItemIdentification (s,"")) (InventoryInfo "" "" True True True) ()
+scriptInventoryItem s k = InventoryItem (InventoryItemIdentification (s,k)) (InventoryInfo "" "" True True True) ()
 inventoryItemIdentifications = map inventoryItemIdentification
 findByInvName name = find (\ (InventoryItemIdentification (n,_),_) -> n == name)
 
@@ -243,8 +245,9 @@ worldFromFullWorldDef worldBuilder fwd lib scripts =
                              (M.fromList activatedScripts)
                              emptyDB
                              (M.fromList (fullWorldDefRegions fwd))
+                             (fullWorldDefInitialKeyIndex fwd)
 
-fctx :: Monad m => String -> Either String a -> m a
+fctx :: MonadError String m => String -> Either String a -> m a
 fctx s (Left s') = fail s
 fctx _ (Right v) = return v
 
@@ -277,53 +280,71 @@ activateScript scripts primMap (k@(primKey,invName),(scriptID)) =
         case script of
             Invalid s -> return (k, Script (Invalid s) M.empty Nothing 0 0  [])
             Valid code -> return (k,Script (Valid $ initLSLScript code) M.empty Nothing 0 0 [Event "state_entry" [] []])
-            
-worldElement :: Monad m => ElemAcceptor m FullWorldDef
+
+newKey xref = do
+    (m,i) <- lift SM.get
+    let k = mkKey i
+    let m' = case xref of
+                 Nothing -> m
+                 Just v -> M.insert v k m
+    lift $ SM.put (m',i+1)            
+    return k
+    
+findRealKey k = lift SM.get >>= M.lookup k . fst
+
+--worldElement :: ElemAcceptor KeyManagerM FullWorldDef
 worldElement =
     let f (Elem _ _ contents) = do
         (maxTime, c1) <- findValue "maxTime" (elementsOnly contents)
         (sliceSizeStr, c2) <- findSimple "sliceSize" c1
-        (activeScripts, c3) <- findElement activeScriptsElement c2
-        (objects,c4) <- findElement objectsElement c3
-        (prims,c5) <- findElement primsElement c4
-        (avatars,[]) <- findElement avatarsElement c5
+        (avatars,c3) <- findElement avatarsElement c2
+        (prims,c4) <- findElement primsElement c3
+        (activeScripts, c5) <- findElement activeScriptsElement c4
+        (objects,[]) <- findElement objectsElement c5
         --maxTime <- readM maxTimeStr
         sliceSize <- readM sliceSizeStr
-        return $ (FullWorldDef maxTime sliceSize activeScripts objects prims avatars (defaultRegions ""))
+        (m,keyIndex) <- lift SM.get
+        return $ (FullWorldDef maxTime sliceSize activeScripts objects prims avatars (defaultRegions "") keyIndex)
     in ElemAcceptor "world-def" f
     
-activeScriptsElement :: Monad m => ElemAcceptor m [((String,String),String)]
+activeScriptsElement :: ElemAcceptor KeyManagerM [((String,String),String)]
 activeScriptsElement = elementList "scripts" activeScriptElement
 
-activeScriptElement :: Monad m => ElemAcceptor m ((String,String),String)
+activeScriptElement :: ElemAcceptor KeyManagerM ((String,String),String)
 activeScriptElement = ElemAcceptor "script" $
     \ (Elem _ _ contents) -> do
             (primKey,c1) <- findSimple "primKey" (elementsOnly contents)
+            realPrimKey <- findRealKey primKey
             (scriptName, c2) <- findSimple "scriptName" c1
             (scriptId, []) <- findSimple "scriptId" c2
-            return $ ((primKey,scriptName), scriptId)
+            return $ ((realPrimKey,scriptName), scriptId)
             
-objectsElement :: Monad m => ElemAcceptor m [LSLObject]
+objectsElement :: ElemAcceptor KeyManagerM [LSLObject]
 objectsElement = elementList "objects" objectElement
 
-objectElement :: Monad m => ElemAcceptor m LSLObject
+objectElement :: ElemAcceptor KeyManagerM LSLObject
 objectElement = ElemAcceptor "object" $
     \ (Elem _ _ contents) -> do
            (primKeys,[]) <- findElement (elementList "primKeys" (simpleElement "string")) (elementsOnly contents)
-           return $ LSLObject primKeys
+           (m,i) <- lift SM.get
+           realPrimKeys <- mapM findRealKey primKeys
+           return $ LSLObject realPrimKeys
            
-primsElement :: Monad m => ElemAcceptor m [Prim]
+primsElement :: ElemAcceptor KeyManagerM [Prim]
 primsElement = elementList "prims" primElement
 
-primElement :: Monad m => ElemAcceptor m Prim
+primElement :: ElemAcceptor KeyManagerM Prim
 primElement = ElemAcceptor "prim" $
     \ (Elem _ _ contents) -> do
             (name,c1) <- findSimple "name" (elementsOnly contents)
             (key,c2) <- findSimple "key" c1
+            realKey <- newKey (Just key)
             (description, c3) <- findSimpleOrDefault "" "description" c2
             (scripts,c4) <- findElement (elementList "scripts" (simpleElement "string")) c3
-            let scripts' = map scriptInventoryItem scripts
+            scriptKeys <- replicateM (length scripts) (newKey Nothing)
+            let scripts' = zipWith scriptInventoryItem scripts scriptKeys
             (owner,c5) <- findSimpleOrDefault "" "owner" c4
+            realOwner <- findRealKey owner
             (position,c6) <- findOrDefault (128.0,128.0,0.0) (vecAcceptor "position") c5
             (eulerRotation,c7) <- findOrDefault (0.0,0.0,0.0) (vecAcceptor "rotation") c6
             (scale,c8) <- findOrDefault (1.0,1.0,1.0) (vecAcceptor "scale") c7
@@ -338,7 +359,7 @@ primElement = ElemAcceptor "prim" $
             (pData,c17) <- findElement (dbAcceptor "data") c16
             (dropAllowed,[]) <- findValueOrDefault False "dropAllowed" c17
             return $ Prim { primName = name, 
-                            primKey = key, 
+                            primKey = realKey, 
                             primParent = Nothing,
                             primDescription = description,
                             primScripts = scripts',
@@ -351,8 +372,8 @@ primElement = ElemAcceptor "prim" $
                             primGestures = [],
                             primLandmarks = [],
                             inventoryObjects = [],
-                            primOwner = owner,
-                            primCreator = owner,
+                            primOwner = realOwner,
+                            primCreator = realOwner,
                             primPosition = position,
                             primRotation = rotationsToQuaternion P123 eulerRotation,
                             primScale = scale,
@@ -472,18 +493,19 @@ primTypeAcceptor s = ElemAcceptor s $
                    primSculptType = sculptType
                 }
                 
-avatarsElement :: Monad m => ElemAcceptor m [Avatar]
+avatarsElement :: ElemAcceptor KeyManagerM [Avatar]
 avatarsElement = elementList "avatars" avatarElement
 
-avatarElement :: Monad m => ElemAcceptor m Avatar
+avatarElement :: ElemAcceptor KeyManagerM Avatar
 avatarElement = ElemAcceptor "avatar" $
     \ (Elem _ _ contents) -> do
             (key,c1) <- findSimple "key" (elementsOnly contents)
+            realKey <- newKey (Just key)
             (name,c2) <- findSimple "name" c1
             (x,c3) <- findValue "xPos" c2
             (y,c4) <- findValue "yPos" c3
             (z,_) <- findValue "zPos" c4
-            return $ (defaultAvatar key) { avatarName = name, avatarPosition = (x,y,z) }
+            return $ (defaultAvatar realKey) { avatarName = name, avatarPosition = (x,y,z) }
 
 vecAcceptor s = ElemAcceptor s $
     \ (Elem _ _ contents) -> do

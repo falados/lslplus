@@ -58,7 +58,8 @@ data World m = World {
                     worldBreakpointManager :: BreakpointManager,
                     worldSuspended :: Maybe (String,String), -- prim-key, script-name, image
                     worldRegions :: Map (Int,Int) Region,
-                    worldZeroTime :: Int
+                    worldZeroTime :: Int,
+                    worldKeyIndex :: Integer
                 } deriving (Show)
 
 -- a state monad for the World
@@ -114,7 +115,8 @@ getWorldRegions :: Monad m => WorldM m (Map (Int,Int) Region)
 getWorldRegions = queryWorld worldRegions
 getWorldZeroTime :: Monad m => WorldM m Int
 getWorldZeroTime = queryWorld worldZeroTime
-
+getWorldKeyIndex :: Monad m => WorldM m Integer
+getWorldKeyIndex = queryWorld worldKeyIndex
 getRegion index = (lift getWorldRegions >>= M.lookup index)
 
 getPrim k = (lift getPrims >>= M.lookup k)
@@ -189,6 +191,7 @@ setWorldScripts s = updateWorld (\w -> w { worldScripts = s })
 setWorldBreakpointManager m = updateWorld (\w -> w { worldBreakpointManager = m })
 setWorldSuspended v = updateWorld (\w -> w { worldSuspended = v })
 setWorldRegions r = updateWorld (\ w -> w { worldRegions = r })
+setWorldKeyIndex i = updateWorld (\ w -> w { worldKeyIndex = i })
 
 setPrim k p = (getPrims >>= return . (M.insert k p) >>= setPrims)
 updatePrimVal k f = (lift getPrims >>= M.lookup k >>= return . f >>= lift . (setPrim k))
@@ -328,3 +331,14 @@ logTrace source s =
        let message = LogMessage tick LogTrace source s 
        setMsgLog (message:log)
               
+newKey :: Monad m => WorldM m  String
+newKey = do
+    i <- getWorldKeyIndex
+    setWorldKeyIndex (i + 1)
+    return $ mkKey i
+    
+findAsset _ = return Nothing
+
+isSoundAsset _ = False
+isTextureAsset _ = False
+isAnimationAsset _ = False

@@ -183,6 +183,7 @@ llGetInventoryType info@(ScriptInfo _ _ _ pk _) [SVal name] = do
                              (getPrimNotecardInfo,llcInventoryNotecard),(getPrimObjectInfo,llcInventoryObject),
                              (getPrimSoundInfo,llcInventorySound),(getPrimTextureInfo,llcInventoryTexture),
                              (getPrimScriptInfo,llcInventoryScript)]
+
 ------------------------------------------------------------------------------
 llCloud info [v@(VVal x y z)] =
     do logFromScript info "llCloud currently returns default density"
@@ -404,7 +405,7 @@ llAttachToAvatar info@(ScriptInfo oid _ sid pk _) [IVal attachPoint] =
                             Nothing -> lift $ logFromScript info "llAttachToAvatar: no permission to attach"
                             Just k -> do
                                 owner <- getPrimOwner pk
-                                if (k /= pk)
+                                if (k /= owner)
                                     then lift $ putChat (Just 20.0) pk 0 ("Script trying to attach to someone other than owner!")
                                     else do 
                                         avatars <- lift getWorldAvatars
@@ -417,13 +418,15 @@ llAttachToAvatar info@(ScriptInfo oid _ sid pk _) [IVal attachPoint] =
                                                         Nothing -> let av' = av { avatarAttachments = IM.insert attachPoint oid attachments } in
                                                             do lift $ setWorldAvatars (M.insert k av' avatars)
                                                                lift $ setPrimAttachment oid (Just $ Attachment k attachPoint)
+                                                               t <- lift getTick
+                                                               lift $ putWorldEvent t (mkAttachEvent pk k)
                                                         Just _ -> lift $ logFromScript info ("llAttachToAvatar: attachment point already occupied")
             ) >> continueWith VoidVal
         else logFromScript info ("llAttachToAvatar: invalid attachment point: " ++ show attachPoint) >> continueWith VoidVal
 
 llGetAttached info@(ScriptInfo oid _ _ _ _) [] = 
     runErrPrim oid 0 (getPrimAttachment oid >>= return . maybe 0 attachmentPoint) >>= continueWith . IVal
-    
+
 llGetPermissionsKey (ScriptInfo _ _ sid pk _) [] =
     fromErrorT nullKey (lift getWorldScripts >>= M.lookup (pk,sid) >>= return . fromMaybe nullKey . scriptLastPerm) >>= continueWith . KVal
     
@@ -516,14 +519,6 @@ llGetLinkKey (ScriptInfo oid _ _ _ _) [IVal link] = do
         return pk
     continueWith (KVal result)
 
-llGetLinkName (ScriptInfo oid _ _ _ _) [IVal link] = do
-    result <- runAndLogIfErr ("object " ++ oid ++ " or link " ++ show link ++ "not found") nullKey $ do
-        LSLObject pkeys <- getObject oid
-        pk <- lookupByIndex (link - 1) pkeys
-        prim <- getPrim pk
-        return (primName prim)
-    continueWith (SVal result)
-    
 -- TODO: should check for av/prim in same region
 -- TODO: no concept of online/offline for av           
 llKey2Name info [KVal k] =
@@ -656,6 +651,28 @@ setTexture texture face pkey =
             updatePrimFace pkey face (\ f -> f { faceTextureInfo = tInfo { textureName = texture } })
             continueWith VoidVal
             
+updateTextureInfo update pk faceIndex =
+    runErrFace pk faceIndex () (
+        if faceIndex == -1
+            then do
+                faces <- getPrimFaces pk
+                let faces' = map (\ face ->
+                        let info = faceTextureInfo face in
+                            face { faceTextureInfo = update info }) faces
+                lift $ setPrimFaces pk faces'
+            else do
+                f <- getPrimFaces pk >>= lookupByIndex faceIndex
+                let tInfo = update $ faceTextureInfo f
+                updatePrimFace pk faceIndex (\ f -> f { faceTextureInfo = tInfo })
+    ) >> continueWith VoidVal
+
+llScaleTexture info@(ScriptInfo _ _ _ pk _) [FVal h,FVal v,IVal faceIndex] = 
+    updateTextureInfo update pk faceIndex where update info = info { textureRepeats = (h,v,0) }
+llOffsetTexture (ScriptInfo _ _ _ pk _) [FVal h, FVal v, IVal faceIndex] =
+    updateTextureInfo update pk faceIndex where update info = info { textureOffsets = (h,v,0) }
+llRotateTexture (ScriptInfo _ _ _ pk _) [FVal rot, IVal faceIndex] =
+    updateTextureInfo update pk faceIndex where update info = info { textureRotation = rot }
+        
 getPos pkey = runErrPrim pkey
                   (VVal 0.0 0.0 0.0)
                   (getPrimPosition pkey >>= return . vec2VVal)
@@ -1145,12 +1162,98 @@ llAddToLandBanList info args =
         aclIntoParcel = (\ parcel list -> parcel { parcelBanList = list })
     in addToLandACLList "ban" aclFromParcel aclIntoParcel info args
 
+soundExists pk sound = do
+    sounds <- getPrimSoundInfo pk
+    case findByInvName sound sounds of
+        Nothing -> do
+            result <- lift $ findAsset sound
+            case result of
+                Nothing -> return False
+                Just v -> return $ if isSoundAsset v then True else False
+        Just _ -> return True
+       
+llTriggerSound info@(ScriptInfo _ _ _ pk _) [SVal sound, FVal volume] =
+    runErrPrim pk () (do
+        found <- soundExists pk sound
+        let message = if found then "llTriggerSound: triggering sound " ++ sound else "llTriggerSound: sound not found - " ++ sound
+        lift $ logFromScript info message
+    ) >> continueWith VoidVal
+llTriggerSoundLimited info@(ScriptInfo _ _ _ pk _) [SVal sound, FVal volume, VVal t n e, VVal b s w] =
+    runErrPrim pk () (do
+        when (t <= b || n <= s || e <= w) $ lift $ logFromScript info ("llTriggerSoundLimited: bounding box has zero or negative volume")
+        found <- soundExists pk sound
+        let message = if found then "llTriggerSoundLimited: triggering sound " ++ sound else "llTriggerSoundLimited: sound no found - " ++ sound
+        lift $ logFromScript info message
+    ) >> continueWith VoidVal
+    
 llSound info@(ScriptInfo _ _ _ pk _) [SVal sound, FVal vol, IVal q, IVal loop] =
-    runErrPrim pk (EvalIncomplete, VoidVal) $ do 
-        lift $ logFromScript info ("call to deprecated function 'llSound'")
-        sounds <- getPrimSoundInfo pk
-        when (isNothing $ findByInvName sound sounds) $ lift $ logFromScript info ("sound " ++ sound ++ " does not exist")
-        continueWith VoidVal
+    runErrPrim pk () (do 
+        found <- soundExists pk sound
+        let message = if found then "llSound (deprecated): playing sound " ++ sound else "llSound (deprecated): sound not found - " ++ sound
+        lift $ logFromScript info message
+    ) >> continueWith VoidVal
+
+llPlaySound info@(ScriptInfo _ _ _ pk _) [SVal sound, FVal vol] =
+    runErrPrim pk () (do
+        found <- soundExists pk sound
+        let message = if found then "llPlaySound: playing sound " ++ sound else "llPlaySound: sound not found - " ++ sound
+        lift $ logFromScript info message
+    ) >> continueWith VoidVal
+    
+llCollisionSound info@(ScriptInfo _ _ _ pk _) [SVal sound, FVal vol] =
+    runErrPrim pk () (do
+        found <- soundExists pk sound
+        let message = if found then "llCollisionSound: setting collision sound to " ++ sound else "llCollisionSound: sound not found - " ++ sound
+        lift $ logFromScript info message
+    ) >> continueWith VoidVal
+    
+llPreloadSound info@(ScriptInfo _ _ _ pk _) [SVal sound] =
+    runErrPrim pk () (do
+        found <- soundExists pk sound
+        let message = if found then "llPreloadSound: loading sound " ++ sound else "llPreloadSound: sound not found - " ++ sound
+        lift $ logFromScript info message
+    ) >> continueWith VoidVal
+    
+llSoundPreload info@(ScriptInfo _ _ _ pk _) [SVal sound] =
+    runErrPrim pk () (do
+        found <- soundExists pk sound
+        let message = if found then "llSoundPreload: loading sound " ++ sound else "llSoundPreload: sound not found - " ++ sound
+        lift $ logFromScript info message
+    ) >> continueWith VoidVal
+    
+llPlaySoundSlave info@(ScriptInfo _ _ _ pk _) [SVal sound, FVal vol] =
+    runErrPrim pk () (do
+        found <- soundExists pk sound
+        let message = if found then "llPlaySoundSlave: playing sound " ++ sound else "llPlaySoundSlave: sound not found - " ++ sound
+        lift $ logFromScript info message
+    ) >> continueWith VoidVal
+
+llLoopSoundSlave info@(ScriptInfo _ _ _ pk _) [SVal sound, FVal vol] =
+    runErrPrim pk () (do
+        found <- soundExists pk sound
+        let message = if found then "llLoopSoundSlave: playing sound " ++ sound else "llLoopSoundSlave: sound not found - " ++ sound
+        lift $ logFromScript info message
+    ) >> continueWith VoidVal
+
+llLoopSound info@(ScriptInfo _ _ _ pk _) [SVal sound, FVal vol] =
+    runErrPrim pk () (do
+        found <- soundExists pk sound
+        let message = if found then "llLoopSound: playing sound " ++ sound else "llLoopSound: sound not found - " ++ sound
+        lift $ logFromScript info message
+    ) >> continueWith VoidVal
+
+llLoopSoundMaster info@(ScriptInfo _ _ _ pk _) [SVal sound, FVal vol] =
+    runErrPrim pk () (do
+        found <- soundExists pk sound
+        let message = if found then "llLoopSoundMaster: playing sound " ++ sound else "llLoopSoundMaster: sound not found - " ++ sound
+        lift $ logFromScript info message
+    ) >> continueWith VoidVal
+
+llStopSound info [] = logFromScript info "llStopSound: stopping sound" >> continueWith VoidVal
+llSetSoundRadius info [FVal radius] = logFromScript info "llSetSoundRadius: called. In real sim, this function has no effect." >>
+    continueWith VoidVal
+llSetSoundQueueing info [IVal bool] = logFromScript info ("llSetSoundQueuiing: set to " ++ (if bool /= 0 then "TRUE" else "FALSE")) >>
+    continueWith VoidVal
 
 llGetKey (ScriptInfo _ _ _ pk _) [] = continueWith $ KVal pk
 
@@ -1239,6 +1342,53 @@ setText func lim info text =
 
 llGetScriptName (ScriptInfo _ _ sid _ _) [] = continueWith (SVal sid)
 
+llGetNumberOfNotecardLines (ScriptInfo _ _ sn pk _) [SVal name] =
+    runErrPrim pk nullKey (do
+        notecards <- getPrimNotecards pk
+        case find ((name==) . fst . inventoryItemNameKey . inventoryItemIdentification) notecards of
+            Nothing -> (lift $ putChat 20.0 pk 0 ("Couldn't find notecard " ++ name)) >> return nullKey
+            Just notecard -> do
+                key <- lift newKey
+                t <- lift getTick
+                lift $ putWorldEvent t (mkDataserverEvent pk sn key (show $ length $ inventoryItemData notecard))
+                return key
+    ) >>= continueWith . KVal
+    
+llGetNotecardLine (ScriptInfo _ _ sn pk _) [SVal name, IVal lineNumber] =
+    runErrPrim pk nullKey (do
+        notecards <- getPrimNotecards pk
+        case find ((name==) . fst . inventoryItemNameKey . inventoryItemIdentification) notecards of
+            Nothing -> (lift $ putChat 20.0 pk cDebugChannel ("Couldn't find notecard " ++ name)) >> return nullKey
+            Just notecard -> do
+                key <- lift newKey
+                t <- lift getTick
+                let line = case lookupByIndex lineNumber $ inventoryItemData notecard of
+                        Nothing -> cEOF
+                        Just v -> take 255 v
+                lift $ putWorldEvent t (mkDataserverEvent pk sn key line)
+                return key
+    ) >>= continueWith . KVal
+ 
+llGetLinkName (ScriptInfo oid _ _ _ _) [IVal linkNumber] =
+    runErrPrim oid nullKey (do
+        LSLObject links <- getObject oid
+        if length links == 0
+           then if linkNumber == 0
+               then getPrimName oid
+               else return nullKey
+           else case lookupByIndex (linkNumber - 1) links of
+                Nothing -> return nullKey
+                Just k -> getPrimName k
+    ) >>= continueWith . SVal   
+    
+llGetStatus (ScriptInfo _ _ _ pk _) [IVal check] =
+    runErrPrim pk 0 (do
+        status <- getPrimStatus pk
+        case mssb check of
+            Nothing -> return 0
+            Just b -> return $ if bit b .&. status /= 0 then 1 else 0
+    ) >>= continueWith . IVal
+    where mssb i = foldl (\ x y -> x `mplus` (if testBit i y then Just y else Nothing)) Nothing [31,30..0]
 continueWith val = return (EvalIncomplete,val)
 
 -- all the predefined functions for which implementations have been created
@@ -1254,6 +1404,7 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llBreakAllLinks",llBreakAllLinks),
         ("llBreakLink",llBreakLink),
         ("llCloud",llCloud),
+        ("llCollisionSound",llCollisionSound),
         ("llCreateLink",llCreateLink),
         ("llDie",llDie),
         ("llEjectFromLand",llEjectFromLand),
@@ -1276,8 +1427,11 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llGetNumberOfPrims",llGetNumberOfPrims),
         ("llGetNumberOfSides",llGetNumberOfSides),
         ("llGetLinkKey",llGetLinkKey),
+        ("llGetLinkName",llGetLinkName),
         ("llGetLinkNumber", llGetLinkNumber),
         ("llGetLocalRot", llGetLocalRot),
+        ("llGetNotecardLine", llGetNotecardLine),
+        ("llGetNumberOfNotecardLines",llGetNumberOfNotecardLines),
         ("llGetObjectDesc", llGetObjectDesc),
         ("llGetObjectDetails", llGetObjectDetails),
         ("llGetObjectName", llGetObjectName),
@@ -1296,6 +1450,7 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llGetRootRotation",llGetRootRotation),
         ("llGetScale", llGetScale),
         ("llGetScriptName", llGetScriptName),
+        ("llGetStatus",llGetStatus),
         ("llGetTexture", llGetTexture),
         ("llGetTextureOffset", llGetTextureOffset),
         ("llGetTextureRot", llGetTextureRot),
@@ -1310,12 +1465,21 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llListen", llListen),
         ("llListenControl",llListenControl),
         ("llListenRemove",llListenRemove),
+        ("llLoopSound",llLoopSound),
+        ("llLoopSoundSlave",llLoopSoundSlave),
+        ("llLoopSoundMaster", llLoopSoundMaster),
         ("llMessageLinked", llMessageLinked),
+        ("llOffsetTexture", llOffsetTexture),
         ("llOwnerSay", llOwnerSay),
+        ("llPlaySound", llPlaySound),
+        ("llPlaySoundSlave", llPlaySoundSlave),
+        ("llPreloadSound", llPreloadSound),
         ("llRegionSay", llRegionSay),
         ("llRequestPermissions",llRequestPermissions),
         ("llResetTime",llResetTime),
+        ("llRotateTexture", llRotateTexture),
         ("llSay",llSay),
+        ("llScaleTexture", llScaleTexture),
         ("llSetAlpha", llSetAlpha),
         ("llSetColor", llSetColor),
         ("llSetLinkAlpha",llSetLinkAlpha),
@@ -1329,6 +1493,8 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llSetPrimitiveParams",llSetPrimitiveParams),
         ("llSetRot",llSetRot),
         ("llSetScale",llSetScale),
+        ("llSetSoundQueueing",llSetSoundQueueing),
+        ("llSetSoundRadius",llSetSoundRadius),
         ("llSetSitText",llSetSitText),
         ("llSetText",llSetText),
         ("llSetTouchText",llSetTouchText),
@@ -1337,6 +1503,10 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llSleep", llSleep),
         ("llSetTimerEvent",llSetTimerEvent),
         ("llSound",llSound),
+        ("llSoundPreload", llSoundPreload),
+        ("llStopSound",llStopSound),
+        ("llTriggerSound",llTriggerSound),
+        ("llTriggerSoundLimited",llTriggerSoundLimited),
         ("llUnSit",llUnSit),
         ("llWhisper",llWhisper),
         ("llWind",llWind),
@@ -1441,7 +1611,8 @@ newWorld slice maxt iq = World {
                worldBreakpointManager = emptyBreakpointManager,
                worldSuspended = Nothing,
                worldRegions = M.empty,
-               worldZeroTime = 0
+               worldZeroTime = 0,
+               worldKeyIndex = 0
            }
            
 newWorld' slice maxt iq lib scripts avatars = 
@@ -1449,13 +1620,14 @@ newWorld' slice maxt iq lib scripts avatars =
         wscripts = scripts, 
         wlibrary = lib,
         worldAvatars = avatars }
-newWorld'' slice maxt iq lib scripts avatars objs prims activeScripts valueDB regions =
+newWorld'' slice maxt iq lib scripts avatars objs prims activeScripts valueDB regions keyIndex =
     (newWorld' slice maxt iq lib scripts avatars) {
         wobjects = objs,
         wprims = prims,
         worldScripts = activeScripts,
         worldDB = valueDB,
-        worldRegions = regions }
+        worldRegions = regions,
+        worldKeyIndex = keyIndex }
         
 addObjectToInventory name obj world = world { inventory = (name,obj):(inventory world) }
 
@@ -1548,11 +1720,11 @@ processEvent (AddScript (name,script) key active) =
           case lookup script scripts of
               Nothing -> logAMessage LogWarn "sim" ("no such script: " ++ script)
               Just (Invalid s) -> do
-                  updatePrim (\ p -> return $ addScript p (scriptInventoryItem name)) key
+                  updatePrim (\ p -> return $ addScript p (scriptInventoryItem name "")) key
                   scripts <- getWorldScripts
                   setWorldScripts (M.insert (key,name) (Script (Invalid s) M.empty Nothing t t []) scripts)
               Just (Valid code) -> do
-                  updatePrim (\ p -> return $ addScript p (scriptInventoryItem name)) key
+                  updatePrim (\ p -> return $ addScript p (scriptInventoryItem name "")) key
                   let sstate = initLSLScript code
                   scripts <- getWorldScripts
                   setWorldScripts (M.insert (key,name) (Script (Valid sstate) M.empty Nothing t t [Event "state_entry" [] []]) scripts)
@@ -1715,7 +1887,7 @@ simStep init@(Left (worldDef, scripts, lib)) command =
 --     let world = initWorld worldDef scripts lib in simStep (Right world) command
     case initWorld worldDef scripts lib of
         Left s -> -- initialization failed
-            (SimEnded ("Error initializing: " ++ s) [] nullSimState, init)
+            (SimEnded ("Error initializing: " ++ s) [LogMessage 0 LogError "sim" ("Error initializing: " ++ s)] nullSimState, init)
         Right world -> simStep (Right (logInitialProblems world)) command
 simStep (Right world) command =
     let t = tick world
@@ -1803,7 +1975,10 @@ mkTouchStartEvent pk nd ak = WorldSimEvent "touch_start" [SimEventArg "Prim Key"
 mkTouchEvent pk nd ak = WorldSimEvent "touch" [SimEventArg "Prim Key" pk, SimEventArg "num_detected" nd, SimEventArg "Avatar key" ak, SimEventArg "Grab vector" "<0.0,0.0,0.0>"]
 mkTouchEndEvent pk nd ak = WorldSimEvent "touch_end" [SimEventArg "Prim Key" pk, SimEventArg "num_detected" nd, SimEventArg "Avatar key" ak]
 mkChangedEvent oid change = WorldSimEvent "changed" [SimEventArg "Object Key" oid,SimEventArg "change" (show change)]
-
+mkDataserverEvent pk script queryid val = 
+    WorldSimEvent "dataserver" [SimEventArg "Prim Key" pk, SimEventArg "Script" script, SimEventArg "queryid" (show queryid),SimEventArg "data" (show val)]
+mkAttachEvent pk k = WorldSimEvent "attach" [SimEventArg "Object Key" pk, SimEventArg "id" (show k)]
+        
 userTouchEventDef :: Monad m => SimInputEventDefinition m
 userTouchEventDef =
     SimInputEventDefinition {

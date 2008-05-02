@@ -1,7 +1,9 @@
 module Lsl.SystemTester where
 
 import Control.Exception
-import Control.Monad
+import Control.Monad.Error
+import Control.Monad.State
+import qualified Data.Map as M
 import IO
 import Lsl.BreakpointsDeserialize
 import Lsl.Compiler
@@ -23,7 +25,7 @@ initializationFromXML xml = let doc = xmlParse "" xml in parseInitialization doc
 
 parseInitialization (Document _ _ root _) = match initSimElement root
 
-initSimElement :: Monad m => ElemAcceptor m (([(String,String)],[(String,String)]),FullWorldDef)
+--initSimElement :: MonadError String m => ElemAcceptor m (([(String,String)],[(String,String)]),FullWorldDef)
 initSimElement =
     let f (Elem _ _ contents) =
             do (sources,contents1) <- findElement sourceFilesElement [ e | e@(CElem _ _) <- contents]
@@ -55,7 +57,7 @@ commandContent (Elem _ _ contents) = do
     (events,[]) <- findOptionalElement  (elementList "events" simEventElement) contents1
     return $ (maybe [] id breakpoints, maybe [] id events)
 
-simEventElement :: Monad m => ElemAcceptor m SimEvent
+simEventElement :: MonadError String m => ElemAcceptor m SimEvent
 simEventElement =
     let f (Elem _ _ contents) = 
              do (name,contents1) <- findElement (ElemAcceptor "name" simple) [ e | e@(CElem _ _) <- contents]
@@ -66,7 +68,7 @@ simEventElement =
                     ((i,_):_) -> return $ SimEvent name (maybe [] id args) i
     in ElemAcceptor "event" f
 
-simArgElement :: Monad m => ElemAcceptor m SimEventArg
+simArgElement :: MonadError String m => ElemAcceptor m SimEventArg
 simArgElement = 
     let f (Elem _ _ contents) =
             do (name,contents1) <- findElement (ElemAcceptor "name" simple) [ e | e@(CElem _ _) <- contents]
@@ -103,10 +105,14 @@ testSystem :: IO ()
 testSystem = 
     do  input <- getLine
         --hPutStrLn stderr input
-        (src,worldDef) <- initializationFromXML  (unescape input)
-        (augLib,scripts) <- compile src
-        let runStep state s =
-                let command = commandFromXML s
-                    (e,state') = simStep state command
-                in (state',outputToXML e)
-        processLinesS (Left (worldDef,scripts,libFromAugLib augLib)) "quit" runStep
+        let result = (evalState . runErrorT) (initializationFromXML  (unescape input)) (M.empty,1)
+        case result of
+            Left s -> fail s
+            Right (src,worldDef) -> do
+                hPutStrLn stderr (show worldDef)
+                (augLib,scripts) <- compile src
+                let runStep state s =
+                        let command = commandFromXML s
+                            (e,state') = simStep state command
+                        in (state',outputToXML e)
+                processLinesS (Left (worldDef,scripts,libFromAugLib augLib)) "quit" runStep

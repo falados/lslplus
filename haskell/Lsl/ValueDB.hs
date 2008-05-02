@@ -1,6 +1,6 @@
 module Lsl.ValueDB(ValueDB,emptyDB,insertDB,insertAllDB,lookupDB,dbFromDomElement,dbAcceptor) where
 
-import Control.Monad
+import Control.Monad.Error
 import Control.Monad.State
 import Data.Map (Map)
 import qualified Data.Map as M
@@ -36,24 +36,24 @@ insertAllDB pairs db = foldl (flip (uncurry insertDB)) db pairs
 
 dbFromDomElement name e = match (dbAcceptor name) e
 
-dbAcceptor :: Monad m => String -> ElemAcceptor m ValueDB
+dbAcceptor :: (MonadError String m,MonadPlus m) => String -> ElemAcceptor m ValueDB
 dbAcceptor name = ElemAcceptor name acceptValueDB
 acceptValueDB (Elem _ _ contents) = foldM (cmatch . entryAcceptor) emptyDB (elementsOnly contents)
 
-entryAcceptor :: Monad m => ValueDB -> ElemAcceptor m ValueDB
+entryAcceptor :: (MonadError String m, MonadPlus m) => ValueDB -> ElemAcceptor m ValueDB
 entryAcceptor (ValueDB m) = ElemAcceptor "entry" $ 
     \ (Elem _ _ contents) -> do
         (key,c1) <- findSimple "key" (elementsOnly contents)
         (value,[]) <- findElement valueElement c1
         return $ ValueDB (M.insert key value m)
 
-valueElement :: (Monad m, MonadPlus m) => ElemAcceptor m (Either ValueDB LSLValue)
+valueElement :: (MonadError String m, MonadPlus m) => ElemAcceptor m (Either ValueDB LSLValue)
 valueElement = ElemAcceptor "value" matchValue
 matchValue e = (matchDbValue e) `mplus` (matchLslValue e)
 matchDbValue e = match dbValueElement e >>= return . Left
 matchLslValue e = match lslValueElement e >>= return . Right
 
-dbValueElement :: Monad m => ElemAcceptor m ValueDB
+dbValueElement :: (MonadError String m,MonadPlus m) => ElemAcceptor m ValueDB
 dbValueElement =
      let f e@(Elem _ attrs contents) = do
             valType <- lookupM "class" attrs

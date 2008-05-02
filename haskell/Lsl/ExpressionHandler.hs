@@ -1,6 +1,6 @@
 module Lsl.ExpressionHandler(validateExpression,evaluateExpression) where
 
-import Control.Monad
+import Control.Monad.Error
 import Data.Bits
 import IO
 
@@ -318,7 +318,7 @@ processDOMExpr (Document _ _ root _) =
         Left s -> error s
         Right v -> v
 
-expressionElementAcceptor :: Monad m => ElemAcceptor m (String,String)
+expressionElementAcceptor :: MonadError String m => ElemAcceptor m (String,String)
 expressionElementAcceptor =
     let f (Elem _ _ contents) = do
             (t,contents1) <- findElement (ElemAcceptor "type" simple) (elementsOnly contents)

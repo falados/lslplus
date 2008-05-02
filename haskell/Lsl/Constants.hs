@@ -37,6 +37,9 @@ validAttachmentPoints = [0..36]::[Int]
 cDebugChannel = 2147483647 :: Int
 llcDebugChannel = IVal cDebugChannel
 
+cEOF = "\n\n\n"
+llcEOF = (SVal cEOF)
+
 allConstants :: [Constant]
 allConstants = [
     Constant "ACTIVE" (IVal 0x2),
@@ -138,7 +141,7 @@ allConstants = [
     Constant "DATA_SIM_STATUS" (IVal 6),
     Constant "DEBUG_CHANNEL" llcDebugChannel,
     Constant "DEG_TO_RAD" (FVal 0.01745329238),
-    Constant "EOF" (SVal "\n\n\n"),
+    Constant "EOF" llcEOF,
     Constant "FALSE" (IVal 0),
     Constant "HTTP_BODY_MAXLENGTH" (IVal 2),
     Constant "HTTP_BODY_TRUNCATED" (IVal 0),
