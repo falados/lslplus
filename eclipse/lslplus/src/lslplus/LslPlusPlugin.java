@@ -53,9 +53,11 @@ import com.thoughtworks.xstream.io.xml.DomDriver;
  */
 public class LslPlusPlugin extends AbstractUIPlugin {
 
+	private static final String LSL_EXECUTABLE = "LslPlus" + ((File.separatorChar == '\\') ? ".EXE" : "");  //$NON-NLS-1$//$NON-NLS-2$ //$NON-NLS-3$
+	
     private static class ValidationResult {
         public boolean ok;
-        public String msg;
+        public String msg;            
     }
     
     public static final boolean DEBUG = true;
@@ -106,14 +108,14 @@ public class LslPlusPlugin extends AbstractUIPlugin {
     /**
      * Run executable with an input string.  Return a process so that the output can be monitored
      * as it is produced.
-     * @param executablePath the path to the executable
+     * @param command the path to the executable
      * @param input the input string
      * @param redir an indicator as to whether stderr should be redirected to stdout
      * @return the process to monitor
      */
-    public static Process runExecutable(String executablePath, String input, boolean redir) {
+    public static Process runCommand(String command, String input, boolean redir) {
         try {
-            Process process = launchExecutable(executablePath, redir);
+            Process process = launchCoreCommand(command, redir);
             if (process == null) return null;
 
             OutputStream out = process.getOutputStream();
@@ -129,17 +131,17 @@ public class LslPlusPlugin extends AbstractUIPlugin {
     }
 
     /**
-     * Find and launch an executable.
-     * @param executablePath the path to the executable
+     * Find and launch a command in the Lsl Plus Core.
+     * @param command the command for the core to execute.
      * @param redir an indicator as to whether stderr should be redirected to stdout
      * @return the process to monitor
      */
-    public static Process launchExecutable(String executablePath, boolean redir) {
+    public static Process launchCoreCommand(String command, boolean redir) {
         try {
-            File f = findExecutable(executablePath);
+            File f = findExecutable(LSL_EXECUTABLE);
             if (f == null) return null;
             
-            ProcessBuilder builder = new ProcessBuilder(new String[] { f.getPath() });
+            ProcessBuilder builder = new ProcessBuilder(new String[] { f.getPath(), command });
             builder.redirectErrorStream(redir);
             Process process = builder.start();
 
@@ -167,8 +169,8 @@ public class LslPlusPlugin extends AbstractUIPlugin {
         return f;
     }
     
-    public static String runTask(String executablePath, String input) {
-        Process p = runExecutable(executablePath, input, true);
+    public static String runTask(String command, String input) {
+        Process p = runCommand(command, input, true);
         
         if (p == null) return null;
         
@@ -198,7 +200,7 @@ public class LslPlusPlugin extends AbstractUIPlugin {
     
     static String validateExpression(String expression) {
         if (DEBUG) Util.log("expression: " + expression);
-        String result = runTask("ExpressionHandler.exe", expression); //$NON-NLS-1$
+        String result = runTask("ExpressionHandler", expression); //$NON-NLS-1$
         if (DEBUG) Util.log("result: " + result);
         XStream xstream = new XStream(new DomDriver());
         xstream.alias("result", ValidationResult.class); //$NON-NLS-1$
@@ -232,7 +234,7 @@ public class LslPlusPlugin extends AbstractUIPlugin {
     }
 
     private LslMetaData buildMetaData() {
-        String result = runTask("MetaData.exe", ""); //$NON-NLS-1$//$NON-NLS-2$
+        String result = runTask("MetaData", ""); //$NON-NLS-1$//$NON-NLS-2$
         if (result == null) {
             Util.error(Messages.LslPlusPlugin_NO_META_DATA);
             return new LslMetaData();

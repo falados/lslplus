@@ -28,6 +28,32 @@ public class SimWorldDef {
         }
     }
     
+    public static class ScriptInfo {
+    	private String scriptName;
+    	private String scriptId;
+    	public ScriptInfo(String scriptName, String scriptId) {
+    		this.scriptName = scriptName;
+    		this.scriptId = scriptId;
+    	}
+    }
+    
+    public static abstract class InventoryItem {
+        private String name;
+        private String creator;
+        public InventoryItem(String name, String creator) {
+            this.name = name;
+            this.creator = creator;
+        }
+    }
+    
+    public static class Notecard extends InventoryItem {
+        private String[] lines;
+        public Notecard(String name, String creator, String[] lines) {
+            super(name,creator);
+            this.lines = lines;
+        }
+    }
+    
     public static class SimObject {
         private String[] primKeys;
         
@@ -39,14 +65,14 @@ public class SimWorldDef {
     public static class Prim {
         private String name;
         private String key;
-        private String[] scripts;
+        private ScriptInfo[] scripts;
         private String description;
         private String owner;
         private LVector position;
         private LVector rotation;
         private Map data;
         
-        public Prim(String name, String key, String[] scripts, Map data,
+        public Prim(String name, String key, ScriptInfo[] scripts, Map data,
                 String description, String owner, LVector position, LVector rotation) {
             this.name = name;
             this.key = key;
@@ -104,7 +130,7 @@ public class SimWorldDef {
         xstream.setMode(XStream.NO_REFERENCES);
         xstream.alias("world-def", SimWorldDef.class); //$NON-NLS-1$
         xstream.alias("avatar", Avatar.class); //$NON-NLS-1$
-        xstream.alias("script", Script.class); //$NON-NLS-1$
+        xstream.alias("script", ScriptInfo.class); //$NON-NLS-1$
         xstream.alias("object", SimObject.class); //$NON-NLS-1$
         xstream.alias("prim", Prim.class); //$NON-NLS-1$
         Mapper mapper = xstream.getMapper();
@@ -126,16 +152,16 @@ public class SimWorldDef {
     
     private long maxTime;
     private int sliceSize;
-    private Script[] scripts;
+    //private Script[] scripts;
     private SimObject[] objects;
     private Prim[] prims;
     private Avatar[] avatars;
     
-    public SimWorldDef(long maxTime, int sliceSize, Script[] scripts, SimObject[] objects,
+    public SimWorldDef(long maxTime, int sliceSize, SimObject[] objects,
             Prim[] prims, Avatar[] avatars) {
         this.maxTime = maxTime;
         this.sliceSize = sliceSize;
-        this.scripts = scripts;
+        //this.scripts = scripts;
         this.objects = objects;
         this.prims = prims;
         this.avatars = avatars;
@@ -143,15 +169,15 @@ public class SimWorldDef {
 
     public static SimWorldDef mkSimpleWorld(SimKeyManager keyManager, String name) {
         String primKey = keyManager.getNextKey();
-        SimWorldDef.Script[] scripts = new SimWorldDef.Script[] {
-                new SimWorldDef.Script(primKey, name, name)
-        };
+//        SimWorldDef.Script[] scripts = new SimWorldDef.Script[] {
+//                new SimWorldDef.Script(primKey, name, name)
+//        };
         String avKey = keyManager.getNextKey();
         
         HashMap primData = new HashMap();
         primData.put("pos", new LVector(128,128,0)); //$NON-NLS-1$
         SimWorldDef.Prim[] prims = new SimWorldDef.Prim[] {
-                new SimWorldDef.Prim("defaultPrim", primKey, new String[] { name }, primData,
+                new SimWorldDef.Prim("defaultPrim", primKey, new ScriptInfo[] { new ScriptInfo(name,name) }, primData,
                         "an object", avKey, new LVector(128,128,0), new LVector(0,0,0))
         };
         
@@ -163,7 +189,7 @@ public class SimWorldDef {
                 new SimWorldDef.Avatar(avKey, "Default Avatar", 128, 128, 0)
         };
         
-        SimWorldDef def = new SimWorldDef(10000000,1000,scripts,objects,prims,avatars);
+        SimWorldDef def = new SimWorldDef(10000000,1000,objects,prims,avatars);
         
         return def;
     }

@@ -235,7 +235,7 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 			project.accept(builder);
 			String descriptor = builder.xmlDescriptor();
 			if (LslPlusPlugin.DEBUG) Util.log("descriptor: " + descriptor); //$NON-NLS-1$
-			String result = LslPlusPlugin.runTask("Compiler.exe", descriptor); //$NON-NLS-1$
+			String result = LslPlusPlugin.runTask("Compiler", descriptor); //$NON-NLS-1$
 			if (LslPlusPlugin.DEBUG) Util.log("result: " + result); //$NON-NLS-1$
 			XStream xstream = new XStream(new DomDriver());
 

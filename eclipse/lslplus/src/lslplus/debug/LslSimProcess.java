@@ -9,7 +9,7 @@ import lslplus.SimManager;
 import org.eclipse.debug.core.ILaunch;
 
 public class LslSimProcess extends LslProcess {
-    private static final String SYSTEM_TESTER = "SystemTester.exe"; //$NON-NLS-1$
+    private static final String SYSTEM_TESTER = "SystemTester"; //$NON-NLS-1$
     private String simDescription;
 	public LslSimProcess(String descriptor, ILaunch launch) {
 	    super(launch);
@@ -22,7 +22,7 @@ public class LslSimProcess extends LslProcess {
     }
 
     protected Process launchExecutable() {
-        return LslPlusPlugin.launchExecutable(SYSTEM_TESTER, false);
+        return LslPlusPlugin.launchCoreCommand(SYSTEM_TESTER, false);
     }
 	
 	public String getLabel() {

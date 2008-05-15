@@ -10,10 +10,12 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
+import lslplus.sim.SimProjectNodes.NotecardLineNode;
+import lslplus.sim.SimProjectNodes.NotecardNode;
 import lslplus.sim.SimWorldDef.Avatar;
 import lslplus.sim.SimWorldDef.LVector;
 import lslplus.sim.SimWorldDef.Prim;
-import lslplus.sim.SimWorldDef.Script;
+import lslplus.sim.SimWorldDef.ScriptInfo;
 import lslplus.sim.SimWorldDef.SimObject;
 
 import org.eclipse.core.resources.IFile;
@@ -27,7 +29,7 @@ import com.thoughtworks.xstream.io.xml.DomDriver;
 // TODO: add validation, so we can mark project is invalid, e.g. if referenced scripts don't exist.
 public class SimProject {
     private static final String PRIM_PROPERTIES = "prim-properties"; //$NON-NLS-1$
-    private static final Status OK = new Status(true,""); //$NON-NLS-1$
+    static final Status OK = new Status(true,""); //$NON-NLS-1$
     private static final NodeFactory[] EMPTY_FACTORY_LIST = { };
     private static final String DEFAULT_AVATAR_ID = "Default Avatar";
     private static HashMap ID_TO_DISPLAY = new HashMap();
@@ -524,7 +526,8 @@ public class SimProject {
     }
     
     public static class PrimNode extends Node {
-        private static final NodeFactory[] LEGAL_CHILD_NODES = { scriptNodeFactory };
+        private static final NodeFactory[] LEGAL_CHILD_NODES =
+            { scriptNodeFactory, SimProjectNodes.notecardFactory };
         
         public PrimNode(Node parent, String name) {
             super(parent, name, null);
@@ -642,6 +645,7 @@ public class SimProject {
             super(parent, PRIM_PROPERTIES, null);
             addChild(new GridPositionNode(this,"pos"));
             addChild(new AvatarReferenceNode(this, "owner", owner));
+            addChild(new StringNode(this,"description",""));
         }
 
         public void setProperty(String string, String owner) {
@@ -660,6 +664,10 @@ public class SimProject {
             
             AvatarReferenceNode owner = (AvatarReferenceNode) findChildByName("owner"); //$NON-NLS-1$
             map.put("owner", new AvatarNodeProxy(owner.getValueString())); //$NON-NLS-1$
+            
+            StringNode description = (StringNode) findChildByName("description"); //$NON-NLS-1$
+            map.put("description", description.getValueString()); //$NON-NLS-1$
+            
             return map;
         }
 
@@ -1125,7 +1133,8 @@ public class SimProject {
         Class[] nodeTypes = new Class[] {
                 WorldNode.class, AvatarNode.class, ObjectNode.class,
                 PrimNode.class, ScriptNode.class, GridCoordinateNode.class,
-                AnyNaturalNode.class, StringNode.class, DefaultAvatarNode.class
+                AnyNaturalNode.class, StringNode.class, DefaultAvatarNode.class,
+                NotecardNode.class, NotecardLineNode.class
         };
         
         xstream.omitField(Node.class, "parent"); //$NON-NLS-1$
@@ -1196,7 +1205,7 @@ public class SimProject {
                     scripts.add(n);
                     Map primInfo = (Map) prims.get(n.getParent());
                     List primScripts = (List) primInfo.get("scripts"); //$NON-NLS-1$
-                    primScripts.add(n.getNameDisplay());
+                    primScripts.add(new ScriptInfo(n.getNameDisplay(),n.getValueString()));
                 } else if (n instanceof AvatarNode) {
                     HashMap info = new HashMap();
                     avatars.put(n, info);
@@ -1268,21 +1277,15 @@ public class SimProject {
                 }
             }
             
-            String owner = (String) data.get("owner");
-            LVector position = (LVector) data.get("pos");
+            String owner = (String) data.get("owner"); //$NON-NLS-1$
+            LVector position = (LVector) data.get("pos"); //$NON-NLS-1$
+            String description = (String) data.get("description"); //$NON-NLS-1$
             primArray[index++] = new Prim((String)info.get("name"), key,  //$NON-NLS-1$
-                    (String[])scriptNames.toArray(new String[scriptNames.size()]),
-                    data, "a prim", owner, position, new LVector(0,0,0));
+                    (ScriptInfo[])scriptNames.toArray(new ScriptInfo[scriptNames.size()]),
+                    data, description, owner, position, new LVector(0,0,0));
         }
         
-        Script[] scriptArray = new Script[scripts.size()];
-        index = 0;
-        for (Iterator i = scripts.iterator(); i.hasNext(); ) {
-            ScriptNode scriptNode = (ScriptNode) i.next();
-            String primKey = (String) reverseKeyMap.get(scriptNode.getParent());
-            scriptArray[index++] = new Script(primKey, scriptNode.getNameDisplay(), scriptNode.getValueString());
-        }
-        return new SimWorldDef(max_tick.intValue(),1000, scriptArray, simObjects, primArray, avatarArray);
+        return new SimWorldDef(max_tick.intValue(),1000, simObjects, primArray, avatarArray);
     }
 
 }

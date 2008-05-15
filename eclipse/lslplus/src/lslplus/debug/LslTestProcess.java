@@ -6,7 +6,7 @@ import lslplus.launching.Messages;
 import org.eclipse.debug.core.ILaunch;
 
 public class LslTestProcess extends LslProcess {
-    private static final String UNIT_TESTER_EXE = "UnitTester2.exe"; //$NON-NLS-1$
+    private static final String UNIT_TESTER = "UnitTester"; //$NON-NLS-1$
     private String descriptor;
     public LslTestProcess(String descriptor, ILaunch launch) {
         super(launch);
@@ -19,7 +19,7 @@ public class LslTestProcess extends LslProcess {
     }
     
     protected Process launchExecutable() {
-        return LslPlusPlugin.launchExecutable(UNIT_TESTER_EXE, false);
+        return LslPlusPlugin.launchCoreCommand(UNIT_TESTER, false);
     }
     
     public String getLabel() {

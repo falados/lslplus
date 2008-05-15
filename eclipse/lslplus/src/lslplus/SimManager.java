@@ -227,7 +227,7 @@ public class SimManager implements SimEventListener {
         Job job = new Job("BuildSimMetaData") { //$NON-NLS-1$
 
             protected IStatus run(IProgressMonitor monitor) {
-                String metaDataString = LslPlusPlugin.runTask("SimMetaData.exe", "");  //$NON-NLS-2$
+                String metaDataString = LslPlusPlugin.runTask("SimMetaData", "");  //$NON-NLS-2$
                 Util.log("metaDataString = " + metaDataString);
                 SimMetaData metaData = SimMetaData.fromXML(metaDataString);
                 

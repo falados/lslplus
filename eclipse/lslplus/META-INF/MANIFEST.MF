@@ -2,7 +2,7 @@ Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: LSLPlus
 Bundle-SymbolicName: lslplus; singleton:=true
-Bundle-Version: 0.2.0
+Bundle-Version: 0.2.5
 Bundle-ClassPath: xstream-1.2.2.jar,
  lslplus.jar
 Bundle-Activator: lslplus.LslPlusPlugin
