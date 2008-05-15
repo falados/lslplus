@@ -3,6 +3,7 @@ module Lsl.Evaluation(
     EvalResult(..),
     Event(..)) where
     
+import Data.Map(Map)
 import Lsl.Type
 import Lsl.Util
 import Lsl.Breakpoint
@@ -19,6 +20,6 @@ data EvalResult = EvalIncomplete | EvalComplete (Maybe String) | YieldTil Int
                 | BrokeAt Breakpoint
     deriving (Show)
 
-data Event = Event { eventName :: String, eventValues :: [LSLValue], eventInfo :: [(String,LSLValue)] }
+data Event = Event { eventName :: String, eventValues :: [LSLValue], eventInfo :: Map String LSLValue }
     deriving (Show)
 

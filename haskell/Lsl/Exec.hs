@@ -16,11 +16,15 @@ module Lsl.Exec(
     runEval,
     scriptImage,
     softReset,
-    hardReset) where
+    hardReset,
+    hasActiveHandler) where
 
 import Debug.Trace
 import Data.Bits
 import Data.List
+import qualified Data.Map as M
+import Data.Maybe
+
 import Lsl.Breakpoint hiding (checkBreakpoint)
 import Lsl.CodeHelper
 import Lsl.FuncSigs
@@ -531,6 +535,7 @@ unwindToLabel name =
 
 
 data ExecutionState = Waiting | Executing | Halted | SleepingTil Int | Erroneous String | Crashed String | Suspended Breakpoint
+                    | WaitingTil Int -- in a waiting state, but won't process new events until time t
     deriving (Show,Eq)
 
 matchEvent (Event name _ _) [] = fail ("no such handler" ++ name)
@@ -605,7 +610,15 @@ evalScript maxTick queue =
                       [] -> return queue
                       (event:queue') ->
                          do states <- getStates
-                            curState <- getCurState
+                            curState <- case event of
+                                            -- when a state_exit event occurs we've already changed the state variable in the image
+                                            -- to the new state.  the event itself contains the name of the old state, so we can
+                                            -- find the right event handler.
+                                            Event "state_exit" _ m -> 
+                                                case M.lookup "last_state" m of
+                                                    Just (SVal s) -> return s
+                                                    Nothing -> logMsg "not a valid state exit!" >> getCurState
+                                            _ -> getCurState
                             (State _ handlers) <- incontext ("state " ++ curState ++ ":") $ findState curState states
                             case matchEvent event handlers of
                                 Nothing -> return queue'
@@ -620,18 +633,26 @@ evalScript maxTick queue =
            Executing -> do result <- eval maxTick
                            case result of
                                EvalComplete (Just newState) -> 
-                                   do setCurState newState
+                                   do curState <- getCurState
+                                      setCurState newState
                                       setExecutionState Waiting
-                               EvalComplete _ -> setExecutionState Waiting
-                               YieldTil i -> setExecutionState $ SleepingTil i
-                               BrokeAt bp -> setExecutionState (Suspended bp)
-                               _ -> return ()
-                           return queue
+                                      if curState /= newState
+                                          -- the event queue gets cleared, with the state exit/entry events added.
+                                          then return [Event "state_exit" [] $ M.singleton "last_state" (SVal curState),
+                                                       Event "state_entry" [] $ M.empty]
+                                          else return queue
+                               EvalComplete _ -> setExecutionState Waiting >> return queue
+                               YieldTil i -> setExecutionState (SleepingTil i) >> return queue
+                               BrokeAt bp -> setExecutionState (Suspended bp) >> return queue
+                               _ -> return queue
            SleepingTil i -> do tick <- getTick
                                if (tick >= i) 
-                                   then do setExecutionState Executing
-                                           evalScript maxTick queue
+                                   then setExecutionState Executing >> evalScript maxTick queue
                                    else return queue
+           WaitingTil i -> do tick <- getTick
+                              if (tick >= i)
+                                  then setExecutionState Waiting >> evalScript maxTick queue
+                                  else return queue
            Halted -> return queue
 
 eval :: Monad w => Int -> Eval w EvalResult
@@ -1050,3 +1071,8 @@ evalPredef' name =
 ctxList es = map (Ctx UnknownSourceContext) es
 
 data ExecutionInfo = ExecutionInfo String Int FrameInfo deriving (Show)
+
+hasActiveHandler simage handler =
+    case find ( \ (State ctxname _) -> curState simage == ctxItem ctxname) (states simage) of
+        Nothing -> False
+        Just (State _ handlers) -> isJust $ find (\ (Handler ctxname _ _) -> handler == ctxItem ctxname) handlers                 

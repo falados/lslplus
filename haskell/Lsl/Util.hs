@@ -30,6 +30,7 @@ module Lsl.Util (
     trimFront,
     trimEnd,
     trim,
+    tuplify,
     cut,
     dist3d,
     dist3d2,
@@ -64,6 +65,11 @@ import IO
 import Network.URI
 
 -- utilities
+
+tuplify [] = []
+tuplify (a:[]) = []
+tuplify (a:b:rest) = (a,b) : tuplify rest
+
 readM s = case reads s of
              [] -> fail ("unable to parse " ++ s)
              ((v,_):_) -> return v

@@ -1,5 +1,6 @@
 module Lsl.UnitTestWorld(
     simStep,
+    simFunc,
     SimpleWorld,
     TestEvent(..),
     ExecutionInfo(..),
@@ -176,6 +177,34 @@ breakpointsFromCommand (ExecStep bps) = bps
 breakpointsFromCommand (ExecStepOver bps) = bps
 breakpointsFromCommand (ExecStepOut bps) = bps
 
+simFunc :: [(String,Validity LModule)] -> (String,String) -> [(String,LSLValue)] -> [LSLValue] -> Either String (LSLValue,[(String,LSLValue)])
+simFunc lib (moduleName,functionName) globs args =
+   let world = SimpleWorld { maxTick = 10000, tick = 0, msgLog = [], wScripts = [], wLibrary = lib, 
+                             expectations = FuncCallExpectations Nice [], breakpointManager = emptyBreakpointManager }
+       ep = ModuleFunc moduleName functionName
+       init = runState (runErrorT (
+           do converted <- convertEntryPoint ep
+              case converted of
+                  Left s -> fail s
+                  Right (script,path) ->
+                      do result <- runEval (setupSimple path globs args) exec
+                         case result of
+                             (Left s, _) -> fail s
+                             (Right (), exec') -> return exec'
+                      where exec = initStateSimple script doPredef logMsg getTick setTick checkBp)) world
+    in case init of
+        (Left s, world') -> Left s
+        (Right exec,world') ->
+            case (runState $ runErrorT $ (runStateT $ runErrorT $ evalSimple 1000) exec) world of
+                (Left s,_) -> Left s
+                (Right r, _) ->
+                    case r of
+                        (Left s,_) -> Left s
+                        (Right (EvalComplete newState, Just val), exec') -> Right (val,glob $ scriptImage exec')
+                        (Right (EvalComplete newState, _),_) -> Left "execution error"
+                        (Right (EvalIncomplete,_),_) -> Left "execution error: timeout"
+                        (Right _,_) -> Left "execution error"
+                            
 simSome exec world = runState (runErrorT (
     do maxTick <- getMaxTick
        (runStateT $ runErrorT $ evalSimple maxTick) exec)) world

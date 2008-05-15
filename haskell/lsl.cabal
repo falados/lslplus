@@ -7,42 +7,50 @@ Author:         Robert Greayer
 Synopsis:       Programs supporting compiling/testing LSL code
 Build-Type:     Simple
 
-Executable Compiler
-  Build-Depends:  base, haskell98, filepath >= 1.1.0.0, parsec >= 2.1.0.0, HaXml >= 1.19.2, directory, mtl >= 1.1, old-time
-  Main-Is:        CompilerMain.hs
-  Hs-Source-Dirs: .
-  Ghc-Options: -fglasgow-exts
+-- Executable Compiler
+--   Build-Depends:  base, haskell98, filepath >= 1.1.0.0, parsec >= 2.1.0.0, HaXml >= 1.19.2, directory, mtl >= 1.1, old-time
+--   Main-Is:        CompilerMain.hs
+--   Hs-Source-Dirs: .
+--   Ghc-Options: -fglasgow-exts
 
-Executable MetaData
-  Build-Depends:  base, haskell98, filepath >= 1.1.0.0, parsec >= 2.1.0.0, HaXml >= 1.19.2, directory, mtl >= 1.1, old-time
-  Main-Is:        MetaDataMain.hs
-  Hs-Source-Dirs: .
-  Ghc-Options: -fglasgow-exts
+-- Executable MetaData
+--   Build-Depends:  base, haskell98, filepath >= 1.1.0.0, parsec >= 2.1.0.0, HaXml >= 1.19.2, directory, mtl >= 1.1, old-time
+--   Main-Is:        MetaDataMain.hs
+--   Hs-Source-Dirs: .
+--   Ghc-Options: -fglasgow-exts
 
-Executable UnitTester2
+-- Executable UnitTester2
+--   Build-Depends:  base, haskell98, filepath >= 1.1.0.0, parsec >= 2.1.0.0, HaXml >= 1.19.2, directory, mtl >= 1.1,
+--                   network >= 2.1, random >= 1.0, containers >= 0.1
+--   Main-Is:        UnitTesterMain2.hs
+--   Hs-Source-Dirs: .
+--   Ghc-Options: -fglasgow-exts
+
+-- Executable SystemTester
+--   Build-Depends:  base, haskell98, filepath >= 1.1.0.0, parsec >= 2.1.0.0, HaXml >= 1.19.2, directory, mtl >= 1.1,
+--                   network >= 2.1, random >= 1.0, containers >= 0.1, QuickCheck >= 1.1.0.0
+--   Main-Is:        SystemTesterMain.hs
+--   Hs-Source-Dirs: .
+--   Ghc-Options: -fglasgow-exts
+
+-- Executable ExpressionHandler
+--   Build-Depends:  base, haskell98, filepath >= 1.1.0.0, parsec >= 2.1.0.0, HaXml >= 1.19.2, directory, mtl >= 1.1,
+--                   network >= 2.1, random >= 1.0
+--   Main-Is:        ExpressionHandlerMain.hs
+--   Hs-Source-Dirs: .
+--   Ghc-Options: -fglasgow-exts
+
+-- Executable SimMetaData
+--   Build-Depends:  base, haskell98, filepath >= 1.1.0.0, parsec >= 2.1.0.0, HaXml >= 1.19.2, directory, mtl >= 1.1,
+--                   network >= 2.1, random >= 1.0, containers >= 0.1, QuickCheck >= 1.1.0.0
+--   Main-Is:        SimMetaDataMain.hs
+--   Hs-Source-Dirs: .
+--   Ghc-Options: -fglasgow-exts
+
+Executable LslPlus
   Build-Depends:  base, haskell98, filepath >= 1.1.0.0, parsec >= 2.1.0.0, HaXml >= 1.19.2, directory, mtl >= 1.1,
-                  network >= 2.1, random >= 1.0, containers >= 0.1
-  Main-Is:        UnitTesterMain2.hs
+                  network >= 2.1, random >= 1.0, containers >= 0.1, QuickCheck >= 1.1.0.0, old-time
+  Main-Is:        LslPlus.hs
   Hs-Source-Dirs: .
-  Ghc-Options: -fglasgow-exts
-
-Executable SystemTester
-  Build-Depends:  base, haskell98, filepath >= 1.1.0.0, parsec >= 2.1.0.0, HaXml >= 1.19.2, directory, mtl >= 1.1,
-                  network >= 2.1, random >= 1.0, containers >= 0.1, QuickCheck >= 1.1.0.0
-  Main-Is:        SystemTesterMain.hs
-  Hs-Source-Dirs: .
-  Ghc-Options: -fglasgow-exts
-
-Executable ExpressionHandler
-  Build-Depends:  base, haskell98, filepath >= 1.1.0.0, parsec >= 2.1.0.0, HaXml >= 1.19.2, directory, mtl >= 1.1,
-                  network >= 2.1, random >= 1.0
-  Main-Is:        ExpressionHandlerMain.hs
-  Hs-Source-Dirs: .
-  Ghc-Options: -fglasgow-exts
-
-Executable SimMetaData
-  Build-Depends:  base, haskell98, filepath >= 1.1.0.0, parsec >= 2.1.0.0, HaXml >= 1.19.2, directory, mtl >= 1.1,
-                  network >= 2.1, random >= 1.0, containers >= 0.1, QuickCheck >= 1.1.0.0
-  Main-Is:        SimMetaDataMain.hs
-  Hs-Source-Dirs: .
-  Ghc-Options: -fglasgow-exts
+  Ghc-Options:    -fglasgow-exts
+  

@@ -47,6 +47,10 @@ validPrimitiveExpr (RotExpr x y z s) = do
      t3 <- validPrimitiveCtxExpr s
      when (not (all (`elem` [LLInteger,LLFloat]) [t0,t1,t2,t3])) $ fail "vector expression must contain only integer or float components"
      return LLRot
+validPrimitiveExpr (ListExpr l) = do
+    ts <- mapM validPrimitiveCtxExpr l
+    when (LLList `elem` ts) $ fail "lists can't contain lists"
+    return LLList
 validPrimitiveExpr (Add e0 e1) =
     do (t0,t1) <- validPrimEach e0 e1
        case (t0,t1) of
@@ -207,6 +211,9 @@ evalExpr (RotExpr xExpr yExpr zExpr sExpr) =
        z <- evalCtxExpr zExpr
        s <- evalCtxExpr sExpr
        return (RVal (toFloat x) (toFloat y) (toFloat z) (toFloat s))
+evalExpr (ListExpr l) =
+    do vals <- mapM evalCtxExpr l
+       return (LVal vals)
 evalExpr (Add e0 e1) =
     do (v0,v1) <- evalEach e0 e1
        case (v0,v1) of

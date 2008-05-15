@@ -5,6 +5,7 @@ import Lsl.Type
 
 data EventDelivery = EventDeliveryScript | EventDeliveryPrim | EventDeliveryObject | EventDeliveryRoot
 data EventAdditionalData = EventAdditionalKeys String String | EventAdditionalAvatarKeys String String | EventAdditionalVectors String String
+                         | EventAdditionalInts String String
 
 lslEventDescriptors = [ 
     ("at_rot_target", [(LLInteger,"tnum"),(LLRot,"targetRot"),(LLRot,"ourrot")], EventDeliveryScript, [],
@@ -51,7 +52,7 @@ lslEventDescriptors = [
      "raised when a scripted object is outside the specified angular distance of a target set by llRotTarget"),
     ("not_at_target",[], EventDeliveryScript, [],
      "raised when a scripted object is outside a specified range of a target set by llTarget"),
-    ("object_rez",[(LLKey,"id")], EventDeliveryScript, [],
+    ("object_rez",[(LLKey,"id")], EventDeliveryPrim, [],
      "raised when a script rezzes another object.  The id is the GUID of the object that it rezzed"),
     ("on_rez", [(LLInteger,"start_param")], EventDeliveryObject, [],
      "raised when an object rezzes (from an agents inventory, an objects inventory, or as an attachment when an user logs on)"),
@@ -68,11 +69,18 @@ lslEventDescriptors = [
      "raised when a state is exited"),
     ("timer", [], EventDeliveryScript, [],
      "raised when the timer set up by llSetTimerEvent triggers"),
-    ("touch", [(LLInteger,"num_detected")], EventDeliveryPrim, [EventAdditionalAvatarKeys "Avatar key" "Key of agent touching prim",EventAdditionalVectors "Grab vector" "direction of grab"],
+    ("touch", [(LLInteger,"num_detected")], EventDeliveryPrim,
+     [EventAdditionalAvatarKeys "Avatar key" "Key of agent touching prim",
+      EventAdditionalVectors "Grab vector" "Force applied by agent grabbing prim",
+      EventAdditionalInts "Link Number" "Link source of touch"],
      "raised when an agent touches a scripted object"),
-    ("touch_start",[(LLInteger,"num_detected")], EventDeliveryPrim, [EventAdditionalAvatarKeys "Avatar key" "Key of agent touching prim"],
+    ("touch_start",[(LLInteger,"num_detected")], EventDeliveryPrim,
+     [EventAdditionalAvatarKeys "Avatar key" "Key of agent touching prim",
+      EventAdditionalInts "Link Number" "Link source of touch"],
      "raised when an agent starts touching a scripted object"),
-    ("touch_end",[(LLInteger,"num_detected")], EventDeliveryPrim, [EventAdditionalAvatarKeys "Avatar key" "Key of agent touching prim"],
+    ("touch_end",[(LLInteger,"num_detected")], EventDeliveryPrim, 
+     [EventAdditionalAvatarKeys "Avatar key" "Key of agent touching prim",
+      EventAdditionalInts "Link Number" "Link source of touch"],
      "raised when an agent stops touching a scripted object")]
 
 simpleLslEventDescriptors =

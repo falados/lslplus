@@ -25,12 +25,21 @@ llcPermissionChangeLinks = IVal cPermissionChangeLinks
 
 cChangedLink = 0x20 :: Int
 llcChangedLink = IVal cChangedLink
+(cChangedInventory,llcChangedInventory) = mkIConst 0x1
+(cChnagedAllowedDrop,llcChangedAllowedDrop) = mkIConst 0x40
 
-cMaskOwner = 1 :: Int
-llcMaskOwner = IVal cMaskOwner
+(cMaskBase,llcMaskBase) = mkIConst 0
+(cMaskOwner,llcMaskOwner) = mkIConst 1
+(cMaskGroup,llcMaskGroup) = mkIConst 2
+(cMaskEveryone,llcMaskEveryone) = mkIConst 3
+(cMaskNext,llcMaskNext) = mkIConst 4
 
-cPermModify = 0x0004000 :: Int
-llcPermModify = IVal cPermModify
+(cPermModify,llcPermModify) = mkIConst 0x00004000
+(cPermCopy,llcPermCopy) = mkIConst 0x00008000
+(cPermTransfer,llcPermTransfer) = mkIConst 0x00002000
+(cPermMove,llcPermMove) = mkIConst 0x00080000
+cFullPerm = cPermModify .|. cPermMove .|. cPermTransfer .|. cPermCopy
+
 
 validAttachmentPoints = [0..36]::[Int]
 
@@ -40,10 +49,89 @@ llcDebugChannel = IVal cDebugChannel
 cEOF = "\n\n\n"
 llcEOF = (SVal cEOF)
 
+cPermissionControlCamera = 0x800 :: Int
+llcPermissionControlCamera = IVal cPermissionControlCamera
+(cPermissionTrackCamera,llcPermissionTrackCamera) = mkIConst 0x400
+(cPermissionTriggerAnimation,llcPermissionTriggerAnimation) = mkIConst 0x10
+(cPermissionDebit,llcPermissionDebit) = mkIConst 0x2
+(cPermissionAttach,llcPermissionAttach) = mkIConst 0x20
+
+(cActive,llcActive) = mkIConst 0x2
+(cAgent,llcAgent) = mkIConst 0x1
+(cPassive,llcPassive) = mkIConst 0x4
+(cScripted,llcScripted) = mkIConst 0x8
+
+
+(cStatusPhysics,llcStatusPhysics) = mkIConst 1
+(cStatusRotateX,llcStatusRotateX) = mkIConst 2
+(cStatusRotateY,llcStatusRotateY) = mkIConst 4
+(cStatusRotateZ,llcStatusRotateZ) = mkIConst 8
+(cStatusPhantom,llcStatusPhantom) = mkIConst 16
+(cStatusSandbox,llcStatusSandbox) = mkIConst 32
+(cStatusBlockGrab,llcStatusBlockGrab) = mkIConst 64
+(cStatusDieAtEdge,llcStatusDieAtEdge) = mkIConst 128
+(cStatusReturnAtEdge,llcStatusReturnAtEdge) = mkIConst 256
+(cStatusCastShadows,llcStatusCastShadows) = mkIConst 512
+
+(cPrimBumpShiny,llcPrimBumpShiny) = mkIConst 19
+(cPrimColor,llcPrimColor) = mkIConst 18
+(cPrimTexture,llcPrimTexture) = mkIConst 17
+(cPrimTexgen,llcPrimTexgen) = mkIConst 22
+(cPrimFullbright,llcPrimFullbright) = mkIConst 20
+
+(cPrimMaterial,llcPrimMaterial) = mkIConst 2
+(cPrimPhantom,llcPrimPhantom) = mkIConst 5
+(cPrimPhysics,llcPrimPhysics) = mkIConst 3
+(cPrimFlexible,llcPrimFlexible) = mkIConst 21
+(cPrimPointLight,llcPrimPointLight) = mkIConst 23
+(cPrimPosition,llcPrimPosition) = mkIConst 6
+(cPrimRotation,llcPrimRotation) = mkIConst 8
+(cPrimSize,llcPrimSize) = mkIConst 7
+(cPrimTempOnRez,llcPrimTempOnRez) = mkIConst 4 
+(cPrimType,llcPrimType) = mkIConst 9
+
+(cParcelDetailsName,llcParcelDetailsName) = mkIConst 0
+(cParcelDetailsDesc,llcParcelDetailsDesc) = mkIConst 1
+(cParcelDetailsOwner,llcParcelDetailsOwner) = mkIConst 2
+(cParcelDetailsGroup,llcParcelDetailsGroup) = mkIConst 3 
+(cParcelDetailsArea,llcParcelDetailsArea) = mkIConst 4
+
+(cClickActionNone,llcClickActionNone) = mkIConst 0
+(cClickActionTouch,llcClickActionTouch) = mkIConst 0
+(cClickActionSit,llcClickActionSit) = mkIConst 1
+(cClickActionBuy,llcClickActionBuy) = mkIConst 2
+(cClickActionPay,llcClickActionPay) = mkIConst 3
+(cClickActionOpen,llcClickActionOpen) = mkIConst 4
+(cClickActionPlay,llcClickActionPlay) = mkIConst 5
+(cClickActionOpenMedia,llcClickActionOpenMedia) = mkIConst 6
+cClickActions = [cClickActionTouch,cClickActionSit,cClickActionBuy,cClickActionPay,cClickActionOpen,cClickActionPlay,cClickActionOpenMedia]
+
+(cDataBorn,llcDataBorn) = mkIConst 3
+(cDataName,llcDataName) = mkIConst 2
+(cDataOnline,llcDataOnline) = mkIConst 1
+(cDataPayinfo,llcDataPayinfo) = mkIConst 8
+(cDataRating,llcDataRating) = mkIConst 4
+(cDataSimPos,llcDataSimPos) = mkIConst 5
+(cDataSimRating,llcDataSimRating) = mkIConst 7
+(cDataSimStatus,llcDataSimStatus) = mkIConst 6
+
+(cHTTPBodyMaxlength,llcHTTPBodyMaxlength) = mkIConst 2
+(cHTTPBodyTruncated,llcHTTPBodyTruncated) = mkIConst 0
+(cHTTPMethod,llcHTTPMethod) = mkIConst 0
+(cHTTPMimetype,llcHTTPMimetype) = mkIConst 1
+(cHTTPVerifyCert,llcHTTPVerifyCert) = mkIConst 3
+
+(cRemoteDataChannel,llcRemoteDataChannel) = mkIConst 1
+(cRemoteDataRequest,llcRemoteDataRequest) = mkIConst 2
+(cRemoteDataReply,llcRemoteDataReply) = mkIConst 3
+
+mkIConst :: Int -> (Int,LSLValue)
+mkIConst i = (i,IVal i)
+
 allConstants :: [Constant]
 allConstants = [
-    Constant "ACTIVE" (IVal 0x2),
-    Constant "AGENT" (IVal 0x1),
+    Constant "ACTIVE" llcActive,
+    Constant "AGENT" llcAgent,
     Constant "AGENT_ALWAYS_RUN" (IVal 0x1000),
     Constant "AGENT_ATTACHMENTS" (IVal 0x2),
     Constant "AGENT_AWAY" (IVal 0x40),
@@ -111,9 +199,9 @@ allConstants = [
     Constant "CAMERA_POSITION_LAG" (IVal 5),
     Constant "CAMERA_POSITION_LOCKED" (IVal 21),
     Constant "CAMERA_POSITION_THRESHOLD" (IVal 10),
-    Constant "CHANGED_ALLOWED_DROP" (IVal 0x40),
+    Constant "CHANGED_ALLOWED_DROP" llcChangedAllowedDrop,
     Constant "CHANGED_COLOR" (IVal 0x2),
-    Constant "CHANGED_INVENTORY" (IVal 0x1),
+    Constant "CHANGED_INVENTORY" llcChangedInventory,
     Constant "CHANGED_LINK" llcChangedLink,
     Constant "CHANGED_OWNER" (IVal 0x80),
     Constant "CHANGED_REGION" (IVal 0x100),
@@ -121,6 +209,14 @@ allConstants = [
     Constant "CHANGED_SHAPE" (IVal 0x4),
     Constant "CHANGED_TELEPORT" (IVal 0x200),
     Constant "CHANGED_TEXTURE" (IVal 0x10),
+    Constant "CLICK_ACTION_NONE" llcClickActionNone,
+    Constant "CLICK_ACTION_TOUCH" llcClickActionTouch,
+    Constant "CLICK_ACTION_SIT" llcClickActionSit,
+    Constant "CLICK_ACTION_BUY" llcClickActionBuy,
+    Constant "CLICK_ACTION_PAY" llcClickActionPay,
+    Constant "CLICK_ACTION_OPEN" llcClickActionOpen,
+    Constant "CLICK_ACTION_PLAY" llcClickActionPlay,
+    Constant "CLICK_ACTION_OPEN_MEDIA" llcClickActionOpenMedia,
     Constant "CONTROL_BACK" (IVal 0x2),
     Constant "CONTROL_DOWN" (IVal 0x20),
     Constant "CONTROL_FWD" (IVal 0x1),
@@ -131,23 +227,23 @@ allConstants = [
     Constant "CONTROL_ROT_LEFT" (IVal 0x100),
     Constant "CONTROL_ROT_RIGHT" (IVal 0x200),
     Constant "CONTROL_UP" (IVal 0x10),
-    Constant "DATA_BORN" (IVal 3),
-    Constant "DATA_NAME" (IVal 2),
-    Constant "DATA_ONLINE" (IVal 1),
-    Constant "DATA_PAYINFO" (IVal 8),
-    Constant "DATA_RATING" (IVal 4),
-    Constant "DATA_SIM_POS" (IVal 5),
-    Constant "DATA_SIM_RATING" (IVal 7),
-    Constant "DATA_SIM_STATUS" (IVal 6),
+    Constant "DATA_BORN" llcDataBorn,
+    Constant "DATA_NAME" llcDataName,
+    Constant "DATA_ONLINE" llcDataOnline,
+    Constant "DATA_PAYINFO" llcDataPayinfo,
+    Constant "DATA_RATING" llcDataRating,
+    Constant "DATA_SIM_POS" llcDataSimPos,
+    Constant "DATA_SIM_RATING" llcDataSimRating,
+    Constant "DATA_SIM_STATUS" llcDataSimStatus,
     Constant "DEBUG_CHANNEL" llcDebugChannel,
     Constant "DEG_TO_RAD" (FVal 0.01745329238),
     Constant "EOF" llcEOF,
     Constant "FALSE" (IVal 0),
-    Constant "HTTP_BODY_MAXLENGTH" (IVal 2),
-    Constant "HTTP_BODY_TRUNCATED" (IVal 0),
-    Constant "HTTP_METHOD" (IVal 0),
-    Constant "HTTP_MIMETYPE" (IVal 1),
-    Constant "HTTP_VERIFY_CERT" (IVal 3),
+    Constant "HTTP_BODY_MAXLENGTH" llcHTTPBodyMaxlength,
+    Constant "HTTP_BODY_TRUNCATED" llcHTTPBodyTruncated,
+    Constant "HTTP_METHOD" llcHTTPMethod,
+    Constant "HTTP_MIMETYPE" llcHTTPMimetype,
+    Constant "HTTP_VERIFY_CERT" llcHTTPVerifyCert,
     Constant "INVENTORY_ALL" llcInventoryAll,
     Constant "INVENTORY_ANIMATION" llcInventoryAnimation,
     Constant "INVENTORY_BODYPART" llcInventoryBodyPart,
@@ -185,10 +281,10 @@ allConstants = [
     Constant "LIST_STAT_SUM" (IVal 6),
     Constant "LIST_STAT_SUM_SQUARES" (IVal 7),
     Constant "LOOP" (IVal 0x2),
-    Constant "MASK_BASE" (IVal 0),
-    Constant "MASK_EVERYONE" (IVal 3),
-    Constant "MASK_GROUP" (IVal 2),
-    Constant "MASK_NEXT" (IVal 4),
+    Constant "MASK_BASE" llcMaskBase,
+    Constant "MASK_EVERYONE" llcMaskEveryone,
+    Constant "MASK_GROUP" llcMaskGroup,
+    Constant "MASK_NEXT" llcMaskNext,
     Constant "MASK_OWNER" llcMaskOwner,
     Constant "NULL_KEY" (SVal "00000000-0000-0000-0000-000000000000"),
     Constant "OBJECT_CREATOR" (IVal 8),
@@ -206,11 +302,11 @@ allConstants = [
     Constant "PARCEL_COUNT_SELECTED" (IVal 4),
     Constant "PARCEL_COUNT_TEMP" (IVal 5),
     Constant "PARCEL_COUNT_TOTAL" (IVal 0),
-    Constant "PARCEL_DETAILS_AREA" (IVal 4),
-    Constant "PARCEL_DETAILS_DESC" (IVal 1),
-    Constant "PARCEL_DETAILS_GROUP" (IVal 3),
-    Constant "PARCEL_DETAILS_NAME" (IVal 0),
-    Constant "PARCEL_DETAILS_OWNER" (IVal 2),
+    Constant "PARCEL_DETAILS_AREA" llcParcelDetailsArea,
+    Constant "PARCEL_DETAILS_DESC" llcParcelDetailsDesc,
+    Constant "PARCEL_DETAILS_GROUP" llcParcelDetailsGroup,
+    Constant "PARCEL_DETAILS_NAME" llcParcelDetailsName,
+    Constant "PARCEL_DETAILS_OWNER" llcParcelDetailsOwner,
     Constant "PARCEL_FLAG_ALLOW_ALL_OBJECT_ENTRY" (IVal (1 `shiftL` 27)),
     Constant "PARCEL_FLAG_ALLOW_CREATE_GROUP_OBJECTS" (IVal (1 `shiftL` 26)),
     Constant "PARCEL_FLAG_ALLOW_CREATE_OBJECTS" (IVal (1 `shiftL` 6)),
@@ -237,27 +333,27 @@ allConstants = [
     Constant "PARCEL_MEDIA_COMMAND_TIME" (IVal 6),
     Constant "PARCEL_MEDIA_COMMAND_UNLOAD" (IVal 8),
     Constant "PARCEL_MEDIA_COMMAND_URL" (IVal 5),
-    Constant "PASSIVE" (IVal 0x4),
+    Constant "PASSIVE" llcPassive,
     Constant "PAYMENT_INFO_ON_FILE" (IVal 1),
     Constant "PAYMENT_INFO_USED" (IVal 2),
     Constant "PAY_DEFAULT" (IVal (-2)),
     Constant "PAY_HIDE" (IVal (-1)),
-    Constant "PERMISSION_ATTACH" (IVal 0x20),
+    Constant "PERMISSION_ATTACH" llcPermissionAttach,
     Constant "PERMISSION_CHANGE_JOINTS" (IVal 0x100),
     Constant "PERMISSION_CHANGE_LINKS" llcPermissionChangeLinks,
     Constant "PERMISSION_CHANGE_PERMISSIONS" (IVal 0x200),
-    Constant "PERMISSION_CONTROL_CAMERA" (IVal 0x800),
-    Constant "PERMISSION_DEBIT" (IVal 0x2),
+    Constant "PERMISSION_CONTROL_CAMERA" llcPermissionControlCamera,
+    Constant "PERMISSION_DEBIT" llcPermissionDebit,
     Constant "PERMISSION_RELEASE_OWNERSHIP" (IVal 0x40),
     Constant "PERMISSION_REMAP_CONTROLS" (IVal 0x8),
     Constant "PERMISSION_TAKE_CONTROLS" (IVal 0x4),
     Constant "PERMISSION_TRACK_CAMERA" (IVal 0x400),
-    Constant "PERMISSION_TRIGGER_ANIMATION" (IVal 0x10),
+    Constant "PERMISSION_TRIGGER_ANIMATION" llcPermissionTriggerAnimation,
     Constant "PERM_ALL" (IVal 0x7FFFFFFF),
-    Constant "PERM_COPY" (IVal 0x8000),
+    Constant "PERM_COPY" llcPermCopy,
     Constant "PERM_MODIFY" llcPermModify,
-    Constant "PERM_MOVE" (IVal 0x80000),
-    Constant "PERM_TRANSFER" (IVal 0x2000),
+    Constant "PERM_MOVE" llcPermMove,
+    Constant "PERM_TRANSFER" llcPermTransfer,
     Constant "PI" (FVal 3.14159274),
     Constant "PING_PONG" (IVal 0x8),
     Constant "PI_BY_TWO" (FVal 1.57079637),
@@ -272,7 +368,7 @@ allConstants = [
     Constant "PRIM_BUMP_GRAVEL" (IVal 11),
     Constant "PRIM_BUMP_LARGETILE" (IVal 14),
     Constant "PRIM_BUMP_NONE" (IVal 0),
-    Constant "PRIM_BUMP_SHINY" (IVal 19),
+    Constant "PRIM_BUMP_SHINY" llcPrimBumpShiny,
     Constant "PRIM_BUMP_SIDING" (IVal 13),
     Constant "PRIM_BUMP_STONE" (IVal 9),
     Constant "PRIM_BUMP_STUCCO" (IVal 15),
@@ -281,14 +377,14 @@ allConstants = [
     Constant "PRIM_BUMP_WEAVE" (IVal 17),
     Constant "PRIM_BUMP_WOOD" (IVal 3),
     Constant "PRIM_CAST_SHADOWS" (IVal 24),
-    Constant "PRIM_COLOR" (IVal 18),
-    Constant "PRIM_FLEXIBLE" (IVal 21),
-    Constant "PRIM_FULLBRIGHT" (IVal 20),
+    Constant "PRIM_COLOR" llcPrimColor,
+    Constant "PRIM_FLEXIBLE" llcPrimFlexible,
+    Constant "PRIM_FULLBRIGHT" llcPrimFullbright,
     Constant "PRIM_HOLE_CIRCLE" (IVal 0x10),
     Constant "PRIM_HOLE_DEFAULT" (IVal 0x0),
     Constant "PRIM_HOLE_SQUARE" (IVal 0x20),
     Constant "PRIM_HOLE_TRIANGLE" (IVal 0x30),
-    Constant "PRIM_MATERIAL" (IVal 2),
+    Constant "PRIM_MATERIAL" llcPrimMaterial,
     Constant "PRIM_MATERIAL_FLESH" (IVal 4),
     Constant "PRIM_MATERIAL_GLASS" (IVal 2),
     Constant "PRIM_MATERIAL_LIGHT" (IVal 7),
@@ -297,23 +393,23 @@ allConstants = [
     Constant "PRIM_MATERIAL_RUBBER" (IVal 6),
     Constant "PRIM_MATERIAL_STONE" (IVal 0),
     Constant "PRIM_MATERIAL_WOOD" (IVal 3),
-    Constant "PRIM_PHANTOM" (IVal 5),
-    Constant "PRIM_PHYSICS" (IVal 3),
-    Constant "PRIM_POINT_LIGHT" (IVal 23),
-    Constant "PRIM_POSITION" (IVal 6),
-    Constant "PRIM_ROTATION" (IVal 8),
+    Constant "PRIM_PHANTOM" llcPrimPhantom,
+    Constant "PRIM_PHYSICS" llcPrimPhysics,
+    Constant "PRIM_POINT_LIGHT" llcPrimPointLight,
+    Constant "PRIM_POSITION" llcPrimPosition,
+    Constant "PRIM_ROTATION" llcPrimRotation,
     Constant "PRIM_SHINY_HIGH" (IVal 3),
     Constant "PRIM_SHINY_LOW" (IVal 1),
     Constant "PRIM_SHINY_MEDIUM" (IVal 2),
     Constant "PRIM_SHINY_NONE" (IVal 0),
-    Constant "PRIM_SIZE" (IVal 7),
-    Constant "PRIM_TEMP_ON_REZ" (IVal 4),
-    Constant "PRIM_TEXGEN" (IVal 22),
+    Constant "PRIM_SIZE" llcPrimSize,
+    Constant "PRIM_TEMP_ON_REZ" llcPrimTempOnRez,
+    Constant "PRIM_TEXGEN" llcPrimTexgen,
     Constant "PRIM_TEXGEN_DEFAULT" (IVal 0),
     Constant "PRIM_TEXGEN_PLANAR" (IVal 1),
-    Constant "PRIM_TEXTURE" (IVal 17),
+    Constant "PRIM_TEXTURE" llcPrimTexture,
     --Constant "PRIM_TYPE" (IVal 1),
-    Constant "PRIM_TYPE" (IVal 9),
+    Constant "PRIM_TYPE" llcPrimType,
     Constant "PRIM_TYPE_BOX" (IVal 0),
     Constant "PRIM_TYPE_CYLINDER" (IVal 1),
     Constant "PRIM_TYPE_PRISM" (IVal 2),
@@ -371,13 +467,13 @@ allConstants = [
     Constant "REGION_FLAG_FIXED_SUN" (IVal (1 `shiftL` 4)),
     Constant "REGION_FLAG_RESTRICT_PUSHOBJECT" (IVal (1 `shiftL` 22)),
     Constant "REGION_FLAG_SANDBOX" (IVal (1 `shiftL` 8)),
-    Constant "REMOTE_DATA_CHANNEL" (IVal 1),
-    Constant "REMOTE_DATA_REPLY" (IVal 3),
-    Constant "REMOTE_DATA_REQUEST" (IVal 2),
+    Constant "REMOTE_DATA_CHANNEL" llcRemoteDataChannel,
+    Constant "REMOTE_DATA_REPLY" llcRemoteDataReply,
+    Constant "REMOTE_DATA_REQUEST" llcRemoteDataRequest,
     Constant "REVERSE" (IVal 0x4),
     Constant "ROTATE" (IVal 0x20),
     Constant "SCALE" (IVal 0x40),
-    Constant "SCRIPTED" (IVal 0x8),
+    Constant "SCRIPTED" llcScripted,
     Constant "SMOOTH" (IVal 0x10),
     Constant "SQRT2" (FVal 1.414213538),
     Constant "STATUS_BLOCK_GRAB" (IVal 0x40),

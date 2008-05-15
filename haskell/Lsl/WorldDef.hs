@@ -1,4 +1,5 @@
-module Lsl.WorldDef(Prim(..),
+module Lsl.WorldDef(Avatar(..),
+                    Prim(..),
                     PrimFace(..),
                     TextureInfo(..),
                     Flexibility(..),
@@ -11,12 +12,31 @@ module Lsl.WorldDef(Prim(..),
                     InventoryItemIdentification(..),
                     InventoryItem(..),
                     InventoryInfo(..),
+                    InventoryItemData(..),
                     Script(..),
                     Attachment(..),
-                    inventoryItemInfoMap,
+                    CameraParams(..),
+                    Email(..),
+                    WebHandling(..),
+                    defaultAvatar,
+                    defaultCamera,
+                    isInvScriptItem,
+                    isInvBodyPartItem,
+                    isInvGestureItem,
+                    isInvClothingItem,
+                    isInvTextureItem,
+                    isInvSoundItem,
+                    isInvAnimationItem,
+                    isInvLandmarkItem,
+                    isInvNotecardItem,
+                    isInvObjectItem,
+                    inventoryInfoPermValue,
+                    defaultInventoryPermissions,
+                    inventoryItemName,
                     inventoryItemNames,
                     scriptInventoryItem,
                     findByInvName,
+                    findByInvKey,
                     emptyPrim,
                     primPhantomBit,
                     primPhysicsBit,
@@ -30,9 +50,10 @@ import Control.Monad.Error
 import qualified Control.Monad.State as SM
 import Data.List
 import qualified Data.Map as M
+import qualified Data.IntMap as IM
 import Data.Maybe
 
-import Lsl.Avatar
+-- import Lsl.Avatar
 import Lsl.DOMProcessing hiding (find)
 import Lsl.Evaluation
 import Lsl.Exec(ScriptImage,initLSLScript)
@@ -47,53 +68,165 @@ type KeyManagerM = ErrorT String (SM.State (M.Map String String,Integer))
 data FullWorldDef = FullWorldDef {
                         fullWorldDefMaxTime :: Int,
                         fullWorldDefSliceSize :: Int,
-                        fullWorldDefActiveScripts :: [((String,String),(String))], -- [((primKey,invName),(scriptID))]
+                        fullWorldDefWebHandling :: WebHandling,
+                        fullWorldDefEventHandler :: Maybe String,
                         fullWorldDefObjects :: [LSLObject],
                         fullWorldDefPrims :: [Prim],
                         fullWorldDefAvatars :: [Avatar],
                         fullWorldDefRegions :: [((Int,Int),Region)],
                         fullWorldDefInitialKeyIndex :: Integer } deriving (Show)
-                        
+
+data WebHandling = WebHandlingByFunction 
+                 | WebHandlingByDoingNothing
+                 | WebHandlingByInternet { webHandlingTimeout :: Float } deriving (Show)
+                             
 data LSLObject = LSLObject { primKeys :: [String] } deriving (Show)
 
+data Avatar = Avatar { avatarKey :: String,
+                       avatarName :: String,
+                       avatarActiveGroup :: Maybe String,
+                       avatarRegion :: (Int,Int),
+                       avatarPosition :: (Float,Float,Float),
+                       avatarRotation :: (Float,Float,Float,Float),
+                       avatarHeight :: Float,
+                       avatarState :: Int,
+                       avatarInventory :: [InventoryItem],
+                       avatarCameraPosition :: (Float,Float,Float),
+                       avatarCameraRotation :: (Float,Float,Float,Float),
+                       avatarCameraControlParams :: CameraParams,
+                       avatarActiveAnimations :: [(Maybe Int,String)],
+                       avatarAttachments :: IM.IntMap String } deriving (Show)
+
+data CameraParams = CameraParams { cameraActive :: Bool,
+                                   cameraBehindednessAngle :: Float,
+                                   cameraBehindednessLag :: Float,
+                                   cameraDistance :: Float,
+                                   cameraFocus :: Maybe (Float,Float,Float),
+                                   cameraFocusLag :: Float,
+                                   cameraFocusLocked :: Bool,
+                                   cameraFocusOffset :: (Float,Float,Float),
+                                   cameraFocusThreshold :: Float,
+                                   cameraPitch :: Float,
+                                   cameraPosition :: Maybe (Float,Float,Float),
+                                   cameraPositionLag :: Float,
+                                   cameraPositionLocked :: Bool,
+                                   cameraPositionThreshold :: Float } deriving Show
+defaultCamera = CameraParams { cameraActive = False,
+                               cameraBehindednessAngle = 10.0,
+                               cameraBehindednessLag = 0,
+                               cameraDistance = 3.0,
+                               cameraFocus = Nothing,
+                               cameraFocusLag = 0,
+                               cameraFocusLocked = False,
+                               cameraFocusOffset = (0,0,0),
+                               cameraFocusThreshold = 1.0,
+                               cameraPitch = 0.0,
+                               cameraPosition = Nothing,
+                               cameraPositionLag = 0.1,
+                               cameraPositionLocked = False,
+                               cameraPositionThreshold = 1 }
+                               
+defaultAvatar key = 
+    Avatar { avatarKey = key,
+             avatarName = "Default Avatar",
+             avatarActiveGroup = Nothing,
+             avatarRegion = (0,0),
+             avatarPosition = (128.0,128.0,0.0),
+             avatarRotation = (0.0, 0.0, 0.0, 1.0),
+             avatarHeight = 2,
+             avatarState = 0,
+             avatarInventory = [],
+             avatarCameraPosition = (128.0,128.0,0.0),
+             avatarCameraRotation = (0,0,0,1),
+             avatarCameraControlParams = defaultCamera,
+             avatarActiveAnimations = [],
+             avatarAttachments = IM.empty }
+                       
 -- these are bit INDEXES not MASKS (0 == least significant bit)
 primPhantomBit :: Int
 primPhantomBit = 4
 primPhysicsBit :: Int
 primPhysicsBit = 0
 
-newtype InventoryItemIdentification = InventoryItemIdentification { inventoryItemNameKey :: (String,String) } deriving (Show)
-data InventoryItem a = InventoryItem { inventoryItemIdentification :: InventoryItemIdentification, 
-                                       inventoryItemInfo :: InventoryInfo,
-                                       inventoryItemData :: a } deriving (Show)
-data InventoryInfo  = InventoryInfo {  inventoryInfoCreator :: String,
-                                       inventoryInfoOwner :: String,
-                                       inventoryInfoCopyPerm :: Bool,
-                                       inventoryInfoModifyPerm :: Bool,
-                                       inventoryInfoTransferPerm :: Bool } deriving (Show)
+data InventoryItemData = InvScript { invScriptLibId :: String, invScriptState :: Maybe ScriptImage }
+                       | InvBodyPart
+                       | InvGesture
+                       | InvClothing
+                       | InvTexture
+                       | InvSound { invSoundDuration :: Float }
+                       | InvAnimation { invAnimationDuration :: Maybe Float }
+                       | InvLandmark { invLandmarkLocation :: ((Int,Int),(Float,Float,Float)) }
+                       | InvNotecard { invNotecardLines :: [String] }
+                       | InvObject { invObjectPrims :: [Prim] } deriving (Show)
+isInvScript (InvScript _ _) = True
+isInvScript _ = False
+isInvBodyPart InvBodyPart = True
+isInvBodyPart _ = False
+isInvGesture InvGesture = True
+isInvGesture _ = False
+isInvClothing InvClothing = True
+isInvClothing _ = False
+isInvTexture InvTexture = True
+isInvTexture _ = False
+isInvSound (InvSound _) = True
+isInvSound _ = False
+isInvAnimation (InvAnimation _) = True
+isInvAnimation _ = False
+isInvLandmark (InvLandmark _) = True
+isInvLandmark _ = False
+isInvNotecard (InvNotecard _) = True
+isInvNotecard _ = False
+isInvObject (InvObject _) = True
+isInvObject _ = False
 
-inventoryItemInfoMap = map ( \ item -> (inventoryItemIdentification item, inventoryItemInfo item))
-inventoryItemNames = map (fst . inventoryItemNameKey . inventoryItemIdentification)
-scriptInventoryItem s k = InventoryItem (InventoryItemIdentification (s,k)) (InventoryInfo "" "" True True True) ()
+isInvScriptItem = isInvScript . inventoryItemData
+isInvBodyPartItem = isInvBodyPart . inventoryItemData
+isInvGestureItem = isInvGesture . inventoryItemData
+isInvClothingItem = isInvClothing . inventoryItemData
+isInvTextureItem = isInvTexture . inventoryItemData
+isInvSoundItem = isInvSound . inventoryItemData
+isInvAnimationItem = isInvAnimation . inventoryItemData
+isInvLandmarkItem = isInvLandmark . inventoryItemData
+isInvNotecardItem = isInvNotecard . inventoryItemData
+isInvObjectItem = isInvObject . inventoryItemData
+                       
+newtype InventoryItemIdentification = InventoryItemIdentification { inventoryItemNameKey :: (String,String) } deriving (Show)
+-- data InventoryItem a = InventoryItem { inventoryItemIdentification :: InventoryItemIdentification, 
+--                                        inventoryItemInfo :: InventoryInfo,
+--                                        inventoryItemData :: a } deriving (Show)
+data InventoryInfo  = InventoryInfo {  inventoryInfoCreator :: String,
+                                       --inventoryInfoOwner :: String,
+                                       inventoryInfoPerms :: (Int,Int,Int,Int,Int) } deriving (Show)
+data InventoryItem = InventoryItem { inventoryItemIdentification :: InventoryItemIdentification,
+                                     inventoryItemInfo :: InventoryInfo,
+                                     inventoryItemData :: InventoryItemData } deriving (Show)
+                                     
+--inventoryItemInfoMap = map ( \ item -> (inventoryItemIdentification item, inventoryItemInfo item))
+inventoryItemName = fst . inventoryItemNameKey . inventoryItemIdentification
+inventoryItemNames = map inventoryItemName
+scriptInventoryItem s k id = InventoryItem (InventoryItemIdentification (s,k)) (InventoryInfo "" defaultInventoryPermissions) (InvScript id Nothing)
 inventoryItemIdentifications = map inventoryItemIdentification
-findByInvName name = find (\ (InventoryItemIdentification (n,_),_) -> n == name)
+findByInvName name = find ((== name) . (fst . inventoryItemNameKey . inventoryItemIdentification))
+findByInvKey key = find ((== key) . (snd . inventoryItemNameKey . inventoryItemIdentification))
+
+inventoryInfoPermValue 0 (i,_,_,_,_) = return i
+inventoryInfoPermValue 1 (_,i,_,_,_) = return i
+inventoryInfoPermValue 2 (_,_,i,_,_) = return i
+inventoryInfoPermValue 3 (_,_,_,i,_) = return i
+inventoryInfoPermValue 4 (_,_,_,_,i) = return i
+inventoryInfoPermValue i _ = throwError ("no such perm mask - " ++ show i)
+
+defaultInventoryPermissions :: (Int,Int,Int,Int,Int)
+defaultInventoryPermissions = (0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff)
 
 data Prim = Prim {
                     primName :: String,
                     primKey :: String,
                     primParent :: Maybe String,
                     primDescription :: String,
-                    primScripts :: [InventoryItem ()],
-                    notecards :: [InventoryItem [String]],
-                    animations :: [InventoryItem ()],
-                    textures :: [InventoryItem ()],
-                    sounds :: [InventoryItem ()],
-                    primBodyParts :: [InventoryItem ()],
-                    primClothing :: [InventoryItem ()],
-                    primGestures :: [InventoryItem ()],
-                    primLandmarks :: [InventoryItem ((Int,Int),(Float,Float,Float))],
-                    inventoryObjects :: [InventoryItem LSLObject],
+                    primInventory :: [InventoryItem],
                     primOwner :: String,
+                    primGroup :: Maybe String,
                     primCreator :: String,
                     primPosition :: (Float, Float, Float),
                     primRotation :: (Float, Float, Float, Float),
@@ -102,6 +235,7 @@ data Prim = Prim {
                     primFlexibility :: Maybe Flexibility,
                     primMaterial :: Int,
                     primStatus :: Int,
+                    primVehicleFlags :: Int,
                     primLight :: Maybe LightInfo,
                     primTempOnRez :: Bool,
                     primTypeInfo :: PrimType,
@@ -110,7 +244,12 @@ data Prim = Prim {
                     primAllowInventoryDrop :: Bool,
                     primSitTarget :: Maybe ((Float,Float,Float),(Float,Float,Float,Float)),
                     primSittingAvatar :: Maybe String,
-                    primAttachment :: Maybe Attachment } deriving (Show)
+                    primPendingEmails :: [Email],
+                    primPassTouches :: Bool,
+                    primPassCollisions :: Bool,
+                    primPayInfo :: (Int,Int,Int,Int,Int),
+                    primAttachment :: Maybe Attachment,
+                    primRemoteScriptAccessPin :: Int } deriving (Show)
 
 data PrimType = PrimTypeUnknown
               | PrimType {
@@ -164,7 +303,7 @@ data PrimFace = PrimFace {
 defaultFace = PrimFace 1.0 (1.0,1.0,1.0) 0 0 False 0 defaultTextureInfo
                
 data TextureInfo = TextureInfo {
-        textureName :: String,
+        textureKey :: String,
         textureRepeats :: (Float,Float,Float),
         textureOffsets :: (Float,Float,Float),
         textureRotation :: Float
@@ -172,23 +311,20 @@ data TextureInfo = TextureInfo {
 
 defaultTextureInfo = TextureInfo "" (1.0,1.0,0.0) (0.0,0.0,0.0) 0.0
                    
+data Email = Email {
+                emailSubject :: String,
+                emailAddress :: String, -- sender address
+                emailMessage :: String,
+                emailTime :: Int } deriving (Show)
                                       
 emptyPrim name key =
     Prim { primName = name,
            primKey = key,
            primParent = Nothing,
            primDescription = "",
-           primScripts = [],
-           notecards = [],
-           animations = [],
-           textures = [],
-           sounds = [],
-           primBodyParts = [],
-           primClothing = [],
-           primGestures = [],
-           primLandmarks = [],
-           inventoryObjects = [],
+           primInventory = [],
            primOwner = "",
+           primGroup = Nothing,
            primCreator = "",
            primPosition = (0.0,0.0,0.0),
            primRotation = (0.0,0.0,0.0,1.0),
@@ -197,6 +333,7 @@ emptyPrim name key =
            primFlexibility = Nothing,
            primMaterial = 0,
            primStatus = 0x0e,
+           primVehicleFlags = 0,
            primLight = Nothing,
            primTempOnRez = False,
            primTypeInfo = basicBox,
@@ -205,37 +342,52 @@ emptyPrim name key =
            primAllowInventoryDrop = False,
            primSitTarget = Nothing,
            primSittingAvatar = Nothing,
-           primAttachment = Nothing }
+           primPendingEmails = [],
+           primPassTouches = False,
+           primPassCollisions = False,
+           primPayInfo = ( -2, -2, -2, -2, -2),
+           primAttachment = Nothing,
+           primRemoteScriptAccessPin = 0 }
 
 data Region = Region {
         regionName :: String,
+        regionFlags :: Int,
         regionParcels :: [Parcel]
     } deriving (Show)
     
 data Parcel = Parcel {
         parcelName :: String,
+        parcelDescription :: String,
         parcelBoundaries :: (Int,Int,Int,Int), -- bottom, top, left, right aka south,north,west,east
         parcelOwner :: String,
+        parcelFlags :: Int,
         parcelBanList :: [(String,Maybe Int)],
         parcelPassList :: [(String,Maybe Int)]
     } deriving (Show)
 
 defaultRegions :: String -> [((Int,Int),Region)]
 defaultRegions owner = [
-    ((0,0), Region { regionName = "Region_0_0", regionParcels = [Parcel "parcel_0" (0,256,0,256) owner [] []] })
+    ((0,0), Region { regionName = "Region_0_0", regionFlags = 0,
+                     regionParcels = [Parcel "parcel_0" "default parcel" (0,256,0,256) owner 0xffffffff [] []] })
     ]
 
 data Script = Script { scriptImage :: Validity ScriptImage,
+                       scriptStopped :: Bool,
                        scriptPermissions :: M.Map String Int,
                        scriptLastPerm :: Maybe String,
                        scriptStartTick :: Int,
                        scriptLastResetTick :: Int,
-                       scriptEventQueue :: [Event] } deriving (Show)
+                       scriptEventQueue :: [Event],
+                       scriptStartParameter :: Int } deriving (Show)
                        
 worldFromFullWorldDef worldBuilder fwd lib scripts =
     do let primMap = mkPrimMap (fullWorldDefPrims fwd)
        primMap' <- checkObjects primMap (fullWorldDefObjects fwd) -- prove all the prims in all the objects exists
-       activatedScripts <- activateScripts (fullWorldDefActiveScripts fwd) scripts primMap'
+       let activeScripts = 
+               concat (map (\ prim -> map 
+                   (\ item -> ((primKey prim, fst $ inventoryItemNameKey $ inventoryItemIdentification item),
+                               invScriptLibId $ inventoryItemData item)) (filter isInvScriptItem $ primInventory prim)) (M.elems primMap'))
+       activatedScripts <- activateScripts activeScripts scripts primMap'
        return $ worldBuilder (fullWorldDefSliceSize fwd)
                              (fullWorldDefMaxTime fwd)
                              [] lib scripts 
@@ -246,6 +398,8 @@ worldFromFullWorldDef worldBuilder fwd lib scripts =
                              emptyDB
                              (M.fromList (fullWorldDefRegions fwd))
                              (fullWorldDefInitialKeyIndex fwd)
+                             (fullWorldDefWebHandling fwd)
+                             (fullWorldDefEventHandler fwd)
 
 fctx :: MonadError String m => String -> Either String a -> m a
 fctx s (Left s') = fail s
@@ -276,10 +430,10 @@ activateScripts scriptIdInfo compiledScripts primMap = mapM (activateScript comp
 activateScript scripts primMap (k@(primKey,invName),(scriptID)) =
     do  script <- fctx ("looking up script " ++ scriptID ++ " failed") $ maybe2Either $ lookup scriptID scripts
         prim <- fctx ("looking up prim " ++ primKey ++ " failed") (M.lookup primKey primMap)
-        when (isNothing (findByInvName invName $ inventoryItemInfoMap (primScripts prim))) $ fail (invName ++ " doesn't exist in prim " ++ primKey)
+        when (isNothing (findByInvName invName (primInventory prim))) $ fail (invName ++ " doesn't exist in prim " ++ primKey)
         case script of
-            Invalid s -> return (k, Script (Invalid s) M.empty Nothing 0 0  [])
-            Valid code -> return (k,Script (Valid $ initLSLScript code) M.empty Nothing 0 0 [Event "state_entry" [] []])
+            Invalid s -> return (k, Script (Invalid s) False M.empty Nothing 0 0  [] 0)
+            Valid code -> return (k,Script (Valid $ initLSLScript code) True M.empty Nothing 0 0 [Event "state_entry" [] M.empty] 0)
 
 newKey xref = do
     (m,i) <- lift SM.get
@@ -299,12 +453,12 @@ worldElement =
         (sliceSizeStr, c2) <- findSimple "sliceSize" c1
         (avatars,c3) <- findElement avatarsElement c2
         (prims,c4) <- findElement primsElement c3
-        (activeScripts, c5) <- findElement activeScriptsElement c4
-        (objects,[]) <- findElement objectsElement c5
+        --(activeScripts, c5) <- findElement activeScriptsElement c4
+        (objects,[]) <- findElement objectsElement c4
         --maxTime <- readM maxTimeStr
         sliceSize <- readM sliceSizeStr
         (m,keyIndex) <- lift SM.get
-        return $ (FullWorldDef maxTime sliceSize activeScripts objects prims avatars (defaultRegions "") keyIndex)
+        return $ (FullWorldDef maxTime sliceSize WebHandlingByDoingNothing Nothing objects prims avatars (defaultRegions "") keyIndex)
     in ElemAcceptor "world-def" f
     
 activeScriptsElement :: ElemAcceptor KeyManagerM [((String,String),String)]
@@ -340,9 +494,9 @@ primElement = ElemAcceptor "prim" $
             (key,c2) <- findSimple "key" c1
             realKey <- newKey (Just key)
             (description, c3) <- findSimpleOrDefault "" "description" c2
-            (scripts,c4) <- findElement (elementList "scripts" (simpleElement "string")) c3
-            scriptKeys <- replicateM (length scripts) (newKey Nothing)
-            let scripts' = zipWith scriptInventoryItem scripts scriptKeys
+            (scripts,c4) <- findElement (elementList "scripts" (scriptAcceptor "script")) c3
+            --scriptKeys <- replicateM (length scripts) (newKey Nothing)
+            --let scripts' = zipWith scriptInventoryItem scripts scriptKeys
             (owner,c5) <- findSimpleOrDefault "" "owner" c4
             realOwner <- findRealKey owner
             (position,c6) <- findOrDefault (128.0,128.0,0.0) (vecAcceptor "position") c5
@@ -357,22 +511,15 @@ primElement = ElemAcceptor "prim" $
             (typeInfo, c15) <- findOrDefault basicBox (primTypeAcceptor "typeInfo") c14
             (permissions, c16) <- findOrDefault [0] (elementList "permissions" (valueAcceptor "int")) c15
             (pData,c17) <- findElement (dbAcceptor "data") c16
-            (dropAllowed,[]) <- findValueOrDefault False "dropAllowed" c17
+            (dropAllowed,c18) <- findValueOrDefault False "dropAllowed" c17
+            (inventory,[]) <- findOrDefault [] (elementList "inventory" (inventoryItemAcceptor "item")) c18
             return $ Prim { primName = name, 
                             primKey = realKey, 
                             primParent = Nothing,
                             primDescription = description,
-                            primScripts = scripts',
-                            notecards = [], 
-                            animations = [],
-                            textures = [],
-                            sounds = [],
-                            primBodyParts = [],
-                            primClothing = [],
-                            primGestures = [],
-                            primLandmarks = [],
-                            inventoryObjects = [],
+                            primInventory = scripts ++ inventory,
                             primOwner = realOwner,
+                            primGroup = Nothing,
                             primCreator = realOwner,
                             primPosition = position,
                             primRotation = rotationsToQuaternion P123 eulerRotation,
@@ -381,6 +528,7 @@ primElement = ElemAcceptor "prim" $
                             primFlexibility = flexibility,
                             primMaterial = material,
                             primStatus = status,
+                            primVehicleFlags = 0,
                             primLight = light,
                             primTempOnRez = tempOnRez,
                             primTypeInfo = typeInfo,
@@ -389,8 +537,36 @@ primElement = ElemAcceptor "prim" $
                             primAllowInventoryDrop = dropAllowed,
                             primSitTarget = Nothing ,
                             primSittingAvatar = Nothing,
-                            primAttachment = Nothing }
+                            primPendingEmails = [],
+                            primPassTouches = False,
+                            primPassCollisions = False,
+                            primPayInfo = (-2, -2, -2, -2, -2),
+                            primAttachment = Nothing,
+                            primRemoteScriptAccessPin = 0 }
 
+inventoryItemAcceptor s = ElemAcceptor s $
+   \ (Elem _ [("class",v)] contents) -> do
+       let c0 = elementsOnly contents
+       let itemType = attValueString v
+       (name,c1) <- findSimple "name" c0
+       key <- newKey Nothing
+       (creator,c2) <- findSimple "creator" c1
+       realCreator <- findRealKey creator
+       case itemType of
+           "notecard" -> do
+               (lines,c3) <- findOrDefault [] (elementList "lines" (simpleElement "string")) c2
+               return $ InventoryItem (InventoryItemIdentification (name, key)) (InventoryInfo creator defaultInventoryPermissions)
+                                      (InvNotecard lines)
+           _ -> throwError ("item type " ++ itemType ++ " is not supported")
+       
+scriptAcceptor s = ElemAcceptor s $
+   \ (Elem _ _ contents) -> do
+       let c0 = elementsOnly contents
+       (scriptName, c1) <- findSimple "scriptName" c0
+       (scriptId, []) <- findSimple "scriptId" c1
+       k <- newKey Nothing
+       return $ scriptInventoryItem scriptName k scriptId
+       
 faceAcceptor s = ElemAcceptor s $
     \ (Elem _ _ contents) -> do
             let c0 = elementsOnly contents
@@ -419,7 +595,7 @@ textureInfoAcceptor s = ElemAcceptor s $
         (offsets,c3) <- findOrDefault (0.0,0.0,0.0) (vecAcceptor "offsets") c2
         (rotation,[]) <- findValueOrDefault 0.0 "rotation" c3
         return $ TextureInfo {
-                textureName = name,
+                textureKey = name,
                 textureRepeats = repeats,
                 textureOffsets = offsets,
                 textureRotation = rotation
@@ -505,7 +681,7 @@ avatarElement = ElemAcceptor "avatar" $
             (x,c3) <- findValue "xPos" c2
             (y,c4) <- findValue "yPos" c3
             (z,_) <- findValue "zPos" c4
-            return $ (defaultAvatar realKey) { avatarName = name, avatarPosition = (x,y,z) }
+            return $ (defaultAvatar realKey) { avatarName = name, avatarPosition = (x,y,z), avatarCameraPosition = (x,y,z) }
 
 vecAcceptor s = ElemAcceptor s $
     \ (Elem _ _ contents) -> do

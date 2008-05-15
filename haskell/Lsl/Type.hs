@@ -12,6 +12,13 @@ module Lsl.Type(
     lslTypeString,
     lslShowVal,
     toSVal,
+    isIVal,
+    isFVal,
+    isSVal,
+    isKVal,
+    isLVal,
+    isVVal,
+    isRVal,
     lslValueElement,
     defaultValue,
     vecMulScalar,
@@ -93,11 +100,11 @@ typeOfLSLComponent v c = error ("value " ++ (show v) ++ " doesn't have a subcomp
 -- convert a value to a string 'internally' (TODO: where SHOULD this be used? It's used in internal funcs, but
 -- probably will not work completely correctly when tabs, newlines, or double quotes are involved)
 lslValString (IVal i) = (show i)
-lslValString (FVal f) = (show f)
+lslValString (FVal f) = (printf "%.6f" f)
 lslValString (SVal s) = s
 lslValString (KVal k) = k
-lslValString (VVal x y z) = "<" ++ (show x) ++ "," ++ (show y) ++ "," ++ (show z) ++ ">"
-lslValString (RVal x y z s) = "<" ++ (show x) ++ "," ++ (show y) ++ "," ++ (show z) ++ "," ++ (show s) ++ ">"
+lslValString (VVal x y z) = concat ["<",comp2Str x,",",comp2Str y,",",comp2Str z,">"]
+lslValString (RVal x y z s) = concat ["<",comp2Str x,",",comp2Str y,",",comp2Str z,",",comp2Str s,">"]
 lslValString (LVal l) = concat (("[":(weave (map lslValString l) $ replicate (length l - 1) ",")) ++ ["]"])
 lslValString (VoidVal) = ""
 
@@ -123,6 +130,21 @@ lslTypeString LLVector = "vector"
 lslTypeString LLRot = "rotation"
 lslTypeString LLString = "string"
 lslTypeString LLVoid = "void"
+
+isIVal (IVal _) = True
+isIVal _ = False
+isSVal (SVal _) = True
+isSVal _ = False
+isLVal (LVal _) = True
+isLVal _ = False
+isFVal (FVal _) = True
+isFVal _ = False
+isVVal (VVal _ _ _) = True
+isVVal _ = False
+isRVal (RVal _ _ _ _) = True
+isRVal _ = False
+isKVal (KVal _) = True
+isKVal _ = False
 
 parseInt s = 
    case readInt s of
