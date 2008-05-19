@@ -94,12 +94,15 @@ emitMessage logMessage =
 emitState state =
     emit "state" [] [ emitSimple "time" [] (show $ simStateInfoTime state),
                       emitPrims (simStateInfoPrims state),
-                      emitAvatars (simStateInfoAvatars state) ]
+                      emitAvatars (simStateInfoAvatars state),
+                      emitScripts (simStateInfoScripts state) ]
 emitPrims prims = emitList "prims" emitPrim prims
 emitAvatars avatars = emitList "avatars" emitAvatar avatars
+emitScripts scripts = emitList "scripts" emitScript scripts
 
 emitPrim (key,name) = emit "prim" [] [emitSimple "key" [] key, emitSimple "name" [] name]
 emitAvatar (key,name) = emit "avatar" [] [emitSimple "key" [] key, emitSimple "name" [] name]
+emitScript (pk,sname) = emit "script" [] [emitSimple "primKey" [] pk, emitSimple "scriptName" [] sname]
 
 testSystem :: IO ()
 testSystem = 

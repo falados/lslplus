@@ -2951,16 +2951,18 @@ data SimStatus = SimEnded { simStatusMessage :: String, simStatusLog :: [LogMess
 data SimStateInfo = SimStateInfo {
         simStateInfoTime :: Int,
         simStateInfoPrims :: [(String,String)],
-        simStateInfoAvatars :: [(String,String)]
+        simStateInfoAvatars :: [(String,String)],
+        simStateInfoScripts :: [(String,String)]
     } deriving (Show)
     
-nullSimState = SimStateInfo 0 [] []
+nullSimState = SimStateInfo 0 [] [] []
 
 stateInfoFromWorld world =
     SimStateInfo {
         simStateInfoTime = tick world,
         simStateInfoPrims = map (\ p -> (primKey p, primName p)) (M.elems $ wprims world),
-        simStateInfoAvatars = map (\ (_,a) -> (avatarKey a, avatarName a)) (M.toList $ worldAvatars world)
+        simStateInfoAvatars = map (\ (_,a) -> (avatarKey a, avatarName a)) (M.toList $ worldAvatars world),
+        simStateInfoScripts = M.keys (worldScripts world)
     }
     
 data SimInputEventDefinition m = SimInputEventDefinition { 
@@ -3145,8 +3147,8 @@ lslEventDescriptorToSimInputDef (name, params, delivery, additionalData, descrip
         simInputEventDescription = "This is a raw LSL event: " ++ description,
         simInputEventParameters =
             (case delivery of
-               EventDeliveryScript -> [SimParam "Prim Key" "key of prim to deliver to" SimParamPrim,
-                                       SimParam "Script" "name of script to deliver to" SimParamScript]
+               EventDeliveryScript -> [SimParam "Script" "name of script to deliver to" SimParamScript,
+                                       SimParam "Prim Key" "key of prim to deliver to" SimParamPrim]
                EventDeliveryObject -> [SimParam "Object Key" "key of object to deliver to" SimParamRootPrim]
                EventDeliveryRoot -> [SimParam "Object Key" "key of object to deliver to" SimParamRootPrim]
                EventDeliveryPrim -> [SimParam "Prim Key" "key of prim to deliver to" SimParamPrim]
@@ -3160,12 +3162,12 @@ lslEventDescriptorToSimInputDef (name, params, delivery, additionalData, descrip
         simInputEventHandler =
             let f _ list = 
                     let lenAddl = length additionalData
-                        (df,rest) = case delivery of
-                               EventDeliveryScript -> 
-                                   let (KVal pk:SVal sn:vals) = list in ((\ e -> pushEvent e pk sn),vals)
-                               EventDeliveryObject ->
-                                   let (KVal key:vals) = list in ((\ e -> pushEventToObject e key),vals)
-                               _ -> let (KVal key:vals) = list in ((\ e -> pushEventToPrim e key), vals)
+                        (df,rest) = case (delivery,list) of
+                               (EventDeliveryScript,SVal sn:KVal pk:vals) -> (\ e -> pushEvent e pk sn,vals)
+                               (EventDeliveryObject,KVal key:vals) -> (\ e -> pushEventToObject e key,vals)
+                               (EventDeliveryRoot, KVal key:vals) -> ((\ e -> pushEventToPrim e key), vals)
+                               (EventDeliveryPrim, KVal key:vals) -> ((\ e -> pushEventToPrim e key), vals)
+                               _ -> (\ _ -> logAMessage LogWarn "sim" "invalid user event - bad script address",[])
                     in df (Event name (drop lenAddl rest) (M.fromList (zipWith mkInfo additionalData (take lenAddl rest))) )
                        where mkInfo (EventAdditionalVectors _ _) val = ("vector_0",val)
                              mkInfo (EventAdditionalInts _ _)    val = ("integer_0",val)
