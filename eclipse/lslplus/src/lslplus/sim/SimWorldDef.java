@@ -1,6 +1,5 @@
 package lslplus.sim;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -54,6 +53,65 @@ public class SimWorldDef {
         }
     }
     
+    public static class Texture extends InventoryItem {
+        public Texture(String name, String creator) {
+            super(name, creator);
+        }
+    }
+    
+    public static class Clothing extends InventoryItem {
+        public Clothing(String name, String creator) {
+            super(name, creator);
+        }
+    }
+    
+    public static class BodyPart extends InventoryItem {
+        public BodyPart(String name, String creator) {
+            super(name, creator);
+        }
+    }
+    
+    public static class Gesture extends InventoryItem {
+        public Gesture(String name, String creator) {
+            super(name, creator);
+        }
+    }
+    
+    public static class Animation extends InventoryItem {
+        private float duration;
+
+        public Animation(String name, String creator, float duration) {
+            super(name, creator);
+            this.duration = duration;
+        }
+    }
+    public static class Sound extends InventoryItem {
+        private float duration;
+
+        public Sound(String name, String creator, float duration) {
+            super(name, creator);
+            this.duration = duration;
+        }
+    }
+    
+    public static class Landmark extends InventoryItem {
+        private Region region;
+        private LVector position;
+        public Landmark(String name, String creator, Region region, LVector position) {
+            super(name,creator);
+            this.position = position;
+            this.region = region;
+        }
+    }
+    
+    public static class InventoryObject extends InventoryItem {
+        private Prim[] prims;
+        public InventoryObject(String name, String creator, Prim[] prims) {
+            super(name,creator);
+            this.prims = prims;
+        }
+    }
+    
     public static class SimObject {
         private String[] primKeys;
         
@@ -66,34 +124,36 @@ public class SimWorldDef {
         private String name;
         private String key;
         private ScriptInfo[] scripts;
+        private InventoryItem[] inventory;
         private String description;
         private String owner;
         private LVector position;
         private LVector rotation;
-        private Map data;
         
-        public Prim(String name, String key, ScriptInfo[] scripts, Map data,
+        public Prim(String name, String key, ScriptInfo[] scripts, InventoryItem[] inventory,
                 String description, String owner, LVector position, LVector rotation) {
             this.name = name;
             this.key = key;
             this.scripts = scripts;
-            this.data = data;
+            this.inventory = inventory;
             this.description = description;
             this.owner = owner;
             this.position = position;
             this.rotation = rotation;
         }
+
+        public String getKey() {
+            return key;
+        }
     }
     
     public static class Avatar {
-        private String key;
         private String name;
         private float xPos;
         private float yPos;
         private float zPos;
         
-        public Avatar(String key, String name, float x, float y, float z) {
-            this.key = key;
+        public Avatar(String name, float x, float y, float z) {
             this.name = name;
             this.xPos = x;
             this.yPos = y;
@@ -124,6 +184,11 @@ public class SimWorldDef {
         }
     }
     
+    public static class Region {
+        private int x,y;
+        public Region(int x, int y) { this.x = x; this.y = y; }
+    }
+    
     private static XStream xstream = new XStream(new DomDriver());
     
     public static void configureXStream(XStream xstream) {
@@ -140,6 +205,17 @@ public class SimWorldDef {
         xstream.alias("map", Map.class); //$NON-NLS-1$
         xstream.alias("vector", LVector.class); //$NON-NLS-1$
         xstream.alias("rotation", LRotation.class); //$NON-NLS-1$
+        xstream.alias("region", Region.class);
+        xstream.alias("inventoryItem", InventoryItem.class); //$NON-NLS-1$
+        xstream.aliasType("notecardItem", Notecard.class); //$NON-NLS-1$
+        xstream.aliasType("bodyPartItem", BodyPart.class);
+        xstream.aliasType("textureItem", Texture.class);
+        xstream.aliasType("animationItem", Animation.class);
+        xstream.aliasType("soundItem", Sound.class);
+        xstream.aliasType("gestureItem", Gesture.class);
+        xstream.aliasType("clothingItem", Clothing.class);
+        xstream.aliasType("landmarkItem", Landmark.class);
+        xstream.aliasType("inventoryObjectItem", InventoryObject.class);
     }
     
     static {
@@ -156,29 +232,25 @@ public class SimWorldDef {
     private SimObject[] objects;
     private Prim[] prims;
     private Avatar[] avatars;
+    private String simEventHandler;
     
     public SimWorldDef(long maxTime, int sliceSize, SimObject[] objects,
-            Prim[] prims, Avatar[] avatars) {
+            Prim[] prims, Avatar[] avatars, String simEventHandler) {
         this.maxTime = maxTime;
         this.sliceSize = sliceSize;
-        //this.scripts = scripts;
         this.objects = objects;
         this.prims = prims;
         this.avatars = avatars;
+        this.simEventHandler = simEventHandler;
     }
 
     public static SimWorldDef mkSimpleWorld(SimKeyManager keyManager, String name) {
         String primKey = keyManager.getNextKey();
-//        SimWorldDef.Script[] scripts = new SimWorldDef.Script[] {
-//                new SimWorldDef.Script(primKey, name, name)
-//        };
         String avKey = keyManager.getNextKey();
         
-        HashMap primData = new HashMap();
-        primData.put("pos", new LVector(128,128,0)); //$NON-NLS-1$
         SimWorldDef.Prim[] prims = new SimWorldDef.Prim[] {
-                new SimWorldDef.Prim("defaultPrim", primKey, new ScriptInfo[] { new ScriptInfo(name,name) }, primData,
-                        "an object", avKey, new LVector(128,128,0), new LVector(0,0,0))
+                new SimWorldDef.Prim("defaultPrim", primKey, new ScriptInfo[] { new ScriptInfo(name,name) }, null,
+                        "an object", "Default Avatar", new LVector(128,128,0), new LVector(0,0,0))
         };
         
         SimWorldDef.SimObject[] objects = new SimWorldDef.SimObject[] {
@@ -186,10 +258,10 @@ public class SimWorldDef {
         };
         
         SimWorldDef.Avatar[] avatars = new SimWorldDef.Avatar[] {
-                new SimWorldDef.Avatar(avKey, "Default Avatar", 128, 128, 0)
+                new SimWorldDef.Avatar("Default Avatar", 128, 128, 0)
         };
         
-        SimWorldDef def = new SimWorldDef(10000000,1000,objects,prims,avatars);
+        SimWorldDef def = new SimWorldDef(10000000,1000,objects,prims,avatars, null);
         
         return def;
     }

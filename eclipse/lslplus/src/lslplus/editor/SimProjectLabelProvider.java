@@ -5,6 +5,8 @@ import java.util.LinkedList;
 
 import lslplus.LslPlusPlugin;
 import lslplus.sim.SimProject;
+import lslplus.sim.SimProjectNodes;
+import lslplus.sim.SimProject.EventHandlerNode;
 
 import org.eclipse.jface.viewers.ITableLabelProvider;
 import org.eclipse.jface.viewers.LabelProvider;
@@ -24,6 +26,14 @@ public class SimProjectLabelProvider extends LabelProvider implements ITableLabe
     private Image xPositionImage = createImage("icons/x-position.gif"); //$NON-NLS-1$
     private Image yPositionImage = createImage("icons/y-position.gif"); //$NON-NLS-1$
     private Image zPositionImage = createImage("icons/z-position.gif"); //$NON-NLS-1$
+    private Image notecardImage = createImage("icons/notecard.gif");
+    private Image animationImage = createImage("icons/animation.gif");
+    private Image gestureImage = createImage("icons/gesture.gif");
+    private Image clothingImage = createImage("icons/clothing.gif");
+    private Image soundImage = createImage("icons/sound.gif");
+    private Image textureImage = createImage("icons/texture.gif");
+    private Image landmarkImage = createImage("icons/landmark.gif");
+    private Image bodypartImage = createImage("icons/bodypart.gif");
     private Image createImage(String path) {
         if (images == null) images = new LinkedList();
         Image i = LslPlusPlugin.createImage(path);
@@ -45,7 +55,8 @@ public class SimProjectLabelProvider extends LabelProvider implements ITableLabe
         } else if (element instanceof SimProject.WorldNode) {
             return worldImage;
         } else if (element instanceof SimProject.PrimPropertiesNode ||
-                   element instanceof SimProject.AvatarPropertiesNode) {
+                   element instanceof SimProject.AvatarPropertiesNode ||
+                   element instanceof SimProjectNodes.InventoryPropertiesNode) {
             return propertiesImage;
         } else if (element instanceof SimProject.GridPositionNode) {
             return gridPositionImage;
@@ -57,6 +68,26 @@ public class SimProjectLabelProvider extends LabelProvider implements ITableLabe
             return valImage;
         } else if (element instanceof SimProject.AvatarReferenceNode) {
             return avatarRefImage;
+        } else if (element instanceof SimProjectNodes.NotecardNode) {
+            return notecardImage;
+        } else if (element instanceof SimProjectNodes.ClothingNode) {
+            return clothingImage;
+        } else if (element instanceof SimProjectNodes.AnimationNode) {
+            return animationImage;
+        } else if (element instanceof SimProjectNodes.SoundNode) {
+            return soundImage;
+        } else if (element instanceof SimProjectNodes.GestureNode) {
+            return gestureImage;
+        } else if (element instanceof SimProjectNodes.TextureNode) {
+            return textureImage;
+        } else if (element instanceof SimProjectNodes.LandmarkNode) {
+            return landmarkImage;
+        } else if (element instanceof SimProjectNodes.BodyPartNode) {
+            return bodypartImage;
+        } else if (element instanceof SimProjectNodes.InventoryObjectNode) {
+            return objectImage;
+        } else if (element instanceof EventHandlerNode) {
+            return scriptImage;
         } else {
             // TODO: add other node types
             return valImage;

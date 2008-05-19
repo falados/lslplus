@@ -143,7 +143,9 @@ public class SimWatcherViewPart extends ViewPart implements SimListener, SimMeta
     private Label timeText;
     private UserEventAction chatAction;
     private LinkedList actions;
-
+    private volatile String curTime;
+    private boolean refreshPending = false;
+    
     public SimWatcherViewPart() {
         simManager = LslPlusPlugin.getDefault().getSimManager();
         simManager.addSimListener(this);
@@ -328,11 +330,6 @@ public class SimWatcherViewPart extends ViewPart implements SimListener, SimMeta
         }
     }
 
-    public void newLogMessages(SimStatuses.Message[] result) {
-        this.logViewerModel.addMessages(result);
-        refreshAsync();
-    }
-
     public void simLaunched() {
         enableActions(true);
         if (logViewerModel != null) {
@@ -385,13 +382,25 @@ public class SimWatcherViewPart extends ViewPart implements SimListener, SimMeta
         eventsCombo.setItems(names);
     }
 
-    public void newSimState(final SimState state) {
+    public void newSimState(final SimState state, SimStatuses.Message[] messages) {
+        curTime = formatTime(state.getTime());
+        this.logViewerModel.addMessages(messages);
+        if (checkAndSetRefreshPending()) return;
         asyncExec(new Runnable() {
             public void run() {
-                int msTime = state.getTime();
-                timeText.setText(formatTime(msTime));
+                timeText.setText(curTime);
+                logViewer.refresh();
+                clearRefreshPending();
             }
         });
+    }
+    
+    private synchronized void clearRefreshPending() { refreshPending = false; }
+    
+    private synchronized boolean checkAndSetRefreshPending() {
+        if (refreshPending) return true;
+        refreshPending = true;
+        return false;
     }
     
     private static String padInt(int w, int v) {

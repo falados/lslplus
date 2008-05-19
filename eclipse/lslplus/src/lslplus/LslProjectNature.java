@@ -2,6 +2,7 @@ package lslplus;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -360,6 +361,24 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 	    return scripts;
 	}
 	
+    public List getLslModules() {
+        ArrayList l = new ArrayList();
+        if (entryPoints == null) return l;
+        
+        synchronized (this) {
+            for (Iterator  i = entryPoints.keySet().iterator(); i.hasNext();) {
+                String name = (String) i.next();
+                
+                if (name.endsWith(".lslm")) { //$NON-NLS-1$
+                    l.add(name);
+                }
+            }
+        }
+        
+        Collections.sort(l);
+        return l;
+    }
+    
 	
 	public IProject getProject() {
 	    return project;

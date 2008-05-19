@@ -236,6 +236,30 @@
             name="New Sim Project File"
             preferredPerspectives="lslplus.LslPlusPerspective">
       </wizard>
+      <wizard
+            category="lslplus.lslplus"
+            class="lslplus.wizards.NewSimEventHandler"
+            icon="icons/obj16/lslplus.gif"
+            id="lslplus.newSimEventHandlerWizard"
+            name="Sim Event Handler"
+            preferredPerspectives="lslplus.LslPlusPerspective">
+      </wizard>
+      <wizard
+            category="lslplus.lslplus"
+            class="lslplus.wizards.NewHttpRpcSampleWizard"
+            icon="icons/obj16/lslplus.gif"
+            id="lslplus.HttpRpcExample"
+            name="HTTP/RPC Example"
+            preferredPerspectives="lslplus.LslPlusPerspective">
+      </wizard>
+      <wizard
+            category="lslplus.lslplus"
+            class="lslplus.wizards.NewDialogSampleWizard"
+            icon="icons/obj16/lslplus.gif"
+            id="lslplus.DialogExample"
+            name="Dialog Example"
+            preferredPerspectives="lslplus.LslPlusPerspective">
+      </wizard>
    </extension>
    <extension
          point="org.eclipse.ui.ide.projectNatureImages">
@@ -373,6 +397,22 @@
             class="lslplus.debug.LslDebugModelPresentation"
             id="lslplus">
       </debugModelPresentation>
+   </extension>
+   <extension
+         point="org.eclipse.help.toc">
+      <toc
+            file="toc.xml">
+      </toc>
+      <toc
+            file="testToc.xml"
+            primary="true">
+      </toc>
+   </extension>
+   <extension
+         point="org.eclipse.help.contexts">
+      <contexts
+            file="helpcontexts.xml">
+      </contexts>
    </extension>
 
 </plugin>

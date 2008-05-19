@@ -275,21 +275,18 @@ public class LslSimInteractor implements Runnable, Interactor, SimEventListener 
                 if (status instanceof SimInfo) {
                     String cmd = continueText();
                     SimInfo info = (SimInfo)status;
-                    simManager().newLogMessages(info.getMessages());
-                    simManager().setSimState(info.getState());
+                    simManager().setSimState(info.getState(), info.getMessages());
                     //if (LslPlusPlugin.DEBUG) Util.log("writing: " + cmd); //$NON-NLS-1$
                     writeOut(cmd);
                 } else if (status instanceof SimEnded) {
                     if (LslPlusPlugin.DEBUG) Util.log(Util.URIDecode(line));
                     SimEnded ended = (SimEnded) status;
-                    simManager().newLogMessages(ended.getMessages());
-                    simManager().setSimState(ended.getState());
+                    simManager().setSimState(ended.getState(), ended.getMessages());
                     endSession();
                     fireComplete();
                 } else if (status instanceof SimSuspended) {
                     if (LslPlusPlugin.DEBUG) Util.log("hit a breakpoint... suspending!"); //$NON-NLS-1$
-                    simManager().newLogMessages(status.getMessages());
-                    simManager().setSimState(status.getState());
+                    simManager().setSimState(status.getState(), status.getMessages());
                     fireSuspended(((SimSuspended)status).getScriptState());
                     return;
                 } else {

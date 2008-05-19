@@ -153,13 +153,6 @@ public class SimManager implements SimEventListener {
         return (SimWatcherViewPart) page.findView(SimWatcherViewPart.ID);
     }
 
-    public synchronized void newLogMessages(SimStatuses.Message[] s) {
-        for (Iterator i = listeners.iterator(); i.hasNext(); ) {
-            SimListener l = (SimListener) i.next();
-            l.newLogMessages(s);
-        }
-    }
-    
     public boolean isSimActive() {
         return active;
     }
@@ -179,16 +172,16 @@ public class SimManager implements SimEventListener {
         }
     }
 
-    private void fireNewSimState() {
+    private void fireNewSimState(SimStatuses.Message[] messages) {
         for (Iterator i = listeners.iterator(); i.hasNext(); ) {
             SimListener listener = (SimListener) i.next();
-            listener.newSimState(simState);
+            listener.newSimState(simState, messages);
         }
     }
     
-    public synchronized void setSimState(SimState state) {
+    public synchronized void setSimState(SimState state, SimStatuses.Message[] messages) {
         this.simState = state;
-        fireNewSimState();
+        fireNewSimState(messages);
     }
     
     public synchronized SimState getSimState() { return simState; }

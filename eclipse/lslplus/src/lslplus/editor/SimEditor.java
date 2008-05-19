@@ -2,6 +2,7 @@ package lslplus.editor;
 
 import java.io.ByteArrayInputStream;
 import java.util.LinkedList;
+import java.util.List;
 
 import lslplus.LslPlusPlugin;
 import lslplus.LslProjectNature;
@@ -52,6 +53,7 @@ import org.eclipse.swt.widgets.TreeColumn;
 import org.eclipse.ui.IEditorInput;
 import org.eclipse.ui.IEditorSite;
 import org.eclipse.ui.PartInitException;
+import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.operations.UndoRedoActionGroup;
 import org.eclipse.ui.part.EditorPart;
 
@@ -348,6 +350,10 @@ public class SimEditor extends EditorPart implements SimProject.NodeListener {
 			    String[] choices;
 			    if ("scripts".equals(n.getChoicesId())) { //$NON-NLS-1$
 			        choices = nature.getLslScripts();
+			    } else if ("optional-module".equals(n.getChoicesId())) {
+			        List modules = nature.getLslModules();
+			        modules.add(0, "(none)");
+			        choices = (String[]) modules.toArray(new String[modules.size()]);
 			    } else if ("avatars".equals(n.getChoicesId())) {
 			        SimProject.Node root = n.findRoot();
 			        final LinkedList avnames = new LinkedList();
@@ -458,7 +464,7 @@ public class SimEditor extends EditorPart implements SimProject.NodeListener {
 
         protected void setValue(Object element, Object value) {
             SimProject.Node n = (SimProject.Node) element;
-            
+            if (value == null) return;            
             SimProject.Status status = n.checkNameString((String)value);
             if (!status.isOk()) return;
             if (value.equals(n.getNameDisplay())) return;
@@ -568,6 +574,7 @@ public class SimEditor extends EditorPart implements SimProject.NodeListener {
 	}
 
 	public void createPartControl(Composite parent) {
+        PlatformUI.getWorkbench().getHelpSystem().setHelp(parent, "lslplus.simProjectEditor");
 		//control = new Composite(parent, SWT.NULL);
 		//control.setVisible(true);
 		createViewer(parent);

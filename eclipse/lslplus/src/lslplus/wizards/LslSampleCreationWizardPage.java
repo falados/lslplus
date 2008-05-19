@@ -11,19 +11,26 @@
  *******************************************************************************/
 package lslplus.wizards;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URI;
 import java.util.Iterator;
+import java.util.List;
 
 import lslplus.util.Util;
 
 import org.eclipse.core.commands.ExecutionException;
+import org.eclipse.core.commands.operations.IOperationHistory;
 import org.eclipse.core.resources.IFile;
+import org.eclipse.core.resources.IFolder;
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.IWorkspace;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
+import org.eclipse.core.runtime.FileLocator;
 import org.eclipse.core.runtime.IAdaptable;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IProgressMonitor;
@@ -42,36 +49,82 @@ import org.eclipse.swt.widgets.Event;
 import org.eclipse.swt.widgets.Listener;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.ide.undo.CreateFileOperation;
+import org.eclipse.ui.ide.undo.CreateFolderOperation;
 import org.eclipse.ui.ide.undo.WorkspaceUndoUtil;
+import org.osgi.framework.Bundle;
 
-abstract public class LslFileCreationWizardPage extends WizardPage implements Listener {
-	private final class CreateFileRunnable implements IRunnableWithProgress {
-		private final InputStream initialContents;
-		private final IFile newFileHandle;
+abstract public class LslSampleCreationWizardPage extends WizardPage implements Listener {
+    public static class Sample {
+        private String name;
+        private Bundle bundle;
+        private IPath path;
+        private boolean filter;
+        
+        public Sample(String name, Bundle bundle, IPath path, boolean filter) {
+            this.name = name;
+            this.bundle = bundle;
+            this.path = path;
+            this.filter = filter;
+        }
+        
+        public String getName() {
+            return name;
+        }
+        
+        public InputStream getInputStream(IFolder folder) throws IOException {
+            // if we are filtering, we'll just assume the files small enough to fit in memory...
+            // could be smarter, but...
+            if (filter) {
+                String id = folder.getProjectRelativePath().toString().replace("/", ".");
+                InputStream in = FileLocator.openStream(bundle, path, false);
+                InputStreamReader reader = new InputStreamReader(in);
+                char buf[] = new char[1024];
+                StringBuilder str = new StringBuilder();
+                int numRead;
+                while ((numRead = reader.read(buf)) >= 0) {
+                    str.append(buf,0,numRead);
+                }
+                
+                if (!id.endsWith(".")) id = id + ".";
+                return new ByteArrayInputStream(str.toString().replace("@PREFIX@", id).getBytes());
+            } else {
+                return FileLocator.openStream(bundle, path, false);
+            }
+        }
+    }
+    
+	private final class CreateSampleRunnable implements IRunnableWithProgress {
+	    private final IFolder folder;
+	    private List samples;
 
-		private CreateFileRunnable(InputStream initialContents,
-				IFile newFileHandle) {
-			this.initialContents = initialContents;
-			this.newFileHandle = newFileHandle;
+		private CreateSampleRunnable(IFolder folder,
+				List samples) {
+			this.folder = folder;
+			this.samples = samples;
 		}
 
 		public void run(IProgressMonitor monitor) {
-			CreateFileOperation op = new CreateFileOperation(newFileHandle,
-					linkTargetPath, initialContents,
-					Messages.getString("LslFileCreationWizardPage.CREATE_FILE")); //$NON-NLS-1$
+		    CreateFolderOperation crFolderOp = new CreateFolderOperation(folder, null, "create folder");
 			try {
-				PlatformUI.getWorkbench().getOperationSupport()
-						.getOperationHistory().execute(
-								op,
-								monitor,
-								WorkspaceUndoUtil
-										.getUIInfoAdapter(getShell()));
+			    IOperationHistory history = PlatformUI.getWorkbench().getOperationSupport().getOperationHistory();
+			    IAdaptable info = WorkspaceUndoUtil.getUIInfoAdapter(getShell());
+				history.execute(crFolderOp,	monitor, info);
+				
+				for (Iterator i = samples.iterator(); i.hasNext(); ) {
+				    Sample sample = (Sample) i.next();
+				    
+				    IFile file = folder.getFile(sample.getName());
+				    CreateFileOperation op = new CreateFileOperation(file, null, sample.getInputStream(folder), "create file");
+				    history.execute(op, monitor, info);
+				}
+			} catch (IOException e) {
+			    handleException(e);
 			} catch (final ExecutionException e) {
-				handleExecutionException(e);
+				handleException(e);
 			}
 		}
 
-		private void handleExecutionException(final ExecutionException e) {
+		private void handleException(final Exception e) {
 			getContainer().getShell().getDisplay().syncExec(
 				new Runnable() {
 					public void run() {
@@ -119,7 +172,7 @@ abstract public class LslFileCreationWizardPage extends WizardPage implements Li
 	 * @param selection
 	 *            the current resource selection
 	 */
-	public LslFileCreationWizardPage(String pageName,
+	public LslSampleCreationWizardPage(String pageName,
 			IStructuredSelection selection) {
 		super(pageName);
 		setPageComplete(false);
@@ -161,34 +214,21 @@ abstract public class LslFileCreationWizardPage extends WizardPage implements Li
 	}
 
 
-	/**
-	 * Creates a file resource handle for the file with the given workspace
-	 * path. This method does not create the file resource; this is the
-	 * responsibility of <code>createFile</code>.
-	 * 
-	 * @param filePath
-	 *            the path of the file resource to create a handle for
-	 * @return the new file resource handle
-	 */
-	protected IFile createFileHandle(IPath filePath) {
-		return ResourcesPlugin.getWorkspace().getRoot().getFile(filePath);
+	protected IFolder createFolderHandle(IPath filePath) {
+		return ResourcesPlugin.getWorkspace().getRoot().getFolder(filePath);
 	}
 
-	public IFile createNewFile() {
-		if (newFile != null) {
-			return newFile;
-		}
-
+	public void createSample() {
 		final IPath containerPath = resourceGroup.getContainerFullPath();
 		IPath newFilePath = containerPath.append(resourceGroup.getResource());
-		final IFile newFileHandle = createFileHandle(newFilePath);
-		final InputStream initialContents = getInitialContents();
+		final IFolder newFolderHandle = createFolderHandle(newFilePath);
 
-		IRunnableWithProgress op = new CreateFileRunnable(initialContents, newFileHandle);
+		IRunnableWithProgress op = new CreateSampleRunnable(newFolderHandle,getSampleItems());
 		try {
 			getContainer().run(true, true, op);
+			return;
 		} catch (InterruptedException e) {
-			return null;
+		    return;
 		} catch (InvocationTargetException e) {
 			// Execution Exceptions are handled above but we may still get
 			// unexpected runtime errors.
@@ -198,12 +238,8 @@ abstract public class LslFileCreationWizardPage extends WizardPage implements Li
 					Messages.getString("LslFileCreationWizardPage.CREATION_PROBLEMS"), //$NON-NLS-1$
 					NLS.bind(Messages.getString("LslFileCreationWizardPage.INTERNAL_ERROR"),e.getTargetException().getMessage())); //$NON-NLS-1$
 
-			return null;
+			return;
 		}
-
-		newFile = newFileHandle;
-
-		return newFile;
 	}
 
 	/**
@@ -223,7 +259,7 @@ abstract public class LslFileCreationWizardPage extends WizardPage implements Li
 	 * <br><br>
 	 * The current file name will include the file extension if 
 	 * the preconditions are met.
-	 * @see LslFileCreationWizardPage#setFileExtension(String)
+	 * @see LslSampleCreationWizardPage#setFileExtension(String)
 	 * 
 	 * @return the file name, its anticipated initial value, or
 	 *         <code>null</code> if no file name is known
@@ -240,7 +276,7 @@ abstract public class LslFileCreationWizardPage extends WizardPage implements Li
 	 * Returns the file extension to use when creating the new file.
 	 * 
 	 * @return the file extension or <code>null</code>.
-	 * @see LslFileCreationWizardPage#setFileExtension(String)
+	 * @see LslSampleCreationWizardPage#setFileExtension(String)
 	 * @since 3.3 
 	 */
 	public String getFileExtension() {
@@ -257,7 +293,7 @@ abstract public class LslFileCreationWizardPage extends WizardPage implements Li
 	 * 
 	 * @return initial contents to be given to new file resource instances
 	 */
-	protected InputStream getInitialContents() {
+	protected List getSampleItems() {
 		return null;
 	}
 
