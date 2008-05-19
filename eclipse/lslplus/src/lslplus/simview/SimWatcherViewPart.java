@@ -275,7 +275,7 @@ public class SimWatcherViewPart extends ViewPart implements SimListener, SimMeta
     private void createColumns(Tree tree) {
         fColumn1 = new TreeColumn(tree, SWT.LEFT);
         fColumn1.setText("Time");  //$NON-NLS-1$
-        fColumn1.setWidth(50);
+        fColumn1.setWidth(100);
         fColumn1.addSelectionListener(new SelectionAdapter() {
             public void widgetSelected(SelectionEvent e) {
             }
@@ -283,7 +283,7 @@ public class SimWatcherViewPart extends ViewPart implements SimListener, SimMeta
 
         fColumn2 = new TreeColumn(tree, SWT.LEFT);
         fColumn2.setText("Source");  //$NON-NLS-1$
-        fColumn2.setWidth(200);
+        fColumn2.setWidth(300);
         fColumn2.addSelectionListener(new SelectionAdapter() {
             public void widgetSelected(SelectionEvent e) {
             }
@@ -291,7 +291,7 @@ public class SimWatcherViewPart extends ViewPart implements SimListener, SimMeta
         
         fColumn3 = new TreeColumn(tree, SWT.LEFT);
         fColumn3.setText("Message");  //$NON-NLS-1$
-        fColumn3.setWidth(300);
+        fColumn3.setWidth(350);
         fColumn3.addSelectionListener(new SelectionAdapter() {
             public void widgetSelected(SelectionEvent e) {
             }

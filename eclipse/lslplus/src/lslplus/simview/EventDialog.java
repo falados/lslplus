@@ -1,5 +1,7 @@
 package lslplus.simview;
 
+import java.util.HashMap;
+
 import lslplus.LslPlusPlugin;
 import lslplus.SimManager;
 import lslplus.sim.SimEvent;
@@ -7,6 +9,9 @@ import lslplus.sim.SimEventArg;
 import lslplus.sim.SimEventDefinition;
 import lslplus.sim.SimParamDefinition;
 import lslplus.sim.SimStatuses.NameKeyType;
+import lslplus.sim.SimStatuses.SimPrim;
+import lslplus.sim.SimStatuses.SimScript;
+
 import org.eclipse.jface.dialogs.Dialog;
 import org.eclipse.jface.dialogs.IDialogConstants;
 import org.eclipse.swt.SWT;
@@ -75,10 +80,16 @@ public class EventDialog extends Dialog {
         
         SimParamDefinition[] parameters = desc.getParams();
         
+        boolean skip = false;
         for (int i = 0; i < parameters.length; i++) {
+            if (skip) {
+                skip = false;
+                continue;
+            }
+            
             Composite comp = new Composite(parent, SWT.NONE);
             GridLayout layout = new GridLayout();
-            layout.numColumns = 2;
+            layout.numColumns = 3;
 //            layout.marginHeight = convertVerticalDLUsToPixels(IDialogConstants.VERTICAL_MARGIN);
 //            layout.marginWidth = convertHorizontalDLUsToPixels(IDialogConstants.HORIZONTAL_MARGIN);
 //            layout.verticalSpacing = convertVerticalDLUsToPixels(IDialogConstants.VERTICAL_SPACING);
@@ -101,12 +112,53 @@ public class EventDialog extends Dialog {
                         updateButtons();
                     }
                 });
-                
+                String type = controlID.substring("expression-".length());
+                Label hintLabel = new Label(comp,SWT.LEAD|SWT.HORIZONTAL);
+                hintLabel.setText("(enter LSL " + type + " expression)");
             } else if ("avatar".equals(controlID)) {
                 createKeyCombo(i, comp, simManager().getSimState().getAvatars());
+                Label hintLabel = new Label(comp,SWT.LEAD|SWT.HORIZONTAL);
+                hintLabel.setText("");
             } else if ("prim".equals(controlID)) {
                 createKeyCombo(i, comp, simManager().getSimState().getPrims());
-                
+                Label hintLabel = new Label(comp,SWT.LEAD|SWT.HORIZONTAL);
+                hintLabel.setText("");
+            } else if ("script".equals(controlID)) {
+                skip = true;
+                final int argIndex = i;
+                final Combo combo = new Combo(comp, SWT.READ_ONLY|SWT.DROP_DOWN);
+                final SimScript[] scripts = simManager().getSimState().getScripts();
+                String[] dropDownRepresentation = new String[scripts.length];
+                SimPrim[] prims = simManager().getSimState().getPrims();
+                HashMap pk2name = new HashMap();
+                for (int pi = 0; pi < prims.length; pi++) pk2name.put(prims[pi].getKey(), prims[pi].getName());
+                for (int si = 0; si < scripts.length; si++) {
+                    dropDownRepresentation[si] = scripts[i].getPrimKey() + " (" +
+                        pk2name.get(scripts[i].getPrimKey()).toString() + ") / " + scripts[i].getScriptName();
+                }
+                combo.setItems(dropDownRepresentation);
+                combo.deselectAll();
+                combo.addSelectionListener(new SelectionListener() {
+                    public void widgetDefaultSelected(SelectionEvent e) {
+                    }
+
+                    public void widgetSelected(SelectionEvent e) {
+                        if (combo.getSelectionIndex() >= 0) {
+                            argValid[argIndex] = true;
+                            argValid[argIndex+1] = true;
+                            args[argIndex] = scripts[combo.getSelectionIndex()].getScriptName();
+                            args[argIndex+1]  = scripts[combo.getSelectionIndex()].getPrimKey();
+                        } else {
+                            argValid[argIndex] = false;
+                            argValid[argIndex+1] = false;
+                            args[argIndex] = null;
+                            args[argIndex+1] = null;
+                        }
+                        updateButtons();
+                    }
+                });
+                Label hintLabel = new Label(comp,SWT.LEAD|SWT.HORIZONTAL);
+                hintLabel.setText("");
             }
         }
         

@@ -59,14 +59,23 @@ public class SimStatuses {
         }
     }
     
+    public static class SimScript {
+        private String primKey;
+        private String scriptName;
+        public String getPrimKey() { return primKey; }
+        public String getScriptName() { return scriptName; }
+    }
+    
     public static class SimState {
         private int time;
         private SimPrim[] prims;
         private SimAvatar[] avatars;
+        private SimScript[] scripts;
         
         public int getTime() { return time; }
         public SimPrim[] getPrims() { return prims; }
         public SimAvatar[] getAvatars() { return avatars; }
+        public SimScript[] getScripts() { return scripts; }
     }
     
     public static class SimStatus {
@@ -101,6 +110,7 @@ public class SimStatuses {
         xstream.alias("message", Message.class);        //$NON-NLS-1$
         xstream.alias("prim", SimPrim.class); //$NON-NLS-1$
         xstream.alias("avatar", SimAvatar.class); //$NON-NLS-1$
+        xstream.alias("script", SimScript.class); //$NON-NLS-1$
         xstream.aliasField("script-state", SimSuspended.class, "scriptState");  //$NON-NLS-1$//$NON-NLS-2$
     }
     

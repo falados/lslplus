@@ -10,4 +10,5 @@
 		<topic label="Sim Projects" href="html/sim-project.html"></topic></topic>
 	<topic label="Launching LSL Code" href="html/launching.html"></topic>
 	<topic label="Debugging" href="html/debug.html"></topic>
+	<topic label="Sim Watcher View" href="html/sim-watch.html"></topic>
 </toc>
