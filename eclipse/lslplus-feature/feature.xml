@@ -2,7 +2,7 @@
 <feature
       id="lslplus"
       label="Lslplus"
-      version="0.2.0">
+      version="0.3.0">
 
    <description url="http://www.example.com/description">
       The LSL Plus Plugin.
