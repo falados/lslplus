@@ -118,7 +118,6 @@ primErr k = (\ s -> throwError ("problem - can't find prim " ++ k))
 
 llHTTPRequest info@(ScriptInfo _ _ sn pk _) [SVal url, LVal params, SVal body] = 
     runErrFunc info "llHTTPRequest" nullKey (do
-        handling <- lift getWorldWebHandling
         t <- lift getTick
         -- verify the parameters
         when (length params `mod` 2 /= 0) (throwError "invalid parameter list")
@@ -232,7 +231,7 @@ llGetInventoryPermMask info@(ScriptInfo _ _ _ pk _) [SVal name, IVal mask] =
     runErrFunc info "llGetInventoryPermMask" 0 (do
         all <- getPrimInventory pk
         case findByInvName name all of
-            Nothing -> (lift $ putChat 20.0 pk 0 ("No item named '" ++ name ++ "'")) >> throwError ("No item named '" ++ name ++ "'")
+            Nothing -> (lift $ putChat (Just 20.0) pk 0 ("No item named '" ++ name ++ "'")) >> throwError ("No item named '" ++ name ++ "'")
             Just item -> inventoryInfoPermValue mask (inventoryInfoPerms $ inventoryItemInfo item)
     ) >>= continueWith . IVal
     
@@ -265,7 +264,7 @@ llGetInventoryType info@(ScriptInfo _ _ _ pk _) [SVal name] = do
 llRemoveInventory info@(ScriptInfo _ _ _ pk _) [SVal name] =
     runErrFunc info "llRemoveInventory" () (do
         inv <- getPrimInventory pk
-        maybe (lift $ putChat 20 pk cDebugChannel ("Missing inventory item '" ++ name ++ "'"))
+        maybe (lift $ putChat (Just 20) pk cDebugChannel ("Missing inventory item '" ++ name ++ "'"))
               (\  _ -> let inv' = [ item | item <- inv, name /= (inventoryItemName item)] in
                   lift $ setPrimInventory pk inv')
               (findByInvName name inv)
@@ -319,8 +318,8 @@ llGiveInventory info@(ScriptInfo _ _ _ pk _) [KVal k, SVal inv] =
                                Just _ -> let newName = findAName 1 inv in (changeName item' newName) : inventory'
                        lift $ setPrimInventory k inventory''
                        -- TODO: are scripts handled right?
-                       lift $ pushEventToPrim (Event "changed" [if hasModifyPerm then llcChangedInventory else llcChangedAllowedDrop]
-                                                     M.empty) k
+                       lift $ pushDeferredScriptEventToPrim
+                                  (Event "changed" [if hasModifyPerm then llcChangedInventory else llcChangedAllowedDrop] M.empty) k 0
                    else throwError ("can't modify/drop inventory on target")
             Nothing -> do
                 avatars <- lift getWorldAvatars
@@ -333,7 +332,7 @@ llGiveInventory info@(ScriptInfo _ _ _ pk _) [KVal k, SVal inv] =
 llSetRemoteScriptAccessPin info@(ScriptInfo _ _ _ pk _) [IVal pin] =
     setPrimRemoteScriptAccessPin pk pin >> continueWith VoidVal
 llRemoteLoadScript info@(ScriptInfo _ _ _ pk _) [KVal _,SVal _, IVal _, IVal _] =
-    putChat 20.0 pk cDebugChannel "Deprecated.  Please use llRemoteLoadScriptPin instead." >> continueWith VoidVal
+    putChat (Just 20.0) pk cDebugChannel "Deprecated.  Please use llRemoteLoadScriptPin instead." >> continueWith VoidVal
        
 llRezObject info params = rezObject "llRezObject" False info params
 llRezAtRoot info params = rezObject "llRezAtRoot" True info params
@@ -341,7 +340,7 @@ llRezAtRoot info params = rezObject "llRezAtRoot" True info params
 rezObject name atRoot info@(ScriptInfo _ _ _ pk _) [SVal inventory, VVal px py pz, VVal vx vy vz, RVal rx ry rz rs, IVal param] =
     runErrFunc info name () (do
         objects <- getPrimObjects pk
-        maybe (do lift $ putChat 20 pk 0 ("Couldn't find object '" ++ inventory ++ "'")
+        maybe (do lift $ putChat (Just 20) pk 0 ("Couldn't find object '" ++ inventory ++ "'")
                   throwError ("no such inventory item - " ++ inventory))
               (\ item -> do
                   let itemInfo = inventoryItemInfo item
@@ -376,11 +375,12 @@ llResetScript info@(ScriptInfo _ _ sn pk _) [] =
 llResetOtherScript info@(ScriptInfo _ _ sn pk _) [SVal sn'] =
     runErrFunc info "llResetOtherScript" () (do
         when (sn == sn') $ throwError ("trying to reset the current script - must use llResetScript for this")
-        lift getWorldScripts >>= M.lookup (pk,sn) >>= return . scriptStopped >>= flip when (throwError "can't reset a stopped script")
+        lift getWorldScripts >>= M.lookup (pk,sn) >>= return . scriptActive >>= flip when (throwError "can't reset a stopped script") . not
         resetScript pk sn'
     ) >> continueWith VoidVal
     
 resetScript pk sn = do
+         lift $ logAMessage LogDebug "sim" "resetting a script"
          scripts <- lift getWorldScripts
          script <- M.lookup (pk,sn) scripts
          t <- lift getTick
@@ -390,7 +390,7 @@ resetScript pk sn = do
                  let doReset execState =
                          let script' = script {
                             scriptImage = Valid $ (hardReset img) {executionState = execState},
-                            scriptStopped = False,
+                            scriptActive = True,
                             scriptPermissions = M.empty,
                             scriptLastPerm = Nothing,
                             scriptLastResetTick = t,
@@ -406,7 +406,7 @@ resetScript pk sn = do
 llGetScriptState info@(ScriptInfo _ _ _ pk _) [SVal sn] =
     runErrFunc info "llGetScriptState" 0 (do
         script <- (lift getWorldScripts >>= M.lookup (pk,sn)) <||> throwError "no such script"
-        return $ if scriptStopped script then 0
+        return $ if not $ scriptActive script then 0
                 else case scriptImage script of
                     Invalid _ -> 0
                     Valid img ->
@@ -424,17 +424,17 @@ llSetScriptState info@(ScriptInfo _ _ sn pk _) [SVal sn', IVal state] =
         script <- M.lookup (pk,sn') scripts <||> throwError "no such script"
         if state == 0 
             then
-                if (scriptStopped script) 
-                    then return ()
-                    else lift $ setWorldScripts (M.insert (pk,sn') (script { scriptStopped = True }) scripts)
+                if (scriptActive script) 
+                    then lift $ setWorldScripts (M.insert (pk,sn') (script { scriptActive = False }) scripts)
+                    else return ()
             else case scriptImage script of
                 Invalid _ -> throwError "script is invalid, can't change state"
                 Valid img -> case executionState img of
                     Crashed _ -> throwError "can't change state of crashed script"
                     Erroneous _ -> throwError "can't change state of erroneous script"
-                    _ -> if scriptStopped script
-                             then resetScript pk sn'
-                             else throwError "script is already running"
+                    _ -> if scriptActive script
+                             then throwError "script is already running"
+                             else resetScript pk sn'
     ) >> continueWith VoidVal
 ------------------------------------------------------------------------------
 llSetPayPrice info@(ScriptInfo _ _ sn pk _) [IVal price, LVal l] =
@@ -483,16 +483,15 @@ llUnSit info@(ScriptInfo _ _ _ pk _) [KVal k] =
     ) >> continueWith VoidVal
 
 llMessageLinked :: Monad m => ScriptInfo -> [LSLValue] -> WorldM m (EvalResult,LSLValue)       
-llMessageLinked (ScriptInfo oid pid sid pkey _) [IVal link,IVal val,SVal msg,KVal key] =
-    do mNumPrims <- queryObject oid (\ o -> return $ length (primKeys o))
-       case mNumPrims of
-           Nothing -> do logAMessage LogWarn "sim" ("object " ++ oid ++ " not found!")
-                         return (EvalIncomplete,VoidVal)
-           Just n -> 
-              let targetList = targetLinks n link pid
-              in
-                   do mapM (flip (pushEvents oid) (Event "link_message" [IVal pid,IVal val,SVal msg, KVal key] M.empty)) targetList
-                      return (EvalIncomplete,VoidVal)
+llMessageLinked info@(ScriptInfo oid pid sid pkey _) [IVal link,IVal val,SVal msg,KVal key] =
+    runErrFunc info "llMessageLinked" () (do
+        LSLObject links <- (lift getObjects >>= M.lookup oid) <||> throwError ("object not found!")
+        when (null links) $ throwError ("object is has no links!")
+        let targetLinkIndices = targetLinks (length links) link pid
+        let targetLinks = map (links !!) targetLinkIndices
+        let event = (Event "link_message" [IVal pid, IVal val, SVal msg, KVal key] M.empty)
+        lift $ mapM_ (\ pk -> pushDeferredScriptEventToPrim event pk 0) targetLinks
+    ) >> continueWith VoidVal
 
 targetLinks n link pid =
     case link of
@@ -533,11 +532,15 @@ chat range info@(ScriptInfo oid pid sid pkey event) [IVal chan, SVal message] =
        putChat range pkey chan message
        return (EvalIncomplete,VoidVal)
        
-putChat range pk chan message = do
-    (VVal x y z) <- getPos pk
-    region <- getRegionIndex pk
-    Just name <- queryPrim pk primName
-    putWorldEvent 0 $ Chat chan name pk message (region,(x,y,z)) (Just 20.0)
+putChat range k chan message = do
+    prims <- getPrims
+    case M.lookup k prims of
+        Just prim -> putWorldEvent 0 $ Chat chan (primName prim) k message (primRegion prim, primPosition prim) (range)
+        Nothing -> do
+            avatars <- getWorldAvatars
+            case M.lookup k avatars of
+                Just avatar -> putWorldEvent 0 $ Chat chan (avatarName avatar) k message (avatarRegion avatar, avatarPosition avatar) (range)
+                Nothing -> logAMessage LogWarn "sim" ("Trying to chat from unknown object/avatar with key " ++ k)
     
 llListen (ScriptInfo oid pid sid pkey event) [IVal chan, SVal sender, KVal key, SVal msg] =
     do lid <- registerListener $ Listener pkey sid chan sender key msg
@@ -1615,8 +1618,8 @@ llGetNextEmail info@(ScriptInfo _ _ sn pk _) [SVal addr, SVal subj] =
        case find match emails of
            Nothing -> return ()
            Just email -> do
-                lift $ pushEvent (Event "email" [SVal $ show $ emailTime email, SVal $ emailAddress email, SVal $ emailSubject email,
-                                                 SVal $ emailMessage email, IVal (length emails - 1)] M.empty) pk sn
+                lift $ pushDeferredScriptEvent (Event "email" [SVal $ show $ emailTime email, SVal $ emailAddress email, SVal $ emailSubject email,
+                                                SVal $ emailMessage email, IVal (length emails - 1)] M.empty) pk sn 0
                 lift $ setPrimPendingEmails pk (filter (not . match) emails)
    ) >> continueWith VoidVal
    where match email = (addr == "" || addr == emailAddress email) &&
@@ -1818,7 +1821,7 @@ llGetNumberOfNotecardLines (ScriptInfo _ _ sn pk _) [SVal name] =
     runErrPrim pk nullKey (do
         notecards <- getPrimNotecards pk
         case find ((name==) . inventoryItemName) notecards of
-            Nothing -> (lift $ putChat 20.0 pk 0 ("Couldn't find notecard " ++ name)) >> return nullKey
+            Nothing -> (lift $ putChat (Just 20.0) pk 0 ("Couldn't find notecard " ++ name)) >> return nullKey
             Just notecard -> do
                 key <- lift newKey
                 lift $ pushDataserverEvent pk sn key (show $ length $ invNotecardLines $ inventoryItemData notecard)
@@ -1829,7 +1832,7 @@ llGetNotecardLine (ScriptInfo _ _ sn pk _) [SVal name, IVal lineNumber] =
     runErrPrim pk nullKey (do
         notecards <- getPrimNotecards pk
         case find ((name==) . inventoryItemName) notecards of
-            Nothing -> (lift $ putChat 20.0 pk cDebugChannel ("Couldn't find notecard " ++ name)) >> return nullKey
+            Nothing -> (lift $ putChat (Just 20.0) pk cDebugChannel ("Couldn't find notecard " ++ name)) >> return nullKey
             Just notecard -> do
                 key <- lift newKey
                 let line = case lookupByIndex lineNumber $ invNotecardLines $ inventoryItemData notecard of
@@ -2107,7 +2110,8 @@ llOpenRemoteDataChannel info@(ScriptInfo _ _ sn pk _) [] =
     runErrFunc info "llOpenRemoteDataChannel" () (do 
        key <- lookupDataChannel (pk,sn) <||> lift newKey
        insertScriptChannelPair (pk,sn) key
-       lift $ pushEvent (Event "remote_data" [llcRemoteDataChannel, KVal key, KVal nullKey, SVal "", IVal 0, SVal ""] M.empty) pk sn
+       lift $ logFromScript info ("pushing remote data channel to script")
+       lift $ pushDeferredScriptEvent (Event "remote_data" [llcRemoteDataChannel, KVal key, KVal nullKey, SVal "", IVal 0, SVal ""] M.empty) pk sn 0
     ) >> continueWith VoidVal
        
 llSendRemoteData info [KVal channel, SVal dest, IVal idata, SVal sdata] =
@@ -2143,7 +2147,7 @@ llDialog info@(ScriptInfo _ _ _ pk _) [KVal ak, SVal message, LVal buttons, IVal
         (lift getWorldAvatars >>= M.lookup ak) <||> throwError ("no such agent/avatar - " ++ ak)
         lift $ putWorldEvent 0 (DialogEvent ak message buttons' channel pk)
     ) >> continueWith VoidVal
-    where doErr msg = (lift $ putChat 20 pk cDebugChannel ("llDialog: " ++ msg)) >> throwError msg
+    where doErr msg = (lift $ putChat (Just 20) pk cDebugChannel ("llDialog: " ++ msg)) >> throwError msg
 -------------------------------------------------------------------------------    
 -- old (deprecated) functions for visual effects
 
@@ -2400,15 +2404,6 @@ getPrimInfo pkey =
 
 maybeM m = case m of Nothing -> fail "nothing"; (Just v) -> return v
 
-pushEvents oid pid e = do
-    fromErrorT () $ do
-            objects <- lift getObjects
-            o <- M.lookup oid objects
-            key <- lookupByIndex pid (primKeys o)
-            p <- getPrim key
-            scripts <- getPrimScripts key
-            lift $ mapM_ (pushEvent e key) (map invName scripts)
-    
 pushEvent e key sid =
     do scripts <- getWorldScripts
        case M.lookup (key,sid) scripts of
@@ -2424,14 +2419,21 @@ pushEventToObject e key =
            Nothing -> logAMessage LogWarn "sim" ("no such object: " ++ key)
            Just o ->  mapM_ (pushEventToPrim e) (primKeys o)
 
-pushDataserverEvent pk sn key val = pushEvent (Event "dataserver" [KVal key, SVal val] M.empty) pk sn
-pushChangedEventToObject oid val = pushEventToObject (Event "changed" [IVal val] M.empty) oid
-pushAttachEvent pk k = pushEventToPrim (Event "attach" [KVal k] M.empty) pk
+pushDataserverEvent pk sn key val = pushDeferredScriptEvent (Event "dataserver" [KVal key, SVal val] M.empty) pk sn 0
+pushChangedEventToObject oid val = pushDeferredScriptEventToObject (Event "changed" [IVal val] M.empty) oid 0
+pushAttachEvent pk k = pushDeferredScriptEventToPrim (Event "attach" [KVal k] M.empty) pk 0
 
+pushDeferredScriptEvent event pk sn delay = 
+    putWorldEvent delay (DeferredScriptEvent event (DeferredScriptEventScriptTarget (pk,sn)))
+pushDeferredScriptEventToPrim event pk delay =
+    putWorldEvent delay (DeferredScriptEvent event (DeferredScriptEventPrimTarget pk))
+pushDeferredScriptEventToObject event oid delay =
+    putWorldEvent delay (DeferredScriptEvent event (DeferredScriptEventObjectTarget oid))
+    
 putHTTPTimeoutEvent pk sn key delay = 
-    putWorldEvent delay $ DeferredScriptEvent (Event "http_response" [KVal key, IVal 499, LVal [], SVal ""] M.empty) (pk,sn)
+    pushDeferredScriptEvent (Event "http_response" [KVal key, IVal 499, LVal [], SVal ""] M.empty) pk sn delay
 putHTTPResponseEvent pk sn key status metadata body delay =
-    putWorldEvent delay $ DeferredScriptEvent (Event "http_response" [KVal key, IVal 499, LVal [], SVal ""] M.empty) (pk,sn)
+    pushDeferredScriptEvent (Event "http_response" [KVal key, IVal 499, LVal [], SVal ""] M.empty) pk sn delay
     
 getObjectNames :: (Monad m) => WorldM m [String]
 getObjectNames = getObjects >>= (return . M.keys)
@@ -2567,7 +2569,9 @@ processEvents =
                       processEvents
     where isNothing = maybe True (const False)
     
-processEvent (DeferredScriptEvent event (pk,sn)) = pushEvent event pk sn
+processEvent (DeferredScriptEvent event (DeferredScriptEventScriptTarget (pk,sn))) = pushEvent event pk sn
+processEvent (DeferredScriptEvent event (DeferredScriptEventPrimTarget pk)) = pushEventToPrim event pk
+processEvent (DeferredScriptEvent event (DeferredScriptEventObjectTarget oid)) = pushEventToObject event oid
 processEvent (CreatePrim name key) =
     do worldPrims <- getPrims
        objects <- getObjects
@@ -2629,10 +2633,11 @@ processEvent evt@(SensorEvent (pk,sn) name key stype range arc rpt) =
     where senseObjects = do
               pos <- getPrimPosition pk
               rot <- getPrimRotation pk
-              root <- getPrimParent pk
+              root <- getRootPrim pk
               let fwd = fwdFromRot rot
               prims <- rootPrims root
-              return [ primKey p | p <- prims, withinSensorArea pos fwd range arc (primPosition p)]
+              statuses <- mapM objectStatus (map primKey prims)
+              return [ primKey p | (p,stat) <- zip prims statuses, withinSensorArea pos fwd range arc (primPosition p), stat .&. stype /= 0]
           senseAvatars = 
               if stype .&. cAgent /= 0 then do
                       pos <- getPrimPosition pk
@@ -2649,8 +2654,9 @@ processEvent evt@(SensorEvent (pk,sn) name key stype range arc rpt) =
                   m = mag3d v in m <= range && angleBetween v direction <= arc
           rootPrims exclude = do
               objs <- lift getObjects
-              mapM getPrim [ k | LSLObject (k:_) <- M.elems objs, exclude /= Just k]
-          objectStatus pks = do 
+              mapM getPrim [ k | LSLObject (k:_) <- M.elems objs, exclude /= k]
+          objectStatus root = do
+              LSLObject pks <- lift getObjects >>= M.lookup root
               stat <- foldM (\ x k -> determineActivePassiveScripted k >>= return . (x .|.)) 0 pks
               if (stat .&. cActive /= 0 && stat .&. cPassive /= 0) 
                  then return (stat .&. complement cPassive)
@@ -2659,6 +2665,7 @@ processEvent evt@(SensorEvent (pk,sn) name key stype range arc rpt) =
               avs <- lift getWorldAvatars
               return [ av | av <- M.elems avs, exclude /= Just (avatarKey av)]
 processEvent (HTTPRequestEvent (pk,sn) key url method mimetype maxlength verify body) = do
+        logAMessage LogDebug "sim" "processing an HTTP request event"
         handling <- getWorldWebHandling
         case handling of
             WebHandlingByDoingNothing -> putHTTPTimeoutEvent pk sn key 60 
@@ -2670,12 +2677,13 @@ processEvent (HTTPRequestEvent (pk,sn) key url method mimetype maxlength verify 
                     Left s -> throwError s
                     Right (SVal msg,results) | not (null msg) -> throwError msg
                                              | otherwise ->
-                        let IVal status = maybe (IVal 200) id (lookup "outStatus" results >>= ( \ val -> if isIVal val then Just val else Nothing))
-                            LVal metadata = maybe (LVal []) id (lookup "outMetadata" results >>= ( \ val -> if isLVal val then Just val else Nothing))
-                            body = maybe (SVal "") id (lookup "outBody" results >>= ( \ val -> if isSVal val then Just val else Nothing))
+                        let IVal status = maybe (IVal 200) id (lookup "outHttpStatus" results >>= ( \ val -> if isIVal val then Just val else Nothing))
+                            LVal metadata = maybe (LVal []) id (lookup "outHttpMetadata" results >>= ( \ val -> if isLVal val then Just val else Nothing))
+                            body = maybe (SVal "") id (lookup "outHttpBody" results >>= ( \ val -> if isSVal val then Just val else Nothing))
                             events = maybe (LVal []) id (lookup "outEvents" results)
                         in do lift $ putHTTPResponseEvent pk sn key status metadata body 2
                               lift $ processEventsList events
+                              lift $ setWorldEventHandler (Just (moduleName, results))
                     Right _ -> throwError ("invalid web handling function, must return a string")
             WebHandlingByInternet timeout -> do
                 let event = SimEvent "http_request" [
@@ -2695,8 +2703,10 @@ processEvent (HTTPRequestEvent (pk,sn) key url method mimetype maxlength verify 
                 putHTTPTimeoutEvent pk sn key timeout
 processEvent (XMLRequestEvent source channel idata sdata) = 
     runAndLogIfErr "invalid xml request" () $ do
+        lift $ logAMessage LogInfo "sim" "processing XMLRequestEvent"
         (pk,sn) <- lookupScriptFromChan channel <||> throwError ("no such channel" ++ channel)
         key <- lift newKey
+        lift getWorldXMLRequestRegistry >>= return . (M.insert key source) >>= lift . setWorldXMLRequestRegistry
         lift $ pushEvent (Event "remote_data" [llcRemoteDataRequest, KVal channel, KVal nullKey, SVal "", IVal idata, SVal sdata]
                                               (M.fromList [("requestKey",KVal key)])) pk sn
 processEvent (XMLReplyEvent key channel messageId sdata idata) = do
@@ -2707,12 +2717,13 @@ processEvent (XMLReplyEvent key channel messageId sdata idata) = do
             XMLRequestInternal tag -> do
                 (moduleName, state) <- lift getWorldEventHandler >>= maybe (throwError "no handler defined") return
                 lib <- lift getWLibrary
-                case simFunc lib (moduleName, "xmlReply") state [SVal channel, SVal sdata, IVal idata] of
+                case simFunc lib (moduleName, "xmlReply") state [SVal tag, SVal channel, SVal sdata, IVal idata] of
                     Left s -> throwError s
                     Right (SVal msg, results) | not (null msg) -> throwError msg
                                               | otherwise ->
-                        let events = maybe (LVal []) id (lookup "outEvents" results) in
+                        let events = maybe (LVal []) id (lookup "outEvents" results) in do
                             lift $ processEventsList events
+                            lift $ setWorldEventHandler (Just (moduleName, results))
             XMLRequestExternal tag -> do
                 let event = SimEvent "xml_reply" [
                         SimEventArg "tag" tag,
@@ -2730,11 +2741,11 @@ processEvent (DialogEvent agent message buttons channel source) =
             Left s -> throwError s
             Right (SVal msg, results) | not (null msg) -> throwError msg
                                       | otherwise ->
-                let (IVal selection) = maybe (IVal (-1)) id (lookup "outButtonSelected" results)
+                let (IVal selection) = maybe (IVal (-1)) id (lookup "outDialogButtonSelected" results)
                     events = maybe (LVal []) id (lookup "outEvents" results)
                 in do
                     when (selection >= 0 && selection < length buttons) $ 
-                        lift $ putChat 20.0 agent channel (buttons !! selection)
+                        lift $ putChat (Just 20.0) agent channel (buttons !! selection)
                     lift $ processEventsList events
 processEvent (RezObjectEvent links pos vel rot start pk copy atRoot) =
     runAndLogIfErr "invalid rez object event" () $ do
@@ -2773,7 +2784,7 @@ processEvent (RezObjectEvent links pos vel rot start pk copy atRoot) =
                   else return (inventoryItemData item)
               return $ item { inventoryItemIdentification = InventoryItemIdentification (name,key), inventoryItemData = newData }
 processEvent (ResetScriptEvent pk sn) =
-     runAndLogIfErr "invalid rez script event" () (resetScript pk sn)
+     runAndLogIfErr "invalid reset script event" () (resetScript pk sn)
 processEvent (DetachCompleteEvent oid ak) =
      runAndLogIfErr "invalid detach complete event" () $ do
          -- need to remove the object and it's prims and its active scripts from the live lists, but

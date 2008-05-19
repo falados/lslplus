@@ -109,7 +109,6 @@ testSystem =
         case result of
             Left s -> fail s
             Right (src,worldDef) -> do
-                hPutStrLn stderr (show worldDef)
                 (augLib,scripts) <- compile src
                 let runStep state s =
                         let command = commandFromXML s

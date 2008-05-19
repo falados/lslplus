@@ -17,6 +17,7 @@ module Lsl.DOMProcessing(ElemAcceptor(..),
                          attValueString,
                          acceptList, -- 
                          elementList,
+                         elementListWith,
                          elementsOnly,
                          attrString,
                          module Text.XML.HaXml,
@@ -94,6 +95,9 @@ attValueString (AttValue list) = concat [ s | Left s <- list ]
 acceptList itemAcceptor (Elem _ _ contents) = mapM (cmatch itemAcceptor) (elementsOnly contents)
 
 elementList name itemAcceptor = ElemAcceptor name (acceptList itemAcceptor)
+
+acceptListWith f (Elem _ _ contents) = mapM f (elementsOnly contents)
+elementListWith name f = ElemAcceptor name (acceptListWith f)
     
 elementsOnly cs = [ e | e@(CElem _ _) <- cs]
 

@@ -182,6 +182,8 @@ getPrimAnimations k = getPrimInventory k >>= return . filter isInvAnimationItem
 getPrimTextures k = getPrimInventory k >>= return . filter isInvTextureItem
 getPrimScripts k = getPrimInventory k >>= return . filter isInvScriptItem
 
+getRootPrim pk =  (getPrimParent pk) >>= return . maybe pk id
+ 
 -- TODO: temp until introduce region into Prim definition
 getPrimRegion _ = (lift (return (0 :: Int,0 :: Int)))
 primRegion :: a -> (Int,Int)
@@ -256,19 +258,6 @@ updatePrimFace k i f = do
 setPrimFaceAlpha k i v = runErrFace k i () $ updatePrimFace k i (\ f -> f { faceAlpha = v })
 setPrimFaceColor k i v = runErrFace k i () $ updatePrimFace k i (\ f -> f { faceColor = v })
 
-insertPrimData key path value = do
-    prims <- getPrims
-    case M.lookup key prims of
-        Nothing -> logAMessage LogWarn "sim" ("key " ++ key ++ " not found")
-        Just prim -> 
-            setPrims $ M.insert key (prim { primData = (insertDB path value (primData prim)) }) prims
-
-lookupPrimData key path = do
-    prims <- getPrims
-    case M.lookup key prims of
-        Nothing -> return Nothing
-        Just prim -> return $ lookupDB path (primData prim)
- 
 insertWorldDB path value = do
     wdb <- getWorldDB
     setWorldDB (insertDB path value wdb)
@@ -282,7 +271,7 @@ data WorldEventType = CreatePrim { wePrimName :: String, wePrimKey :: String }
                     | ResetScript String String -- prim key, script name
                     | ResetScripts String -- object name
                     | WorldSimEvent { worldSimEventName :: String, worldSimEventArgs :: [SimEventArg] }
-                    | DeferredScriptEvent { deferredScriptEvent :: Event, deferredScriptEventTarget :: (String,String) }
+                    | DeferredScriptEvent { deferredScriptEvent :: Event, deferredScriptEventTarget :: DeferredScriptEventTarget }
                     | Chat { chatChannel :: Int, chatterName :: String, chatterKey :: String, chatMessage :: String,
                              chatLocation :: ((Int,Int),(Float,Float,Float)),
                              chatRange :: Maybe Float }
@@ -339,6 +328,11 @@ data XMLRequestSourceType = XMLRequestInternal { xmlRequestTag :: String }
                           | XMLRequestExternal { xmlRequestTag :: String }
     deriving (Show)
 
+data DeferredScriptEventTarget = DeferredScriptEventScriptTarget (String,String)
+                               | DeferredScriptEventPrimTarget String -- pushes to all scripts in prim
+                               | DeferredScriptEventObjectTarget String -- pushes to all scripts in all prims in object
+    deriving (Show)
+    
 isSensorEvent (SensorEvent _ _ _ _ _ _ _) = True
 isSensorEvent _ = False
     

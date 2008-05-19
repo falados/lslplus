@@ -261,7 +261,10 @@ evalLit globals expr =
         RotExpr a b c d -> RVal (litExpr2Float a) (litExpr2Float b) (litExpr2Float c) (litExpr2Float d)
         Get (Ctx _ nm,All)    -> 
             case find (\ (GDecl (Var nm' t) mexpr') -> nm == nm') globals of
-                Nothing -> error ("invalid global " ++ nm ++ " referenced in initializer")
+                Nothing -> 
+                    case findConstVal nm of
+                        Nothing -> error ("invalid global " ++ nm ++ " referenced in initializer")
+                        Just v -> v
                 Just g ->
                     let (_,v) = initGlobal globals g in v
 

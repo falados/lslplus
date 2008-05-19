@@ -52,6 +52,7 @@ import Data.List
 import qualified Data.Map as M
 import qualified Data.IntMap as IM
 import Data.Maybe
+import Debug.Trace
 
 -- import Lsl.Avatar
 import Lsl.DOMProcessing hiding (find)
@@ -240,7 +241,6 @@ data Prim = Prim {
                     primTempOnRez :: Bool,
                     primTypeInfo :: PrimType,
                     primPermissions :: [Int],
-                    primData :: ValueDB,
                     primAllowInventoryDrop :: Bool,
                     primSitTarget :: Maybe ((Float,Float,Float),(Float,Float,Float,Float)),
                     primSittingAvatar :: Maybe String,
@@ -338,7 +338,6 @@ emptyPrim name key =
            primTempOnRez = False,
            primTypeInfo = basicBox,
            primPermissions = [0],            
-           primData = emptyDB,
            primAllowInventoryDrop = False,
            primSitTarget = Nothing,
            primSittingAvatar = Nothing,
@@ -372,7 +371,7 @@ defaultRegions owner = [
     ]
 
 data Script = Script { scriptImage :: Validity ScriptImage,
-                       scriptStopped :: Bool,
+                       scriptActive :: Bool,
                        scriptPermissions :: M.Map String Int,
                        scriptLastPerm :: Maybe String,
                        scriptStartTick :: Int,
@@ -428,7 +427,10 @@ checkObjects primMap os = foldM checkObject primMap os
 activateScripts scriptIdInfo compiledScripts primMap = mapM (activateScript compiledScripts primMap) scriptIdInfo
 
 activateScript scripts primMap (k@(primKey,invName),(scriptID)) =
-    do  script <- fctx ("looking up script " ++ scriptID ++ " failed") $ maybe2Either $ lookup scriptID scripts
+    do  --script <- fctx ("looking up script " ++ scriptID ++ " failed") $ maybe2Either $ lookup scriptID scripts
+        let script = case lookup scriptID scripts of
+             Nothing -> fail "script not found"
+             Just v -> v
         prim <- fctx ("looking up prim " ++ primKey ++ " failed") (M.lookup primKey primMap)
         when (isNothing (findByInvName invName (primInventory prim))) $ fail (invName ++ " doesn't exist in prim " ++ primKey)
         case script of
@@ -450,15 +452,15 @@ findRealKey k = lift SM.get >>= M.lookup k . fst
 worldElement =
     let f (Elem _ _ contents) = do
         (maxTime, c1) <- findValue "maxTime" (elementsOnly contents)
-        (sliceSizeStr, c2) <- findSimple "sliceSize" c1
-        (avatars,c3) <- findElement avatarsElement c2
-        (prims,c4) <- findElement primsElement c3
-        --(activeScripts, c5) <- findElement activeScriptsElement c4
-        (objects,[]) <- findElement objectsElement c4
-        --maxTime <- readM maxTimeStr
+        (handler, c2) <- findOptionalElement (simpleElement "simEventHandler") c1
+        (sliceSizeStr, c3) <- findSimple "sliceSize" c2
+        (avatars,c4) <- findElement avatarsElement c3
+        (prims,c5) <- findElement primsElement c4
+        (objects,[]) <- findElement objectsElement c5
         sliceSize <- readM sliceSizeStr
         (m,keyIndex) <- lift SM.get
-        return $ (FullWorldDef maxTime sliceSize WebHandlingByDoingNothing Nothing objects prims avatars (defaultRegions "") keyIndex)
+        let webHandling = if isNothing handler then WebHandlingByDoingNothing else WebHandlingByFunction
+        return $ (FullWorldDef maxTime sliceSize webHandling handler objects prims avatars (defaultRegions "") keyIndex)
     in ElemAcceptor "world-def" f
     
 activeScriptsElement :: ElemAcceptor KeyManagerM [((String,String),String)]
@@ -495,8 +497,6 @@ primElement = ElemAcceptor "prim" $
             realKey <- newKey (Just key)
             (description, c3) <- findSimpleOrDefault "" "description" c2
             (scripts,c4) <- findElement (elementList "scripts" (scriptAcceptor "script")) c3
-            --scriptKeys <- replicateM (length scripts) (newKey Nothing)
-            --let scripts' = zipWith scriptInventoryItem scripts scriptKeys
             (owner,c5) <- findSimpleOrDefault "" "owner" c4
             realOwner <- findRealKey owner
             (position,c6) <- findOrDefault (128.0,128.0,0.0) (vecAcceptor "position") c5
@@ -510,9 +510,8 @@ primElement = ElemAcceptor "prim" $
             (tempOnRez, c14) <- findValueOrDefault False "tempOnRez" c13
             (typeInfo, c15) <- findOrDefault basicBox (primTypeAcceptor "typeInfo") c14
             (permissions, c16) <- findOrDefault [0] (elementList "permissions" (valueAcceptor "int")) c15
-            (pData,c17) <- findElement (dbAcceptor "data") c16
-            (dropAllowed,c18) <- findValueOrDefault False "dropAllowed" c17
-            (inventory,[]) <- findOrDefault [] (elementList "inventory" (inventoryItemAcceptor "item")) c18
+            (dropAllowed,c17) <- findValueOrDefault False "dropAllowed" c16
+            (inventory,[]) <- findOrDefault [] (elementListWith "inventory" acceptInventoryItem) c17
             return $ Prim { primName = name, 
                             primKey = realKey, 
                             primParent = Nothing,
@@ -533,7 +532,6 @@ primElement = ElemAcceptor "prim" $
                             primTempOnRez = tempOnRez,
                             primTypeInfo = typeInfo,
                             primPermissions = permissions,
-                            primData = pData,
                             primAllowInventoryDrop = dropAllowed,
                             primSitTarget = Nothing ,
                             primSittingAvatar = Nothing,
@@ -544,20 +542,51 @@ primElement = ElemAcceptor "prim" $
                             primAttachment = Nothing,
                             primRemoteScriptAccessPin = 0 }
 
-inventoryItemAcceptor s = ElemAcceptor s $
-   \ (Elem _ [("class",v)] contents) -> do
+acceptInventoryItem e = matchChoice (map (uncurry mkInventoryItemAcceptor) 
+    [("notecardItem",acceptNotecardData),
+     ("textureItem", acceptTextureData),
+     ("bodyPartItem", acceptBodyPartData),
+     ("clothingItem", acceptClothingData),
+     ("gestureItem", acceptGestureData),
+     ("soundItem", acceptSoundData),
+     ("animationItem", acceptAnimationData),
+     ("inventoryObjectItem", acceptInventoryObjectData),
+     ("landmarkItem", acceptLandmarkData)
+    ]) e
+
+acceptNotecardData contents = do
+     (lines,c1) <- findOrDefault [] (elementList "lines" (simpleElement "string")) contents
+     return (InvNotecard lines,c1)
+
+acceptTextureData contents = return (InvTexture,contents)
+acceptBodyPartData contents = return (InvBodyPart,contents)
+acceptClothingData contents = return (InvClothing,contents)
+acceptGestureData contents = return (InvGesture,contents)
+acceptSoundData contents = do
+    (duration,c1) <- findValue "duration" contents
+    return (InvSound duration,c1)
+acceptAnimationData contents = do
+    (duration,c1) <- findValue "duration" contents
+    return (InvAnimation duration,c1)
+acceptInventoryObjectData contents = do
+    (prims,c1) <- findElement primsElement contents
+    return (InvObject prims,c1)
+    
+acceptLandmarkData contents = do
+    (region,c1) <- findElement (regionAcceptor "region") contents
+    (position, c2) <- findElement (vecAcceptor "position") c1
+    return (InvLandmark (region,position), c2)
+    
+mkInventoryItemAcceptor s f = ElemAcceptor s $
+   \ (Elem _ _ contents) -> do
        let c0 = elementsOnly contents
-       let itemType = attValueString v
        (name,c1) <- findSimple "name" c0
        key <- newKey Nothing
        (creator,c2) <- findSimple "creator" c1
        realCreator <- findRealKey creator
-       case itemType of
-           "notecard" -> do
-               (lines,c3) <- findOrDefault [] (elementList "lines" (simpleElement "string")) c2
-               return $ InventoryItem (InventoryItemIdentification (name, key)) (InventoryInfo creator defaultInventoryPermissions)
-                                      (InvNotecard lines)
-           _ -> throwError ("item type " ++ itemType ++ " is not supported")
+       (itemData,[]) <- f c2
+       return $ InventoryItem (InventoryItemIdentification (name, key)) (InventoryInfo creator defaultInventoryPermissions)
+                       itemData
        
 scriptAcceptor s = ElemAcceptor s $
    \ (Elem _ _ contents) -> do
@@ -675,9 +704,8 @@ avatarsElement = elementList "avatars" avatarElement
 avatarElement :: ElemAcceptor KeyManagerM Avatar
 avatarElement = ElemAcceptor "avatar" $
     \ (Elem _ _ contents) -> do
-            (key,c1) <- findSimple "key" (elementsOnly contents)
-            realKey <- newKey (Just key)
-            (name,c2) <- findSimple "name" c1
+            (name,c2) <- findSimple "name" (elementsOnly contents)
+            realKey <- newKey (Just name)
             (x,c3) <- findValue "xPos" c2
             (y,c4) <- findValue "yPos" c3
             (z,_) <- findValue "zPos" c4
@@ -698,3 +726,8 @@ rotAcceptor s = ElemAcceptor s $
         (s,[]) <- findValue "s" c3
         return $ (x,y,z,s)
         
+regionAcceptor s = ElemAcceptor s $
+    \ (Elem _ _ contents) -> do
+        (x,c1) <- findValue "x" (elementsOnly contents)
+        (y,[]) <- findValue "y" (c1)
+        return $ (x,y)
