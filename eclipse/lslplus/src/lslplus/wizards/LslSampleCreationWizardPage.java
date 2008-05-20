@@ -135,7 +135,7 @@ abstract public class LslSampleCreationWizardPage extends WizardPage implements 
 						} else {
 							MessageDialog
 									.openError(getContainer().getShell(),Messages.getString("LslFileCreationWizardPage.CREATION_PROBLEMS"), //$NON-NLS-1$
-											NLS.bind(Messages.getString("LslFileCreationWizardPage.INTERNAL_ERROR"), e.getCause().getMessage())); //$NON-NLS-1$
+											NLS.bind(Messages.getString("LslFileCreationWizardPage.INTERNAL_ERROR"), e.getMessage())); //$NON-NLS-1$
 						}
 					}
 				});
