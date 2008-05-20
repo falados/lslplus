@@ -1360,7 +1360,7 @@ public class SimProject {
                 GridPositionNode.class, PrimPropertiesNode.class, AvatarPropertiesNode.class,
                 AvatarReferenceNode.class, GestureNode.class, ClothingNode.class,
                 BodyPartNode.class, SoundNode.class, AnimationNode.class, TextureNode.class,
-                LandmarkNode.class
+                LandmarkNode.class, EventHandlerNode.class
         };
         
         xstream.omitField(Node.class, "parent"); //$NON-NLS-1$

@@ -8,11 +8,11 @@
       <value class="int">10000000</value>
       <childrenArray/>
     </anyNaturalNode>
-    <lslplus.sim.SimProject_-EventHandlerNode>
+    <eventHandlerNode>
       <nodeName>event-handler</nodeName>
       <value class="string">@PREFIX@eventhandler.lslm</value>
       <childrenArray/>
-    </lslplus.sim.SimProject_-EventHandlerNode>
+    </eventHandlerNode>
     <defaultAvatarNode>
       <nodeName>Default Avatar</nodeName>
       <childrenArray>
@@ -86,7 +86,7 @@
             </primPropertiesNode>
             <scriptNode>
               <nodeName>rpc-script</nodeName>
-              <value class="string">http_rpc_example.rpc_server.lslp</value>
+              <value class="string">@PREFIX@rpc_server.lslp</value>
               <childrenArray/>
             </scriptNode>
           </childrenArray>

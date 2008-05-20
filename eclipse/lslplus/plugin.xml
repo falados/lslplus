@@ -245,7 +245,7 @@
             preferredPerspectives="lslplus.LslPlusPerspective">
       </wizard>
       <wizard
-            category="lslplus.lslplus"
+            category="lslplus.lslplus.examples"
             class="lslplus.wizards.NewHttpRpcSampleWizard"
             icon="icons/obj16/lslplus.gif"
             id="lslplus.HttpRpcExample"
@@ -253,13 +253,18 @@
             preferredPerspectives="lslplus.LslPlusPerspective">
       </wizard>
       <wizard
-            category="lslplus.lslplus"
+            category="lslplus.lslplus.examples"
             class="lslplus.wizards.NewDialogSampleWizard"
             icon="icons/obj16/lslplus.gif"
             id="lslplus.DialogExample"
             name="Dialog Example"
             preferredPerspectives="lslplus.LslPlusPerspective">
       </wizard>
+      <category
+            id="lslplus.lslplus.examples"
+            name="LSL Plus Examples"
+            parentCategory="lslplus.lslplus">
+      </category>
    </extension>
    <extension
          point="org.eclipse.ui.ide.projectNatureImages">
