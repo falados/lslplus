@@ -6,8 +6,8 @@ import Control.Exception
 import Control.Monad
 import Control.Monad.Error
 import Data.List
-import Lsl.Structure
-import Lsl.Parse
+import Lsl.Structure(validLSLScript,validLibrary,SourceContext(..), Validity(..))
+import Lsl.Parse(parseModule', parseScript')
 import System
 import System.Directory
 import System.FilePath
