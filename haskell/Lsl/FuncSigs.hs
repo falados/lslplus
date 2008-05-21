@@ -197,7 +197,7 @@ funcSigs = [
     ("llMD5String",LLString,[LLString,LLInteger]),
     ("llMakeExplosion",LLVoid,[LLInteger,LLFloat,LLFloat,LLFloat,LLFloat,LLString,LLVector]),
     ("llMakeFire",LLVoid,[LLInteger,LLFloat,LLFloat,LLFloat,LLFloat,LLString,LLVector]),
-    ("llMakeFountain",LLVoid,[LLInteger,LLFloat,LLFloat,LLFloat,LLFloat,LLString,LLVector]),
+    ("llMakeFountain",LLVoid,[LLInteger,LLFloat,LLFloat,LLFloat,LLFloat,LLInteger,LLString,LLVector,LLFloat]),
     ("llMakeSmoke",LLVoid,[LLInteger,LLFloat,LLFloat,LLFloat,LLFloat,LLString,LLVector]),
     ("llMapDestination",LLVoid,[LLString,LLVector,LLVector]),
     ("llMessageLinked",LLVoid,[LLInteger,LLInteger,LLString,LLKey]),

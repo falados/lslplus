@@ -298,13 +298,13 @@ validGlob library vars funcDecs (globvars,funcs) (GI (Ctx ctx name) bindings pre
         context $ validBindings vars freevars bindings
         (vars',funcDecs') <- context $ typeGlobs library globs
         let renames = bindings ++ (map (\ x -> (x,prefix ++ x)) ((map varName vars') ++ (funcNames funcDecs')))
-        rewrites :: [[GlobDef]] <- mapM (rewriteGlob library renames vars') globs
+        rewrites :: [[GlobDef]] <- mapM (rewriteGlob library renames ((map ctxItem freevars) ++ vars')) globs
         let f (gvs,fs) (GV v m) = return ((GDecl (ctxItem v) $ fromMCtx m):gvs,fs)
             f (gvs,fs) (GF f) = return (gvs,f:fs)
         foldM f (globvars,funcs) $ concat rewrites
 
 rewriteGlob _ renames vars (GF (Func (FuncDec name t params) statements)) =
-    do  name' <- incontext (srcCtx name,  "renaming funcion" ++ ctxItem name) $ lookupM (ctxItem name) renames
+    do  name' <- incontext (srcCtx name,  "renaming function " ++ ctxItem name ++ ", " ++ show renames) $ lookupM (ctxItem name) renames
         return $ [GF (Func (FuncDec (Ctx (srcCtx name) name') t params) $ rewriteStatements 0 renames statements)]
 rewriteGlob _ renames vars (GV (Ctx ctx (Var name t)) mexpr) =
     do  name' <- incontext (ctx,"renaming variable " ++ name) $ lookupM name renames
@@ -316,7 +316,7 @@ rewriteGlob library renames vars (GI (Ctx ctx mName) bindings prefix) =
     do  (LModule globs freevars) <- incontext (ctx, "rewriting module " ++ mName) $ lookupModule mName library
         incontext (ctx,"") $ validBindings vars freevars bindings
         (vars',funcDecs') <- typeGlobs library globs
-        let renames = bindings ++ map (\ x -> (prefix ++ x,x)) (map varName vars' ++ map (ctxItem . funcName) funcDecs')
+        let renames = bindings ++ map (\ x -> (x,prefix ++ x)) (map varName vars' ++ map (ctxItem . funcName) funcDecs')
         rewrites <- mapM (rewriteGlob library renames vars') globs
         return $ concat rewrites
 

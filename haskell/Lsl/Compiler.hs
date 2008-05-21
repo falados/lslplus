@@ -35,7 +35,7 @@ main0 = readCompileEmit stdin
 compile :: ([(String,String)],[(String,String)]) -> IO (AugmentedLibrary,[(String,Validity CompiledLSLScript)])
 compile (moduleInfo,scriptInfo) =
     do augLib <- loadModules moduleInfo
-       scripts <- loadScripts' (libFromAugLib augLib) scriptInfo
+       scripts <- loadScripts (libFromAugLib augLib) scriptInfo
        return (augLib,scripts)
        
 formatCompilationSummary :: (AugmentedLibrary,[(String,Validity CompiledLSLScript)]) -> String
