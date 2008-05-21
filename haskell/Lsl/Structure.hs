@@ -267,62 +267,74 @@ type CompiledLSLScript = ([Global],[Func],[State])
 
 validLSLScript :: Library -> LSLScript -> Validity CompiledLSLScript
 validLSLScript library (LSLScript globs states) = 
-    do  noDupGlobs Nothing "" [] library globs
+    do  --noDupGlobs Nothing "" [] library globs
         (typedVars,typedFuncs) <- typeGlobs library globs
         let vars = reverse typedVars
         let funcDecs = typedFuncs ++ predefFuncs
-        (globvars,funcs) <- foldM (validGlob library vars funcDecs) ([],[]) globs
+        (globvars,funcs,_,_) <- foldM (validGlob library vars funcDecs) ([],[],[],[]) globs
         validStates [] vars funcDecs states
         return (reverse globvars,funcs,states)
 
-validGlob _ vars funcDecs (globvars,funcs) (GV v mexpr) =
+validGlob _ vars funcDecs (globvars,funcs,imports,namesUsed) (GV v mexpr) =
     do when (isConstant $ varName v') $ vfail (srcCtx v, varName v' ++ " is a predefined constant")
        -- find the vars that are defined prior to this global variable -- only one of these
        -- vars may be used to initialize the global variable.
+       when (varName v' `elem` namesUsed) $ vfail (srcCtx v, varName v' ++ " is already defined")
        let (vars',_) = break (\ var -> varName var == varName v') vars
        case mexpr of
-           Nothing -> return (GDecl v' Nothing:globvars,funcs)
+           Nothing -> return (GDecl v' Nothing:globvars,funcs,imports, (varName v'):namesUsed)
            Just expr -> do
                t <- validCtxSimple vars' expr
                let vt = varType v'
                when (not (matchTypes vt t)) $ vfail (srcCtx expr, "expression not of the correct type")
-               return ((GDecl v' $ Just (ctxItem expr)):globvars,funcs)
+               return ((GDecl v' $ Just (ctxItem expr)):globvars,funcs,imports, (varName v'):namesUsed)
     where v' = ctxItem v
-validGlob _ vars funcDecs (globvars,funcs) (GF f@(Func (FuncDec name t params) statements)) =
+validGlob _ vars funcDecs (globvars,funcs,imports,namesUsed) (GF f@(Func (FuncDec name t params) statements)) =
     do  noDupVars [] params
+        when (ctxItem name `elem` namesUsed) $ vfail (srcCtx name, ctxItem name ++ " is already defined")
         returns <- validStatements funcDecs vars t [] [[],params'] statements
         when (not returns && t /= LLVoid) $
             vfail (srcCtx name, "function " ++ (ctxItem name) ++ ": not all code paths return a value")
-        return (globvars,f:funcs)
+        return (globvars,f:funcs,imports,(ctxItem name):namesUsed)
     where params' = ctxItems params
-validGlob library vars funcDecs (globvars,funcs) (GI (Ctx ctx name) bindings prefix) =
+validGlob library vars funcDecs vstate@(globvars,funcs,imports,namesUsed) (GI (Ctx ctx name) bindings prefix) =
     let context = incontext' (ctx,"module " ++ name) in
-    do  (LModule globs freevars) <- context $ lookupModule name library
-        context $ validBindings vars freevars bindings
-        (vars',funcDecs') <- context $ typeGlobs library globs
-        let renames = bindings ++ (map (\ x -> (x,prefix ++ x)) ((map varName vars') ++ (funcNames funcDecs')))
-        rewrites :: [[GlobDef]] <- mapM (rewriteGlob prefix library renames ((map ctxItem freevars) ++ vars')) globs
-        let f (gvs,fs) (GV v m) = return ((GDecl (ctxItem v) $ fromMCtx m):gvs,fs)
-            f (gvs,fs) (GF f) = return (gvs,f:fs)
-        foldM f (globvars,funcs) $ concat rewrites
+    do  let imp = (name,sort bindings,prefix)
+        if imp `elem` imports 
+            then return (globvars,funcs,imports,namesUsed) 
+            else context $ do
+                (LModule globs freevars) <- context $ lookupModule name library
+                context $ validBindings vars freevars bindings
+                (vars',funcDecs') <- context $ typeGlobs library globs
+                let renames = bindings ++ (map (\ x -> (x,prefix ++ x)) ((map varName vars') ++ (funcNames funcDecs')))
+                (gvs,fs,imports',namesUsed') <- foldM (rewriteGlob prefix library renames ((map ctxItem freevars) ++ vars')) vstate globs
+                return (gvs,fs,imp:imports',namesUsed')
 
-rewriteGlob _ _ renames vars (GF (Func (FuncDec name t params) statements)) =
+rewriteGlob _ _ renames vars (globvars,funcs,imports,namesUsed) (GF (Func (FuncDec name t params) statements)) =
     do  name' <- incontext (srcCtx name,  "renaming function " ++ ctxItem name ++ ", " ++ show renames) $ lookupM (ctxItem name) renames
-        return $ [GF (Func (FuncDec (Ctx (srcCtx name) name') t params) $ rewriteStatements 0 renames statements)]
-rewriteGlob _ _ renames vars (GV (Ctx ctx (Var name t)) mexpr) =
+        when (name' `elem` namesUsed) $ fail (name' ++ " imported from module is already defined")
+        let rewrittenFunc = (Func (FuncDec (Ctx (srcCtx name) name') t params) $ rewriteStatements 0 renames statements)
+        return (globvars,rewrittenFunc:funcs,imports,name':namesUsed)
+rewriteGlob _ _ renames vars (globvars,funcs,imports,namesUsed) (GV (Ctx ctx (Var name t)) mexpr) =
     do  name' <- incontext (ctx,"renaming variable " ++ name) $ lookupM name renames
-        return $ [GV (Ctx ctx $ Var name' t) $
-            case mexpr of
-                Nothing -> Nothing
-                Just expr -> Just $ rewriteCtxExpr renames expr]
-rewriteGlob prefix0 library renames vars (GI (Ctx ctx mName) bindings prefix) =
+        when (name' `elem` namesUsed) $ fail (name' ++ " imported from module is already defined")
+        let rewrittenGlobVar = GDecl (Var name' t) $
+                case mexpr of
+                    Nothing -> Nothing
+                    Just expr -> Just $ (ctxItem (rewriteCtxExpr renames expr))
+        return (rewrittenGlobVar:globvars,funcs,imports,name':namesUsed)
+rewriteGlob prefix0 library renames vars vstate@(globvars,funcs,imports,namesUsed) (GI (Ctx ctx mName) bindings prefix) =
     do  (LModule globs freevars) <- incontext (ctx, "rewriting module " ++ mName) $ lookupModule mName library
         incontext (ctx,"") $ validBindings vars freevars bindings
         bindings' <- mapM rewriteBinding bindings
-        (vars',funcDecs') <- typeGlobs library globs
-        let renames = bindings' ++ map (\ x -> (x,prefix0 ++ prefix ++ x)) (map varName vars' ++ map (ctxItem . funcName) funcDecs')
-        rewrites <- mapM (rewriteGlob (prefix0 ++ prefix) library renames vars') globs
-        return $ concat rewrites
+        let imp = (mName,sort bindings',prefix0 ++ prefix)
+        if (imp `elem` imports)
+            then return (globvars,funcs,imports,namesUsed)
+            else do
+                (vars',funcDecs') <- typeGlobs library globs
+                let renames = bindings' ++ map (\ x -> (x,prefix0 ++ prefix ++ x)) (map varName vars' ++ map (ctxItem . funcName) funcDecs')
+                (gvs,fs,imports',namesUsed') <- foldM (rewriteGlob (prefix0 ++ prefix) library renames vars') vstate globs
+                return (gvs,fs,imp:imports',namesUsed')
     where rewriteBinding (fv,rn) = lookupM rn renames >>= return . ((,) fv)
 
 validBindings vars freevars bindings = 
@@ -784,13 +796,14 @@ validHandlers used funcs vars (h:hs) =
 
 -- ********
 validModule library m@(LModule globs freevars) = 
-    do used <- noDupGlobs Nothing "" [] library globs
-       noDupVars used freevars
+    do --used <- noDupGlobs Nothing "" [] library globs
        (typedVars, typedFuncs) <- typeGlobs library globs
+       let used = (map varName typedVars) ++ (map (ctxItem . funcName) typedFuncs)
+       noDupVars used freevars
        let vars = freevars' ++ reverse typedVars
        let funcDecs = typedFuncs ++ predefFuncs
-       foldM (validGlob library vars funcDecs) ([],[]) globs
-       -- return m
+       (vs,fs,_,_) <- foldM (validGlob library vars funcDecs) ([],[],[],[]) globs
+       return (vs,fs)
     where freevars' = ctxItems freevars
 
 -- this function isn't partiuclarly efficient!
