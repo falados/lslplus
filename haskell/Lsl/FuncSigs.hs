@@ -321,6 +321,7 @@ funcSigs = [
     ("llStopSound",LLVoid,[]),
     ("llStringLength",LLInteger,[LLString]),
     ("llStringToBase64",LLString,[LLString]),
+    ("llStringTrim",LLString,[LLString,LLInteger]),
     ("llSubStringIndex",LLInteger,[LLString,LLString]),
     ("llTakeCamera",LLVoid,[LLKey]),
     ("llTakeControls",LLVoid,[LLInteger,LLInteger,LLInteger]),

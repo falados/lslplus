@@ -49,6 +49,7 @@ module Lsl.InternalLLFuncs(
     llBase64ToInteger,
     llBase64ToString,
     llStringToBase64,
+    llStringTrim,
     llXorBase64Strings,
     llXorBase64StringsCorrect,
     -- Math functions
@@ -179,6 +180,7 @@ internalLLFuncs = [
     ("llSqrt",llSqrt),
     ("llStringLength",llStringLength),
     ("llStringToBase64",llStringToBase64),
+    ("llStringTrim", llStringTrim),
     ("llSubStringIndex",llSubStringIndex),
     ("llTan",llTan),
     ("llToLower",llToLower),
@@ -217,7 +219,16 @@ separate l@(a:as) seps spacers accum keepNulls =
                  else (reverse accum):(separate as seps spacers [] keepNulls)
 
 
-
+llStringTrim _ [SVal string, trimType ] = 
+   let trimEnd = reverse . dropWhile (==' ') . reverse
+       trimBegin = dropWhile (==' ')
+       trimBoth = trimBegin . trimEnd in
+   continueWith $ SVal $ (case trimType of 
+       tt  | Just tt == findConstVal "STRING_TRIM_HEAD" -> trimBegin
+           | Just tt == findConstVal "STRING_TRIM_TAIL" -> trimEnd
+           | Just tt == findConstVal "STRING_TRIM" -> trimBoth
+           | otherwise -> id) string
+           
 llParseString2List _ [SVal string, LVal separators, LVal spacers] =
     continueWith $ LVal $ map SVal $ separate string (map lslValString separators) (map lslValString spacers) [] False
 
