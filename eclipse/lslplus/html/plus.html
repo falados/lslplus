@@ -71,7 +71,112 @@ omit it on the first line, in the import statement, and remove it from reference
 constant and the to_moles function.  But if you happen to have other avogadro's number definitions
 and mole conversion functions scattered around in your script already (and, let's face it, who
 doesn't?) then this feature will prevent name clashes.</p>
-</div>
 
+<p>Since LSL Plus 0.3.1, the module feature has been enhanced.  The basic module system generally works
+like an include mechanism, with some rewriting of terms.  The above 'avogadro' example will produce
+a final 'compiled' LSL script that looks like:
+</div>
+<pre>
+// LSL script generated: Wed May 21 20:22:17 Eastern Daylight Time 2008
+float my_avogadro = 6.0221424e23;
+float my_to_moles(float molecules){
+    return (molecules / my_avogadro);
+}
+default {
+    state_entry() {
+        llSay(0,("Avogadro's number is: " + ((string)my_avogadro)));
+        llSay(0,(("5 billion molecules is: " + ((string)my_to_moles(7.050327e8))) + " moles"));
+    }
+}
+</pre>
+
+<p>Each 'import' gets expanded 'inline', with rewriting, to produce the final output.  But in some 
+circumstances, this results in much-less than optimal code (code that uses up too much memory).  Consider
+the following system of modules:</p>
+
+<p>Module 'debug.lslm':</p>
+<pre>
+$module (integer DEBUG)
+
+debug(string msg) {
+    if (DEBUG) llOwnerSay(msg);
+}
+</pre>
+
+<p>Module 'sum.lslm':</p>
+<pre>
+$module (integer dbg)
+
+$import debug.lslm(DEBUG=dbg);
+
+float compute_sum(float x, float y) {
+    debug("computing sum of " + ((string) x) + " and " + ((string) y));
+    return x + y;
+}
+</pre>
+
+<p>Module 'product.lslm'</p>
+<pre>
+$module (integer DEBUG)
+
+$import debug.lslm(DEBUG=DEBUG);
+
+float compute_product(float x, float y) {
+    debug("computing product of " + ((string) x) + " and " + ((string) y));
+    return x * y;
+}
+</pre>
+
+<p>And a script that uses the modules</p>
+<pre>
+
+integer debug_flag = FALSE;
+
+$import sum.lslm(dbg=debug_flag);
+$import product.lslm(DEBUG=debug_flag);
+
+default {
+    state_entry() {
+        llOwnerSay((string)compute_sum(3.0,compute_product(5.0,PI)));
+    }
+}
+</pre>
+
+<p>
+If simple rewriting is used, this script won't compile, since both 'sum.lslm' and 'product.lslm'
+import, and therefore define, their own instances of 'debug.lslm'.  One or the other could be given
+a prefix (e.g. 'my_'), but that would result in a redundant definition of the debug function (e.g.
+'debug' and 'my_debug').  To avoid this issue, the compiler will detect that the same module is being
+imported with the same parameters (in this case, the same top-level 'debug_flag' is passed through
+the each intermediate module, to the 'debug.lslm' module), and recognize that only one 'shared' 
+instance of the module needs to be included in the compiled output, thus resolving the name conflict
+and eliminating redundant code.  The output looks like:</p>
+
+<pre>
+// LSL script generated: Wed May 21 21:23:56 Eastern Daylight Time 2008
+integer debug_flag = FALSE;
+float compute_product(float x,float y){
+    debug(((("computing product of " + ((string)x)) + " and ") + ((string)y)));
+    return (x * y);
+}
+float compute_sum(float x,float y){
+    debug(((("computing sum of " + ((string)x)) + " and ") + ((string)y)));
+    return (x + y);
+}
+debug(string msg){
+    if (debug_flag) llOwnerSay(msg);
+}
+default {
+    state_entry() {
+        llOwnerSay(((string)compute_sum(3.0,compute_product(5.0,PI))));
+    }
+}
+</pre> 
+
+<p>Rewriting versus sharing in a particular instance may be confusing.  If the same module
+is imported in two different places, but the arguments passed when importing
+the module don't resolve to exactly the same global variables, then the instances can't be shared,
+and the only way the script will be able to be compiled is if a prefix is used somewhere to 
+give the imported symbols different names.</p>
 </body>
 </html>
