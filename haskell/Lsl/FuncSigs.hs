@@ -238,6 +238,8 @@ funcSigs = [
     ("llRequestInventoryData",LLKey,[LLString]),
     ("llRequestPermissions",LLVoid,[LLKey,LLInteger]),
     ("llRequestSimulatorData",LLKey,[LLString,LLInteger]),
+    ("llResetLandBanList",LLVoid,[]),
+    ("llResetLandPassList",LLVoid,[]),
     ("llResetOtherScript",LLVoid,[LLString]),
     ("llResetScript",LLVoid,[]),
     ("llResetTime",LLVoid,[]),

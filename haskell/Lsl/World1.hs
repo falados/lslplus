@@ -1567,6 +1567,16 @@ removeFromLandACLList aclFromParcel aclIntoParcel info@(ScriptInfo _ _ _ pk _) a
         let acl = aclFromParcel parcel
         return $ aclIntoParcel parcel [ ac | ac@(k,_) <- acl, k /= ak ]
 
+        
+llResetLandBanList info@(ScriptInfo _ _ _ pk _) [] =
+    runErrFunc info "llResetLandBanList" () (do
+        whenParcelPermitted info pk (\ regionIndex parcelIndex parcel -> return $ parcel { parcelBanList = [] })
+    ) >> continueWith VoidVal
+llResetLandPassList info@(ScriptInfo _ _ _ pk _) [] =
+    runErrFunc info "llResetLandPassList" () (do
+        whenParcelPermitted info pk  (\ regionIndex parcelIndex parcel -> return $ parcel { parcelPassList = [] })
+    ) >> continueWith VoidVal
+
 llRemoveFromLandPassList info [KVal ak] =
     let aclFromParcel = parcelPassList
         aclIntoParcel = (\ parcel list -> parcel { parcelPassList = list})
@@ -2301,6 +2311,8 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llRequestInventoryData",llRequestInventoryData),
         ("llRequestPermissions",llRequestPermissions),
         ("llRequestSimulatorData",llRequestSimulatorData),
+        ("llResetLandPassList",llResetLandPassList),
+        ("llResetLandBanList",llResetLandBanList),
         ("llResetOtherScript",llResetOtherScript),
         ("llResetScript",llResetScript),
         ("llResetTime",llResetTime),
