@@ -112,10 +112,13 @@ public class LslCompletionProcessor implements IContentAssistProcessor {
 			    		public Class elementType() { return CompletionInfo.class; }
 				    	public Object map(Object o) {
 				    		LslHandler handler = (LslHandler) o;
+				    		String proto = handler.getName() + formatParams(handler.getParams());
+				    		String startLine = proto + " {"; //$NON-NLS-1$
 				    		return new CompletionInfo(handler.getName(),
-				    				handler.getName() + formatParams(handler.getParams()) + "{\n", //$NON-NLS-1$
-				    				handler.getName() + formatParams(handler.getParams()),
-				    				handler.getDescription(), handlerImage);
+				    				startLine, //$NON-NLS-1$
+				    				proto,
+				    				handler.getDescription(), handlerImage,
+				    				startLine.length());
 				    	}
 				    }, handlers);
 		    
@@ -123,14 +126,10 @@ public class LslCompletionProcessor implements IContentAssistProcessor {
 				public Class elementType() { return CompletionInfo.class; }
 				public Object map(Object o) {
 					LslFunction f = (LslFunction) o;
-					if (f.getName() == "llFloor") { //$NON-NLS-1$
-						int x = 5;
-						x = x + 1;
-					}
 					return new CompletionInfo(f.getName(),
 							f.getName() + formatArgs(f.getParams()),
 							f.getName() + formatParams(f.getParams()),
-							f.getDescription(), functionImage);
+							f.getDescription(), functionImage, f.getName().length() + 1);
 				}
 		    }, LslPlusPlugin.getDefault().getLslMetaData().getFunctions());
 
@@ -141,7 +140,7 @@ public class LslCompletionProcessor implements IContentAssistProcessor {
 							LslConstant k = (LslConstant) o;
 							return new CompletionInfo(k.getName(),k.getName(),
 									k.getName() + " - " + k.getType(), //$NON-NLS-1$
-									k.getDescription(),constantImage);
+									k.getDescription(),constantImage, k.getName().length());
 						}
 		    		}, LslPlusPlugin.getDefault().getLslMetaData().getConstants());
 		    CompletionInfo[] keywords = (CompletionInfo[]) Util.arrayMap(
@@ -149,7 +148,7 @@ public class LslCompletionProcessor implements IContentAssistProcessor {
 						public Class elementType() { return CompletionInfo.class; }
 						public Object map(Object o) {
 							String k = (String) o;
-							return new CompletionInfo(k,k,k,null,keywordImage);
+							return new CompletionInfo(k,k,k,null,keywordImage,k.length());
 						}
 		    		}, fgProposals);
 		    possibleProposals = (CompletionInfo[])
@@ -180,18 +179,20 @@ public class LslCompletionProcessor implements IContentAssistProcessor {
 	}
 	private static class CompletionInfo {
 		public CompletionInfo(String matchName,String insertText,String displayText, 
-		        String additionalInfo, Image image) {
+		        String additionalInfo, Image image, int cursorOffset) {
 			this.matchName = matchName;
 			this.displayText = displayText;
 			this.insertText = insertText;
 			this.additionalInfo = additionalInfo;
 			this.image = image;
+			this.cursorOffset = cursorOffset;
 		}
 		public String matchName;
 		public String insertText;
 		public String displayText;
 		public String additionalInfo;
 		public Image image;
+		public int cursorOffset;
 	}
 	/* (non-Javadoc)
 	 * Method declared on IContentAssistProcessor
@@ -207,8 +208,8 @@ public class LslCompletionProcessor implements IContentAssistProcessor {
 			if (prop.matchName.startsWith(prefix)) {
 				proposals.add(new CompletionProposal(prop.insertText,
 						documentOffset - prefix.length(), prefix.length(),
-						prop.insertText.length(), prop.image, prop.displayText, 
-						new ContextInformation(prop.matchName,prop.matchName),
+						/*prop.insertText.length()*/prop.cursorOffset, prop.image, prop.displayText, 
+						new ContextInformation(prop.matchName,prop.displayText),
 						prop.additionalInfo)); 
 			}
 		}
