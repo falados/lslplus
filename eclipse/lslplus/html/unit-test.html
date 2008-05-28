@@ -40,7 +40,7 @@ your code base):</p>
 <img src="images/initial-test.jpg"/>
 
 <p>This test will call the <em>hello</em> function in the <em>hello.lslm</em> module, and
-doesn't care what it returns (which is good, because it has no return value).  This test should
+doesn't care what it returns (the value is blank -- which is good, because 'hello' has no return value).  This test should
 always pass.  Save it (Ctrl-S), and then run it:</p>
 <img src="images/launch-test.jpg"/>
 
@@ -93,7 +93,8 @@ the appropriate argument.  First, use the context menu to add a call:</p>
 
 <img src="images/enter-expected-func.jpg"/>
 
-<p>This adds the call to the call list, with expected arguments defaulted to &quot;don't care&quot;.
+<p>This adds the call to the call list, with expected arguments defaulted to &quot;don't care&quot; (the 
+value field is blank).
 You can then edit the argument to tell it you expect it to be &quot;hello&quot;.</p>
 
 <img src="images/edit-argument.jpg"/>
@@ -101,7 +102,7 @@ You can then edit the argument to tell it you expect it to be &quot;hello&quot;.
 <p>Rerunning the test with this change will cause it to once again pass.</p>
 
 <p>Regardless of the mode, when you specify a call (<em>mock up</em> a call) you can either pass in an actual 
-parameter that you expect, or specify &quot;don't care&quot; which will successfully match any argument.</p>
+parameter that you expect, or specify &quot;don't care&quot (by clearing all text from the field); which will successfully match any argument.</p>
 
 <p>When the test is run, the global variables are initialized and the code in the entry point is executed, with
 calls to external (non-stateless) LL functions handled as you specify in the test.  The test may abort (fail) early
@@ -113,17 +114,12 @@ and the test results presented in a tree.  Part of the test results is a complet
 called (both stateless, aka internal, functions, and non-stateless/external functions).</p>
 
 <p>The editing is done via either right clicking
-to add new elements to the tree, or delete elements (such as new tests, or new elements of lists, etc.), or by
-selecting the second column of a row and editing directly the value therein (some elements can be edited this
-way... in general, if a row can be expanded/collapsed, you won't be able to directly edit the 2nd column, you'll
-have to expand the row, and edit the subelements of the tree that roll up into that row.  For example, a function
-call line might have a 2nd column value that looks like:</p>
-<pre>llOwnerSay(&quot;hello&quot;)</pre> 
-<p>The function
-call line is a composite: it has children nodes in the tree, so you can't directly edit the 2nd column.  But
-you can expand the tree and drill down until you get to the node you want to edit (the first and only child
-of the <em>arguments</em> node) and edit the value in the 2nd column.
-</p>
+to add new elements to the tree, or delete elements (such as new tests, or new calls in the list of expected calls),
+or by
+selecting the second column of a row and editing directly the value therein.  You can also edit the name of the
+test suite and the name of each test.  You can't edit the entry point for a test (e.g. hello.lslm/hello) or
+an expected call (e.g. 'llOwnerSay').  To change these you need to delete the test or call and then create a new
+test or call to replace it.</p>
 
 <p>When specifying arguments and return values, and values of global variables (either initial or expected final), you
 can enter LSL expressions, e.g.:</p>
@@ -135,6 +131,4 @@ do things such as pass in mask values by oring together the appropriate LSL cons
 figure out what the actual value of those constants are, oring them together yourself, and typing the resulting
 value into your test.</p>
 
-<p>There's no undo support in the test editor, yet. There <em>is</em> undo support in the 
-<a href="sim-project.html">Sim Project Editor</a> which is similar, but allows you to build entire 
-environments to run your scripts in.</p>
+<p>The test editor now has full undo/redo support, just like the <a href="sim-project.html">Sim Project Editor</a>.</p>
