@@ -1,19 +1,30 @@
 package lslplus.editor;
 
 import java.io.ByteArrayInputStream;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
 
 import lslplus.LslPlusPlugin;
 import lslplus.LslProjectNature;
+import lslplus.LslProjectNature.NameTypePair;
 import lslplus.gentree.Node;
 import lslplus.gentree.NodeFactory;
+import lslplus.gentree.NodeFactory2;
 import lslplus.gentree.NodeListener;
 import lslplus.gentree.NodeStatus;
-import lslplus.gentree.NodeVisitor;
-import lslplus.sim.SimProject;
-import lslplus.sim.SimWorldDef;
+import lslplus.lsltest.LslTest;
+import lslplus.lsltest.LslTestSuite;
+import lslplus.lsltest.TestProject;
+import lslplus.lsltest.TestProject.BindingListNode;
+import lslplus.lsltest.TestProject.SuiteNode;
+import lslplus.lsltest.TestProject.TestNode;
 import lslplus.util.Util;
+import lslplus.util.Util.ArrayMapFunc;
 
 import org.eclipse.core.commands.ExecutionException;
 import org.eclipse.core.commands.operations.AbstractOperation;
@@ -32,6 +43,8 @@ import org.eclipse.jface.action.Action;
 import org.eclipse.jface.action.IMenuListener;
 import org.eclipse.jface.action.IMenuManager;
 import org.eclipse.jface.action.MenuManager;
+import org.eclipse.jface.dialogs.Dialog;
+import org.eclipse.jface.dialogs.IDialogConstants;
 import org.eclipse.jface.viewers.CellEditor;
 import org.eclipse.jface.viewers.CellLabelProvider;
 import org.eclipse.jface.viewers.ColumnViewer;
@@ -46,10 +59,19 @@ import org.eclipse.jface.viewers.TreeSelection;
 import org.eclipse.jface.viewers.TreeViewer;
 import org.eclipse.jface.viewers.TreeViewerColumn;
 import org.eclipse.jface.viewers.ViewerCell;
+import org.eclipse.jface.window.Window;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.SelectionListener;
+import org.eclipse.swt.layout.GridLayout;
+import org.eclipse.swt.widgets.Button;
+import org.eclipse.swt.widgets.Combo;
 import org.eclipse.swt.widgets.Composite;
+import org.eclipse.swt.widgets.Control;
+import org.eclipse.swt.widgets.Event;
+import org.eclipse.swt.widgets.Label;
+import org.eclipse.swt.widgets.Listener;
 import org.eclipse.swt.widgets.Menu;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Tree;
@@ -61,7 +83,245 @@ import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.operations.UndoRedoActionGroup;
 import org.eclipse.ui.part.EditorPart;
 
-public class SimEditor extends EditorPart implements NodeListener {
+public class TestEditor extends EditorPart implements NodeListener {
+    private class EntryPointSelectionDialog extends Dialog {
+        private String fileName = null;
+        private String path = null;
+        private Combo combo;
+        private Combo combo2;
+        protected EntryPointSelectionDialog(Shell parentShell) {
+            super(parentShell);
+        }
+
+        private Button okButton() {
+            return getButton(IDialogConstants.OK_ID);
+        }
+        
+        protected Control createButtonBar(Composite parent) {
+             Control c = super.createButtonBar(parent);
+             
+             okButton().addListener(SWT.Show, new Listener() {
+                public void handleEvent(Event event) {
+                    okButton().setEnabled(selectionIsValid());
+                }
+             });
+             return c;
+        }
+
+        private boolean selectionIsValid() {
+            return combo.getSelectionIndex() >= 0 && combo2.getSelectionIndex() >= 0;
+        }
+        
+        protected Control createDialogArea(Composite parent) {
+            getShell().setText(Messages.getString("LslTestEditor.ENTER_TEST_ENTRY_POINT")); //$NON-NLS-1$
+            Composite  composite = (Composite) super.createDialogArea(parent);
+            GridLayout layout = (GridLayout) composite.getLayout();
+            layout.numColumns = 2;
+            Label fileNameLabel = new Label(composite, SWT.LEFT|SWT.HORIZONTAL);
+            fileNameLabel.setText(Messages.getString("LslTestEditor.FILE_NAME")); //$NON-NLS-1$
+            Label pathLabel = new Label(composite, SWT.LEFT|SWT.HORIZONTAL);
+            pathLabel.setText(Messages.getString("LslTestEditor.ENTRY_POINT")); //$NON-NLS-1$
+            
+            combo = new Combo(composite, SWT.READ_ONLY|SWT.DROP_DOWN);
+            combo2 = new Combo(composite, SWT.READ_ONLY|SWT.DROP_DOWN);
+            
+            String[] files = nature.getLslFiles();
+            combo.setItems(files);
+            combo.deselectAll();
+            
+            combo2.setEnabled(false);
+            
+            combo.addSelectionListener(new SelectionListener() {
+                public void widgetDefaultSelected(SelectionEvent e) {
+                }
+
+                public void widgetSelected(SelectionEvent e) {
+                    if (combo.getSelectionIndex() >= 0) {
+                        String fileName = combo.getItem(combo.getSelectionIndex());
+                        combo2.setItems(nature.getEntryPointNames(fileName));
+                        combo2.deselectAll();
+                        combo2.setEnabled(true);
+                        EntryPointSelectionDialog.this.fileName = fileName;
+                        path = null;
+                        okButton().setEnabled(false);
+                    } else {
+                        EntryPointSelectionDialog.this.fileName = null;
+                        combo2.setEnabled(false);
+                        okButton().setEnabled(false);
+                    }
+                    if (LslPlusPlugin.DEBUG) Util.log("fileName = " + fileName + ", path = " + path); //$NON-NLS-1$ //$NON-NLS-2$
+                }
+            });
+            
+            combo2.addSelectionListener(new SelectionListener() {
+                public void widgetDefaultSelected(SelectionEvent e) {
+                    okButton().setEnabled(combo2.getSelectionIndex() >= 0);
+                }
+
+                public void widgetSelected(SelectionEvent e) {
+                    okButton().setEnabled(combo2.getSelectionIndex() >= 0);
+                    
+                    if (combo2.getSelectionIndex() >= 0) {
+                        path = combo2.getItem(combo2.getSelectionIndex());
+                    } else {
+                        path = null;
+                    }
+                    if (LslPlusPlugin.DEBUG) Util.log("path = " + path); //$NON-NLS-1$
+                }
+            });
+            return composite;
+        }
+        
+        public String getFilename() {
+            return fileName;
+        }
+        
+        public String getPath() {
+            return path;
+        }
+    }
+    
+    private class GlobalSelectionDialog extends Dialog {
+        private NameTypePair pair;
+        private Combo combo;
+        private HashMap pairsMap = new HashMap();
+        protected GlobalSelectionDialog(Shell parentShell, String fileName, List globs) {
+            super(parentShell);
+            
+            pairsMap = determineRemainingGlobals(fileName, globs);
+        }
+
+        private HashMap determineRemainingGlobals(String fileName, List globs) {
+            NameTypePair[] pairs = nature.getGlobalVariables(fileName);
+            Set used = Util.mapToSet(new ArrayMapFunc() {
+                public Class elementType() { return String.class; }
+                public Object map(Object o) { return o; }
+            }, globs);
+            HashMap map = new HashMap();
+            for (int i = 0; i < pairs.length; i++) {
+                if (!used.contains(pairs[i].getName())) {
+                    map.put(pairs[i].getName(), pairs[i]);
+                }
+            }
+            return map;
+        }
+        private Button okButton() {
+            return getButton(IDialogConstants.OK_ID);
+        }
+        
+        private boolean selectionIsValid() {
+            return combo.getSelectionIndex() >= 0;
+        }
+
+        protected Control createButtonBar(Composite parent) {
+            Control c = super.createButtonBar(parent);
+            okButton().setEnabled(false);
+            okButton().addListener(SWT.Show, new Listener() {
+               public void handleEvent(Event event) {
+                   okButton().setEnabled(selectionIsValid());
+               }
+            });
+            return c;
+        }
+        
+        protected Control createDialogArea(Composite parent) {
+            getShell().setText("Select Global");
+            Composite  composite = (Composite) super.createDialogArea(parent);
+            Label nameLabel = new Label(composite, SWT.LEFT|SWT.HORIZONTAL);
+            nameLabel.setText("Variable Name");
+            
+            combo = new Combo(composite, SWT.READ_ONLY|SWT.DROP_DOWN);
+
+            ArrayList l = new ArrayList();
+            l.addAll(pairsMap.keySet());
+            Collections.sort(l);
+            final String[] items = (String[]) l.toArray(new String[l.size()]);
+            combo.setItems(items);
+            combo.deselectAll();
+            
+            combo.addSelectionListener(new SelectionListener() {
+                public void widgetDefaultSelected(SelectionEvent e) {
+                }
+
+                public void widgetSelected(SelectionEvent e) {
+                    if (combo.getSelectionIndex() >= 0) {
+                        String name = items[combo.getSelectionIndex()];
+                        pair = (NameTypePair) pairsMap.get(name);
+                        okButton().setEnabled(true);
+                    } else {
+                        okButton().setEnabled(false);
+                    }
+                }
+            });
+            
+            return composite;
+        }
+
+        
+        public NameTypePair getPair() { return pair; }
+    }
+    private class CallSelectionDialog extends Dialog {
+        private String name;
+        private Combo combo;
+        protected CallSelectionDialog(Shell parentShell, String name) {
+            super(parentShell);
+            this.name = name;
+        }
+        
+        private Button okButton() {
+            return getButton(IDialogConstants.OK_ID);
+        }
+        
+        private boolean selectionIsValid() {
+            return combo.getSelectionIndex() >= 0;
+        }
+
+        protected Control createButtonBar(Composite parent) {
+            Control c = super.createButtonBar(parent);
+            
+            okButton().addListener(SWT.Show, new Listener() {
+               public void handleEvent(Event event) {
+                   okButton().setEnabled(selectionIsValid());
+               }
+            });
+            return c;
+        }
+        
+        protected Control createDialogArea(Composite parent) {
+            getShell().setText("Expected function call");
+            Composite  composite = (Composite) super.createDialogArea(parent);
+            Label nameLabel = new Label(composite, SWT.LEFT|SWT.HORIZONTAL);
+            nameLabel.setText("Function name"); //$NON-NLS-1$
+            
+            combo = new Combo(composite, SWT.READ_ONLY|SWT.DROP_DOWN);
+
+            String[] items = LslPlusPlugin.getStatefulFunctions();
+            int index = Util.elementIndex(name, items);
+            
+            combo.setItems(items);
+            if (index >= 0) combo.select(index);
+            else combo.deselectAll();
+            
+            combo.addSelectionListener(new SelectionListener() {
+                public void widgetDefaultSelected(SelectionEvent e) {
+                }
+
+                public void widgetSelected(SelectionEvent e) {
+                    if (combo.getSelectionIndex() >= 0) {
+                        name = combo.getItem(combo.getSelectionIndex());
+                        okButton().setEnabled(true);
+                    } else {
+                        okButton().setEnabled(false);
+                    }
+                }
+            });
+            
+            return composite;
+        }
+
+        public String getName() { return name; }
+    }
+
     
     private class UpdateValueOperation extends AbstractOperation {
         private Node n;
@@ -235,10 +495,12 @@ public class SimEditor extends EditorPart implements NodeListener {
 	private class DeleteNodeOperation extends AbstractOperation {
 	    Node parent;
 	    Node child;
-        public DeleteNodeOperation(Node parent, Node child) {
+	    int index;
+        public DeleteNodeOperation(Node parent, Node child, int index) {
             super("Delete node");
             this.parent = parent;
             this.child = child;
+            this.index = index;
         }
 
         public IStatus execute(IProgressMonitor monitor, IAdaptable info) throws ExecutionException {
@@ -254,7 +516,7 @@ public class SimEditor extends EditorPart implements NodeListener {
         }
 
         public IStatus undo(IProgressMonitor monitor, IAdaptable info) throws ExecutionException {
-            parent.addChild(child);
+            parent.addChild(child,index);
             decChangeCount();
             return Status.OK_STATUS;
         }
@@ -269,7 +531,15 @@ public class SimEditor extends EditorPart implements NodeListener {
         
         public void run() {
             Node n = getSelectedNode();
-            AddNodeOperation operation = new AddNodeOperation(n, factory);
+            NodeFactory f = null;
+            if (factory instanceof NodeFactory2) {
+                NodeFactory2 fac2 = (NodeFactory2) factory;
+                f = handleNodeFactory2(n, fac2);
+                if (f == null) return;
+            } else {
+                f = factory;
+            }
+            AddNodeOperation operation = new AddNodeOperation(n, f);
             operation.addContext(undoContext);
             try {
                 operationsHistory.execute(operation, null, null);
@@ -288,7 +558,12 @@ public class SimEditor extends EditorPart implements NodeListener {
         
         public void run() {
             Node n = getSelectedNode();
-            AddBeforeOperation operation = new AddBeforeOperation(n, factory);
+            NodeFactory f = factory;
+            if (f instanceof NodeFactory2) {
+                f = handleNodeFactory2(n.getParent(), (NodeFactory2)f);
+                if (f == null) return;
+            }
+            AddBeforeOperation operation = new AddBeforeOperation(n, f);
             operation.addContext(undoContext);
             try {
                 operationsHistory.execute(operation, null, null);
@@ -307,7 +582,12 @@ public class SimEditor extends EditorPart implements NodeListener {
         
         public void run() {
             Node n = getSelectedNode();
-            AddAfterOperation operation = new AddAfterOperation(n, factory);
+            NodeFactory f = factory;
+            if (f instanceof NodeFactory2) {
+                f = handleNodeFactory2(n.getParent(), (NodeFactory2)f);
+                if (f == null) return;
+            }
+            AddAfterOperation operation = new AddAfterOperation(n, f);
             operation.addContext(undoContext);
             try {
                 operationsHistory.execute(operation, null, null);
@@ -324,7 +604,8 @@ public class SimEditor extends EditorPart implements NodeListener {
         
         public void run() {
             Node n = getSelectedNode();
-            DeleteNodeOperation operation = new DeleteNodeOperation(n.getParent(), n);
+            int index = n.getParent().getChildren().indexOf(n);
+            DeleteNodeOperation operation = new DeleteNodeOperation(n.getParent(), n, index);
             operation.addContext(undoContext);
             try {
                 operationsHistory.execute(operation, null, null);
@@ -352,23 +633,8 @@ public class SimEditor extends EditorPart implements NodeListener {
 			
 			if (n.hasValueChoices()) {
 			    String[] choices;
-			    if ("scripts".equals(n.getChoicesId())) { //$NON-NLS-1$
-			        choices = nature.getLslScripts();
-			    } else if ("optional-module".equals(n.getChoicesId())) {
-			        List modules = nature.getLslModules();
-			        modules.add(0, "(none)");
-			        choices = (String[]) modules.toArray(new String[modules.size()]);
-			    } else if ("avatars".equals(n.getChoicesId())) {
-			        Node root = n.findRoot();
-			        final LinkedList avnames = new LinkedList();
-			        root.accept(new NodeVisitor() {
-                        public void visit(Node n) {
-                            if (n instanceof SimProject.AvatarNode) {
-                                avnames.add(n.getNameDisplay());
-                            }
-                        }
-			        });
-			        choices = (String[]) avnames.toArray(new String[avnames.size()]);
+			    if ("expectations-mode".equals(n.getChoicesId())) { //$NON-NLS-1$
+			        choices = (String[]) LslTest.CallExpectations.getModes().toArray(new String[0]);
 			    } else {
 			        choices = new String[0];
 			    }
@@ -486,8 +752,8 @@ public class SimEditor extends EditorPart implements NodeListener {
 	private TreeColumn fColumn2;
 	private TreeViewer fTreeViewer;
 	private Tree fTree;
-	private SimProjectLabelProvider fLabelProvider;
-	private SimProject.WorldNode world = null;
+	private TestEditorLabelProvider fLabelProvider;
+	private SuiteNode world = null;
 	private String simProjectName = null;
 	private LslProjectNature nature = null;
 	private int changeCount = 0;
@@ -497,7 +763,7 @@ public class SimEditor extends EditorPart implements NodeListener {
 	private IOperationHistory operationsHistory;
 	private IUndoContext undoContext;
 	
-	public SimEditor() {
+	public TestEditor() {
 	}
 
 	void incChangeCount() {
@@ -524,7 +790,7 @@ public class SimEditor extends EditorPart implements NodeListener {
 	}
 	
     public void doSave(IProgressMonitor monitor) {
-		String val = SimProject.toXml(world);
+		String val = TestProject.toLslTestSuite(world).toXml();
 		if (LslPlusPlugin.DEBUG) Util.log("world = " + val); //$NON-NLS-1$
 		try {
 			file.setContents(new ByteArrayInputStream(val.getBytes()), IResource.FORCE | IResource.KEEP_HISTORY, monitor);
@@ -533,12 +799,6 @@ public class SimEditor extends EditorPart implements NodeListener {
 			Util.log(e, e.getLocalizedMessage());
 		}
 		
-		try {
-		    SimWorldDef def = SimProject.toSimWorldDef(world);
-		    Util.log(SimWorldDef.toXML(def));
-		} catch (Exception e) {
-		    Util.log(e, e.getLocalizedMessage());
-		}
 	}
 
 	public void doSaveAs() {
@@ -561,10 +821,14 @@ public class SimEditor extends EditorPart implements NodeListener {
 		simProjectName = fullPath.removeFileExtension().lastSegment();
 		if (file != null) {
 			try {
-				world = SimProject.fromXml(file.getContents(), file);
+				world = TestProject.fromLslTestSuite(LslTestSuite.fromXml(file.getContents(), file));
 			} catch (CoreException e) {
 				Util.log(e, "Corrupted sim project file: " + e.getMessage()); //$NON-NLS-1$
 				world = null;
+			} catch (Exception e) {
+                Util.log(e, "Corrupted sim project file: " + e.getMessage()); //$NON-NLS-1$
+                world = null;
+			    
 			}
 		}
 	}
@@ -595,7 +859,7 @@ public class SimEditor extends EditorPart implements NodeListener {
 		createColumns(fTree);
 		world.addListener(this);
 		fTreeViewer.setContentProvider(new GentreeContentProvider(world));
-		fTreeViewer.setLabelProvider(fLabelProvider = new SimProjectLabelProvider());
+		fTreeViewer.setLabelProvider(fLabelProvider = new TestEditorLabelProvider());
 		fTreeViewer.addSelectionChangedListener(new ISelectionChangedListener() {
 			public void selectionChanged(SelectionChangedEvent e) {
 				TreeSelection selection = (TreeSelection) e.getSelection();
@@ -700,7 +964,7 @@ public class SimEditor extends EditorPart implements NodeListener {
 	}
 
 	private Shell getShell() {
-        return SimEditor.this.getEditorSite().getShell();
+        return TestEditor.this.getEditorSite().getShell();
     }
 
     public void nodeStructureChanged(final Node n) {
@@ -724,4 +988,61 @@ public class SimEditor extends EditorPart implements NodeListener {
         group.fillActionBars(getEditorSite().getActionBars());
     }
     
+    NodeFactory handleNodeFactory2(Node n, NodeFactory2 fac2) {
+        
+        if (fac2.getNodeCreationId().equals("entry-point")) {
+            final EntryPointSelectionDialog dlg = new EntryPointSelectionDialog(getShell());
+            dlg.open();
+            if (dlg.getReturnCode() != Window.OK) return null;
+            
+            return new NodeFactory() {
+                public Node createNode(Node parent) {
+                    return new TestProject.TestNode(parent, "New Test", dlg.getFilename() + "/" + dlg.getPath());
+                }
+
+                public String getNodeTypeName() {
+                    return null;
+                }
+            };
+        } else if (fac2.getNodeCreationId().equals("globvar")) {
+            BindingListNode parent = (BindingListNode)n;
+            LinkedList used = new LinkedList();
+            for (Iterator i = parent.getChildren().iterator(); i.hasNext();) {
+                used.add(((Node)i.next()).getName());
+            }
+            TestNode test = (TestNode) parent.getParent();
+            String filename = test.getFilename();
+            GlobalSelectionDialog dlg = new GlobalSelectionDialog(getShell(), filename, used);
+            dlg.open();
+            if (dlg.getReturnCode() != Window.OK) return null;
+            final NameTypePair pair = dlg.getPair();
+            return new NodeFactory() {
+
+                public Node createNode(Node parent) {
+                    return new TestProject.BindingNode(parent, pair.getName(), pair.getType());
+                }
+
+                public String getNodeTypeName() {
+                    return null;
+                }
+                
+            };
+        } else if (fac2.getNodeCreationId().equals("call")) {
+            CallSelectionDialog dlg = new CallSelectionDialog(getShell(), null);
+            dlg.open();
+            if (dlg.getReturnCode() != Window.OK) return null;
+            final String name = dlg.getName();
+            return new NodeFactory() {
+                public Node createNode(Node parent) {
+                    return new TestProject.ExpectedCallNode(parent, "call", name); //$NON-NLS-1$
+                }
+
+                public String getNodeTypeName() {
+                    return null;
+                }
+                
+            };
+        }
+        return null;
+    }
 }

@@ -21,9 +21,9 @@ public class LslTest {
 	public static int MODULE_TEST = 0;
 	public static int HANDLER_TEST = 1;
 	public static int SCRIPT_FUNCTION_TEST = 2;
-	public String name = BLANK;
+	private String name = BLANK;
 	private EntryPoint entryPoint = null;
-	public LslValue[] arguments = null;
+	private LslValue[] arguments = null;
 	private MaybeValue expectedReturn = null;
 	private CallExpectations expectations = new CallExpectations();
 	private ArrayList initialBindings = new ArrayList();
@@ -31,9 +31,6 @@ public class LslTest {
     private LslTestSuite suite;
 	
 	public static class LslValue {
-	    private String mnemonic = null;
-	    public String getMnemonic() { return mnemonic; }
-	    public void setMnemonic(String mnemonic) { this.mnemonic = mnemonic; }
 	}
 	
 	public static class MaybeValue {
@@ -146,6 +143,13 @@ public class LslTest {
             if (val == null) val = new LinkedList();
             return val;
         }
+	}
+	
+	public static class LslList1 extends LslValue {
+	    String val;
+	    public LslList1(String val) { this.val  = val; }
+	    public String getVal() { return val; }
+	    public String toString() { return val; }
 	}
 	
 	public static class LslVector extends LslValue {
@@ -331,6 +335,24 @@ public class LslTest {
 		} else return new LslVoid();
 	}
 	
+    public static String defaultValueFor(String argType) {
+        if ("string".equals(argType)) {
+            return EMPTY_STRING;
+        } else if ("key".equals(argType)) {
+            return EMPTY_STRING;
+        } else if ("integer".equals(argType)) {
+            return "0"; //$NON-NLS-1$
+        } else if ("float".equals(argType)) {
+            return "0.0"; //$NON-NLS-1$
+        } else if ("list".equals(argType)) {
+            return "[]"; //$NON-NLS-1$
+        } else if ("vector".equals(argType)) {
+            return "<0,0,0>"; //$NON-NLS-1$
+        } else if ("rotation".equals(argType)) {
+            return "<0,0,0,1>"; //$NON-NLS-1$
+        } else return ""; //$NON-NLS-1$
+    }
+    
     public void setExpectedReturn(MaybeValue expectedReturn) {
         this.expectedReturn = expectedReturn;
     }
@@ -366,6 +388,30 @@ public class LslTest {
     	return LslValue.class;
     }
 
+    public static String lslTypeToString(Class c) {
+        if (LslInteger.class.equals(c)) return "integer"; //$NON-NLS-1$
+        else if (LslFloat.class.equals(c)) return "float"; //$NON-NLS-1$
+        else if (LslString.class.equals(c)) return "string"; //$NON-NLS-1$
+        else if (LslKey.class.equals(c)) return "key"; //$NON-NLS-1$
+        else if (LslVector.class.equals(c)) return "vector"; //$NON-NLS-1$
+        else if (LslRotation.class.equals(c)) return "rotation"; //$NON-NLS-1$
+        else if (LslList.class.equals(c)) return "list"; //$NON-NLS-1$
+        else if (LslList1.class.equals(c)) return "list"; //$NON-NLS-1$
+        else return "void"; //$NON-NLS-1$
+    }
+    
+    public static LslValue mkLslType(String s, String val) {
+        if ("integer".equals(s)) return new LslInteger(val); //$NON-NLS-1$
+        else if ("float".equals(s)) return new LslFloat(val); //$NON-NLS-1$
+        else if ("string".equals(s)) return new LslString(val); //$NON-NLS-1$
+        else if ("key".equals(s)) return new LslKey(val); //$NON-NLS-1$
+        else if ("vector".equals(s)) return new LslVector(val); //$NON-NLS-1$
+        else if ("rotation".equals(s)) return new LslRotation(val); //$NON-NLS-1$
+        else if ("list".equals(s)) return new LslList1(val); //$NON-NLS-1$
+        else if ("void".equals(s)) return new LslVoid(); //$NON-NLS-1$
+        else if (BLANK.equals(s)) return new LslVoid();
+        return new LslVoid();
+    }
     public void setFinalBindings(ArrayList finalBindings) {
         this.finalBindings = finalBindings;
     }
@@ -402,5 +448,21 @@ public class LslTest {
     
     private LslProjectNature nature() {
         return suite.nature();
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setArguments(LslValue[] arguments) {
+        this.arguments = arguments;
+    }
+
+    public LslValue[] getArguments() {
+        return arguments;
     }
 }

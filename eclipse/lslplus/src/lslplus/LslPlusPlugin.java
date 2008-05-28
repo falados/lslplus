@@ -16,6 +16,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.net.URL;
+import java.util.List;
 
 import lslplus.decorators.ErrorDecorator;
 import lslplus.editor.LslPartitionScanner;
@@ -28,6 +29,7 @@ import lslplus.language_metadata.LslParam;
 import lslplus.lsltest.TestManager;
 import lslplus.util.LslColorProvider;
 import lslplus.util.Util;
+import lslplus.util.Util.ArrayMapFunc;
 
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.runtime.FileLocator;
@@ -224,6 +226,8 @@ public class LslPlusPlugin extends AbstractUIPlugin {
 
     private SimManager simManager = null;
 
+    private static String[] statefulFunctions = null;
+
     /**
      * Creates a new plug-in instance.
      */
@@ -345,6 +349,24 @@ public class LslPlusPlugin extends AbstractUIPlugin {
     }
     public SimManager getSimManager() {
         return simManager;
+    }
+    public static synchronized String[] getStatefulFunctions() {
+        if (LslPlusPlugin.statefulFunctions == null) {
+            List funcs = Util.filtMap(new ArrayMapFunc() {
+                public Class elementType() { return String.class; }
+                public Object map(Object o) {
+                    LslFunction f = (LslFunction) o;
+                    return f.isStateless() ? null : f.getName();
+                }
+            }, getLLFunctions());
+            
+            LslPlusPlugin.statefulFunctions = (String[]) funcs.toArray(new String[funcs.size()]);
+        }
+        
+        return LslPlusPlugin.statefulFunctions;
+    }
+    public static LslFunction[] getLLFunctions() {
+        return getDefault().getLslMetaData().getFunctions();
     }
 
 }

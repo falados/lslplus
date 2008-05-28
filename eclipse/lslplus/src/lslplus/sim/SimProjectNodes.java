@@ -5,14 +5,14 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+import lslplus.gentree.Node;
+import lslplus.gentree.NodeFactory;
+import lslplus.gentree.NodeStatus;
 import lslplus.sim.SimProject.AvatarNode;
 import lslplus.sim.SimProject.AvatarReferenceNode;
 import lslplus.sim.SimProject.FixedFormatNode;
 import lslplus.sim.SimProject.HasDerivedValue;
-import lslplus.sim.SimProject.Node;
-import lslplus.sim.SimProject.NodeFactory;
 import lslplus.sim.SimProject.PrimNode;
-import lslplus.sim.SimProject.Status;
 import lslplus.sim.SimProject.StringNode;
 import lslplus.sim.SimWorldDef.InventoryItem;
 import lslplus.sim.SimWorldDef.LVector;
@@ -50,7 +50,7 @@ public class SimProjectNodes {
         
     }
     public static abstract class InventoryNode extends Node {
-        private static final Status SCRIPT_NAME_IN_USE = new Status(false, "Script name already in use");
+        private static final NodeStatus SCRIPT_NAME_IN_USE = new NodeStatus(false, "Script name already in use");
         
         public InventoryNode(Node parent, String nodeName, Object value) {
             super(parent, nodeName, value);
@@ -69,7 +69,7 @@ public class SimProjectNodes {
             pn.addChild(n);
         }
         
-        public Status checkNameString(String name) {
+        public NodeStatus checkNameString(String name) {
             return SimProject.checkNameUnique(this, name, getParent().getChildren(), SCRIPT_NAME_IN_USE);
         }
 
@@ -99,8 +99,8 @@ public class SimProjectNodes {
         protected void onUpdate(String s) {
         }
         
-        public Status checkValueString(String s) {
-            return SimProject.OK;
+        public NodeStatus checkValueString(String s) {
+            return NodeStatus.OK;
         }
 
     }

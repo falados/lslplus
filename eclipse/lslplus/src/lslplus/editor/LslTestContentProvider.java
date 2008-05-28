@@ -269,7 +269,7 @@ public class LslTestContentProvider implements ITreeContentProvider {
 	}
 	
 	public class CallNode extends Node implements NodeChangeListener {
-        public class CallNameNode extends Node implements ChoiceProvider {
+        public class CallNameNode extends Node {
             public CallNameNode(String name, Node parent, Object value,
                     ParentSetter setter) {
                 super(name, parent, value, setter);
@@ -277,24 +277,14 @@ public class LslTestContentProvider implements ITreeContentProvider {
 
             public Node[] getChildren() { return null; }
 
-            public String[] getChoices() {
-                return LslTestEditor.getStatefulFunctions();
-            }
-
             public boolean hasChildren() { return false; }
 
             public boolean isEditable() {
-//                String[] choices = getChoices();
-//                return choices != null && choices.length > 0;
                 return false;
             }
 
             protected boolean setMyValue(Object o) {
-                Integer i = (Integer) o;
-                String name = LslTestEditor.getStatefulFunctions()[i.intValue()];
-                if (!name.equals(getName())) return false;
-                setValue(name);
-                return true;
+                return false;
             }
         }
 
@@ -1338,7 +1328,7 @@ public class LslTestContentProvider implements ITreeContentProvider {
 		    return new ArgumentsNode(Messages.getString("LslTestContentProvider.ARGUMENTS"), this, args, params, //$NON-NLS-1$
 		            new ParentSetter() {
                         public void set(Object o) {
-                            ((LslTest)getValue()).arguments = (LslValue[]) o;
+                            ((LslTest)getValue()).setArguments((LslValue[]) o);
                         }
 		    });
 		}
@@ -1359,7 +1349,7 @@ public class LslTestContentProvider implements ITreeContentProvider {
             l.add(createEntryPointNode(test.getEntryPoint()));
             Class returnType = entryPointNode.getReturnType();
             LslParam[] params = entryPointNode.getArgumentInfo();
-            l.add(createArgumentsNode(test.arguments, params));
+            l.add(createArgumentsNode(test.getArguments(), params));
             l.add(createReturnNode(test.getExpectedReturn(), returnType));
             l.add(new GlobalBindingsNode(Messages.getString("LslTestContentProvider.INITIAL_GLOBALS"), this, test.getInitialBindings(), //$NON-NLS-1$
                     new ParentSetter() {
@@ -1386,7 +1376,7 @@ public class LslTestContentProvider implements ITreeContentProvider {
 		public String displayString() {
 		    if (getValue() == null) return super.displayString();
 		    LslTest test = (LslTest) getValue();
-		    return test.name;
+		    return test.getName();
 		}
 		
 		public Node[] getChildren() {

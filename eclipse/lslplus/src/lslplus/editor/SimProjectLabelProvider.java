@@ -4,6 +4,7 @@ import java.util.Iterator;
 import java.util.LinkedList;
 
 import lslplus.LslPlusPlugin;
+import lslplus.gentree.Node;
 import lslplus.sim.SimProject;
 import lslplus.sim.SimProjectNodes;
 import lslplus.sim.SimProject.EventHandlerNode;
@@ -95,8 +96,8 @@ public class SimProjectLabelProvider extends LabelProvider implements ITableLabe
     }
 
     public String getColumnText(Object element, int columnIndex) {
-        if (columnIndex == 0) return ((SimProject.Node)element).getNameDisplay();
-        else if (columnIndex == 1) return ((SimProject.Node)element).getValue().toString();
+        if (columnIndex == 0) return ((Node)element).getNameDisplay();
+        else if (columnIndex == 1) return ((Node)element).getValue().toString();
         return null;
     }
 

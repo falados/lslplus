@@ -92,6 +92,7 @@ import org.eclipse.ui.part.EditorPart;
 public class LslTestEditor extends EditorPart {
 	
 	private final class LslTestEditingSupport extends EditingSupport {
+	    private String[] curChoices;
 	    private CellEditor curEditor = null;
 	    private Shell shell;
 		private TextCellEditor textEditor = new TextCellEditor(fTree);
@@ -109,7 +110,8 @@ public class LslTestEditor extends EditorPart {
 			
 			if (n instanceof ChoiceProvider) {
 				ChoiceProvider p = (ChoiceProvider)n;
-				curEditor = new ComboBoxCellEditor(fTree,p.getChoices());
+				curChoices = p.getChoices();
+				curEditor = new ComboBoxCellEditor(fTree,curChoices);
 				return curEditor;
 			} else if (n instanceof EntryPointNode) {
 			    curEditor = new EntryPointCellEditor(fTree, (EntryPoint)n.getValue());
@@ -131,12 +133,10 @@ public class LslTestEditor extends EditorPart {
 			if (n instanceof ChoiceProvider) {
 				if (n.getValue() == null || n.getValue().toString().trim().equals(BLANK))  return new Integer(0);
 				
-				String[] choices = ((ChoiceProvider)n).getChoices();
-				
 				int result = 0;
 				
-				for (int i = 0; i < choices.length; i++) {
-					if (choices[i].equals(n.getValue())) {
+				for (int i = 0; i < curChoices.length; i++) {
+					if (curChoices[i].equals(n.getValue())) {
 						result = i;
 						break;
 					}
@@ -166,7 +166,7 @@ public class LslTestEditor extends EditorPart {
 			}
 			if (n instanceof TestNode) {
 			    LslTest test = (LslTest)n.getValue();
-			    test.name = (String) value;
+			    test.setName((String) value);
 			    fTreeViewer.update(element, null);
 			    setDirty(true);
 			    return;
@@ -200,7 +200,6 @@ public class LslTestEditor extends EditorPart {
     private AddGlobalAction fAddInitialGlobalAction;
     private AddGlobalAction fAddFinalGlobalAction;
 	private static final String BLANK = ""; //$NON-NLS-1$
-	private static String[] statefulFunctions = null;
 	public LslTestEditor() {
 	}
 
@@ -531,7 +530,7 @@ public class LslTestEditor extends EditorPart {
                         public boolean test(Object o) {
                             return name.equals(((LslFunction)o).getName());
                         }
-                    }, getFunctions());
+                    }, LslPlusPlugin.getLLFunctions());
                     
                     call.setName(name);
                     call.setReturns(
@@ -672,7 +671,7 @@ public class LslTestEditor extends EditorPart {
             
             combo = new Combo(composite, SWT.READ_ONLY|SWT.DROP_DOWN);
 
-             String[] items = getStatefulFunctions();
+             String[] items = LslPlusPlugin.getStatefulFunctions();
             int index = Util.elementIndex(name, items);
             
             combo.setItems(items);
@@ -903,25 +902,5 @@ public class LslTestEditor extends EditorPart {
             if (value == null) this.getDefaultLabel().setText(BLANK);
             else this.getDefaultLabel().setText(ep.getFileName() + "/" + ep.getPath()); //$NON-NLS-1$
         }
-    }
-
-    private static LslFunction[] getFunctions() {
-        return LslPlusPlugin.getDefault().getLslMetaData().getFunctions();
-    }
-    
-    public static synchronized String[] getStatefulFunctions() {
-        if (statefulFunctions == null) {
-            List funcs = Util.filtMap(new ArrayMapFunc() {
-                public Class elementType() { return String.class; }
-                public Object map(Object o) {
-                    LslFunction f = (LslFunction) o;
-                    return f.isStateless() ? null : f.getName();
-                }
-            }, getFunctions());
-            
-            statefulFunctions = (String[]) funcs.toArray(new String[funcs.size()]);
-        }
-        
-        return statefulFunctions;
     }
 }

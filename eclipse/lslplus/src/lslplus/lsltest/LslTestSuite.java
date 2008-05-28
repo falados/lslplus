@@ -12,6 +12,7 @@ import lslplus.lsltest.LslTest.LslFloat;
 import lslplus.lsltest.LslTest.LslInteger;
 import lslplus.lsltest.LslTest.LslKey;
 import lslplus.lsltest.LslTest.LslList;
+import lslplus.lsltest.LslTest.LslList1;
 import lslplus.lsltest.LslTest.LslRotation;
 import lslplus.lsltest.LslTest.LslString;
 import lslplus.lsltest.LslTest.LslValue;
@@ -42,17 +43,12 @@ public class LslTestSuite implements IAdaptable {
 		public static String toXML(LslTestSuite suite) {
 			return xstream.toXML(suite);
 		}
-		
-		private static XStream xstreamExternal;
 	}
 	
 	static {
 		XStream xstream = createXStream();
         
         XMLSerializer.xstream = xstream;
-        XStream xstreamExternal = createXStream();
-        xstreamExternal.omitField(LslValue.class, "mnemonic"); //$NON-NLS-1$
-        XMLSerializer.xstreamExternal = xstreamExternal;
 	}
 
     private static XStream createXStream() {
@@ -67,6 +63,7 @@ public class LslTestSuite implements IAdaptable {
 		xstream.aliasType("lsl-vector", LslVector.class); //$NON-NLS-1$
 		xstream.aliasType("lsl-rotation", LslRotation.class); //$NON-NLS-1$
 		xstream.aliasType("lsl-list", LslList.class); //$NON-NLS-1$
+        xstream.aliasType("lsl-list1", LslList1.class); //$NON-NLS-1$
 		xstream.aliasType("lsl-void", LslVoid.class); //$NON-NLS-1$
 		xstream.alias("lsl-test", LslTest.class); //$NON-NLS-1$
 		xstream.alias("globalBinding", GlobBinding.class); //$NON-NLS-1$
@@ -167,6 +164,21 @@ public class LslTestSuite implements IAdaptable {
             }
             
         });
+        xstream.registerConverter(new SingleValueConverter() {
+            public Object fromString(String arg0) {
+                
+                return new LslList1(arg0);
+            }
+
+            public String toString(Object arg0) {
+                return ((LslList1)arg0).val;
+            }
+
+            public boolean canConvert(Class arg0) {
+                return LslList1.class.equals(arg0);
+            }
+            
+        });
         return xstream;
     }
 	
@@ -199,10 +211,6 @@ public class LslTestSuite implements IAdaptable {
 		return XMLSerializer.toXML(this);
 	}
 	
-	public String toExternalXml() {
-	    return XMLSerializer.xstreamExternal.toXML(this);
-	}
-	
 	public static LslTestSuite fromXml(String xml) {
 		return XMLSerializer.fromXML(xml).postInit();
 	}
@@ -228,7 +236,7 @@ public class LslTestSuite implements IAdaptable {
 	    LslTest test = new LslTest();
 	    LinkedList list = new LinkedList();
 	    list.add(new LslFloat("1.0")); //$NON-NLS-1$
-	    test.arguments = new LslValue[] { new LslList(list) };
+	    test.setArguments(new LslValue[] { new LslList(list) });
 	    test.setExpectedReturn(new MaybeValue()); //new MaybeValue(new LslVector(1.0f,2.0f,3.0f));
 	    suite.addTest(test);
 		String xml = suite.toXml();

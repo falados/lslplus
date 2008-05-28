@@ -14,7 +14,7 @@
             id="lslplus.editor.LslPlusEditor">
       </editor>
       <editor
-            class="lslplus.editor.LslTestEditor"
+            class="lslplus.editor.TestEditor"
             extensions="lslt"
             icon="icons/obj16/lslplus-test.gif"
             id="lslplus.editor.LslTestEditor"
