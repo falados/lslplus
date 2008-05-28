@@ -152,14 +152,14 @@ checkResults (ms1, val, globs, w) unitTest =
                                           ", but actually was " ++ (lslValString val)) (msgLog w)
               else 
                   case find (`notElem` globs) (expectedGlobalVals unitTest) of
-                      Just (name,val) ->
-                          case lookup name globs of
+                      Just (globname,val) ->
+                          case lookup globname globs of
                               Nothing ->
-                                  FailureResult name ("expected global " ++ name ++ " to have final value of " ++
+                                  FailureResult name ("expected global " ++ globname ++ " to have final value of " ++
                                                 (lslValString val) ++ ", but no such global was found")
                                                 (msgLog w)
                               Just val' ->
-                                  FailureResult name ("expected global " ++ name ++ " to have final value of " ++
+                                  FailureResult name ("expected global " ++ globname ++ " to have final value of " ++
                                                 (lslValString val) ++ ", but actually had value of " ++
                                                 (lslValString val')) (msgLog w)
                       Nothing -> SuccessResult name (msgLog w)

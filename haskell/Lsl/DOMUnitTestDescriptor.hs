@@ -59,7 +59,7 @@ pathElement = ElemAcceptor "path" simple
 argumentsElement :: MonadError String m => ElemAcceptor m [LSLValue]
 argumentsElement = 
     let f (Elem _ _ contents) = 
-          mapM (matchChoice [lslString, lslInteger, lslFloat, lslVector, lslRotation, lslKey, lslList]) (elementsOnly contents)
+          mapM (matchChoice [lslString, lslInteger, lslFloat, lslVector, lslRotation, lslKey, lslList1]) (elementsOnly contents)
     in ElemAcceptor "arguments" f
 
 lslString :: MonadError String m => ElemAcceptor m LSLValue    
@@ -106,6 +106,14 @@ lslList =
           do list <- mapM (matchChoice [lslString,lslInteger,lslKey,lslVector,lslRotation,lslFloat]) (elementsOnly contents)
              return (LVal list)
     in ElemAcceptor "lsl-list" f
+    
+lslList1 :: MonadError String m => ElemAcceptor m LSLValue    
+lslList1 =ElemAcceptor "lsl-list1" (\ e -> do
+               s <- simple e
+               case evaluateExpression LLList s of
+                   Just f -> return f
+                   Nothing -> fail "invalid content for lsl-list1")
+
 
 lslVoid :: MonadError String m => ElemAcceptor m LSLValue
 lslVoid = 
@@ -193,7 +201,7 @@ maybeSomeVal tag =
 someVal tag =
    let f e@(Elem _ [("class",v)] contents) =
            let valString = attValueString v in
-            case find (\ acceptor -> valString == acceptorTag acceptor) [lslString,lslKey,lslInteger,lslList,lslFloat,
+            case find (\ acceptor -> valString == acceptorTag acceptor) [lslString,lslKey,lslInteger,lslList1,lslFloat,
                                                                          lslVector,lslRotation,lslVoid] of
                 Nothing -> fail ("unknown lsl value class: " ++ valString)
                 Just (ElemAcceptor _ f1) -> f1 e

@@ -252,6 +252,8 @@ evalLit globals expr =
                 (IVal i) -> fromInteger $ toInteger i
                 _ -> error "invalid float expression"
     in case expr of
+        Neg (Ctx _ (IntLit i)) -> IVal (-i)
+        Neg (Ctx _ (FloatLit f)) -> FVal (-f)
         IntLit i        -> IVal i
         FloatLit f      -> FVal f
         StringLit s     -> SVal s
