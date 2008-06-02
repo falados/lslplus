@@ -237,7 +237,7 @@ public class SimManager implements SimEventListener {
             
         };
         
-        job.schedule();
+        job.schedule(100L);
 
     }
     

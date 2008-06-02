@@ -128,7 +128,9 @@ public class TestEditor extends EditorPart implements NodeListener {
             String[] files = nature.getLslFiles();
             combo.setItems(files);
             combo.deselectAll();
-            
+            // a mild hack (there are preferred ways, but this is simplest) to widen the disabled combo
+            combo2.setItems(new String[] { "MMMMMMMMMMMMMMM"}); //$NON-NLS-1$
+            combo2.deselectAll();
             combo2.setEnabled(false);
             
             combo.addSelectionListener(new SelectionListener() {

@@ -2,7 +2,7 @@ Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: LSLPlus
 Bundle-SymbolicName: lslplus; singleton:=true
-Bundle-Version: 0.3.3
+Bundle-Version: 0.3.4
 Bundle-ClassPath: xstream-1.2.2.jar,
  lslplus.jar
 Bundle-Activator: lslplus.LslPlusPlugin
@@ -48,6 +48,7 @@ Require-Bundle: org.eclipse.core.runtime,
  org.eclipse.debug.ui,
  org.eclipse.core.expressions,
  org.eclipse.ui.ide,
- org.eclipse.help
+ org.eclipse.help,
+ org.eclipse.update.core
 Eclipse-LazyStart: true
 Import-Package: com.ibm.icu.text;version="3.6.1"
