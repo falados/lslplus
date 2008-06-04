@@ -2,7 +2,7 @@
 <feature
       id="lslplus"
       label="Lslplus"
-      version="0.3.4">
+      version="0.3.5">
    <install-handler library="install.jar" handler="lslplus.install.InstallHandler"/>
 
    <description>
