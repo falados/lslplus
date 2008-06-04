@@ -116,6 +116,10 @@ import Lsl.Constants
 import Data.List
 import Data.Char
 import Data.Bits
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as L
+import qualified Data.Digest.MD5 as MD5
+import qualified Data.ByteString.UTF8 as UTF8
 import Network.URI
 --import System.Random
 
@@ -164,6 +168,7 @@ internalLLFuncs = [
     ("llListStatistics",llListStatistics),
     ("llLog",llLog),
     ("llLog10",llLog10),
+    ("llMD5String",llMD5String),
     ("llModPow",llModPow),
     ("llParseString2List",llParseString2List),
     ("llParseStringKeepNulls",llParseStringKeepNulls),
@@ -257,7 +262,9 @@ llEscapeURL _ [SVal string] =
     
 llUnescapeURL _ [SVal string] = 
     continueWith $ SVal $ take maxResult $ unEscapeString string
-    
+ 
+llMD5String _ [SVal string, IVal nonce] =
+    continueWith $ SVal $ (show . MD5.md5 . L.pack . B.unpack . UTF8.fromString) (string ++ ":" ++ show nonce)   
 -- Math functions
 
 unaryToLL :: (Monad m) => (Float -> Float) -> [LSLValue] -> m (EvalResult,LSLValue)
