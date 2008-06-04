@@ -30,7 +30,8 @@ lslStyle = javaStyle
                                    "<<",">>","!","%","~","@","+=","-=","*=","/=","%="],
                P.reservedNames = ["state","default","string","integer","list","vector","rotation","key","float","if","else",
                                 "while","for","do","jump","return","default", "$import", "$module","quaternion"],
-               P.caseSensitive = True }
+               P.caseSensitive = True,
+               P.identStart = letter <|> char '_' }
 lexer :: P.TokenParser ()
 lexer  = P.makeTokenParser lslStyle
 

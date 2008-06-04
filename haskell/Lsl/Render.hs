@@ -98,7 +98,7 @@ renderStatement' n (If expr stmt1 stmt2) =
     renderString "if (" . renderCtxExpr expr . renderChar ')' . renderStatement True n stmt1 . 
         case stmt2 of 
             NullStmt -> blank
-            _ -> renderIndent n . (renderStatement True n stmt2)
+            _ -> renderIndent n . renderString "else " . (renderStatement True n stmt2)
 renderStatement' n (Decl var val) = 
     renderVar var . 
         case val of 
