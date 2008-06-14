@@ -346,7 +346,7 @@ public class SimProjectNodes {
             Map props = getProperties();
             String creator = (String) props.get("creator");
             Float duration = (Float) props.get("duration");
-            return new SimWorldDef.Sound(getName(), creator, duration.floatValue());
+            return new SimWorldDef.Animation(getName(), creator, duration.floatValue());
         }
     }
     

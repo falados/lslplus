@@ -309,6 +309,10 @@ public class Util {
         
         for (int i = 0; i < cs.length; i++) {
             if (cs[i] == '%') {
+                if (i > cs.length - 3) {
+                    buf.append('%');
+                    break;
+                }
                 char c1 = cs[++i];
                 char c2 = cs[++i];
                 

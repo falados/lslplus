@@ -388,9 +388,12 @@ public class SimWatcherViewPart extends ViewPart implements SimListener, SimMeta
         if (checkAndSetRefreshPending()) return;
         asyncExec(new Runnable() {
             public void run() {
-                timeText.setText(curTime);
-                logViewer.refresh();
-                clearRefreshPending();
+                try {
+                    timeText.setText(curTime);
+                    logViewer.refresh();
+                } finally {
+                    clearRefreshPending();
+                }
             }
         });
     }

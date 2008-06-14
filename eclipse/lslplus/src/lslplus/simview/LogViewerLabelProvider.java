@@ -42,6 +42,8 @@ public class LogViewerLabelProvider implements ITableLabelProvider {
                 return SimWatcherViewPart.formatTime(Integer.parseInt(message.getTime()));
             else if (columnIndex == 1) return message.getSource();
             else return message.getText();
+        } else if ("archive".equals(element)) {
+            return "archive";
         } else {
             return "";
         }
