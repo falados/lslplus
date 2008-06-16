@@ -41,6 +41,7 @@ module Lsl.Util (
     add3d,
     neg3d,
     scale3d,
+    rot3d,
     unescape,
     processLines,
     processLinesS,

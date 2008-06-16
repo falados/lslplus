@@ -8,6 +8,7 @@ module Lsl.Math(
     add3d,
     neg3d,
     scale3d,
+    rot3d,
     Permutation3(..),
     quaternionToMatrix,
     matrixToQuaternion,
@@ -48,6 +49,12 @@ quaternionMultiply (x1,y1,z1,s1) (x2,y2,z2,s2) =
      (s1 * y2 - x1 * z2 + y1 * s2 + z1 * x2),
      (s1 * z2 + x1 * y2 - y1 * x2 + z1 * s2),
      (s1 * s2 - x1*x2 - y1 * y2 - z1 * z2))
+
+rot3d vec rotation =
+    (quaternionToMatrix rotation) `matMulVec` vec
+    where matMulVec ((a1,b1,c1),(a2,b2,c2),(a3,b3,c3)) (a,b,c) =
+              ((a1*a + a2 * b + a3 * c),(b1 * a + b2 * b + b3 * c),(c1 * a + c2 * b + c3 * c))
+    
 
 rotationsToQuaternion :: Permutation3 -> (Float,Float,Float) -> (Float,Float,Float,Float)
 rotationsToQuaternion order (x,y,z) = 

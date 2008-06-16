@@ -6,6 +6,7 @@ import Control.Monad.Identity
 import Control.Monad.Error
 import Data.List
 import Data.Bits
+import Data.Int
 import Data.Map(Map)
 import Data.Maybe
 import qualified Data.Map as M
@@ -28,6 +29,7 @@ import Lsl.InternalLLFuncs
 import Lsl.Key
 import Lsl.Log
 import Lsl.Parse
+import Lsl.Physics
 import Lsl.Structure
 import Lsl.Type
 import Lsl.UnitTestWorld(simFunc)
@@ -70,7 +72,7 @@ getParcelByPosition regionIndex (x,y,_) =
     do
         region <- getRegion regionIndex
         findParcel 0 (regionParcels region)
-    where findParcel _ [] = mzero
+    where findParcel _ [] = throwError "parcel not found" -- mzero
           findParcel i (p:ps) =
               let (south,north,west,east) = parcelBoundaries p
                   (xc,yc) = (floor x, floor y) in
@@ -900,6 +902,30 @@ llGetGeometricCenter info@(ScriptInfo oid _ _ _ _) [] =
         foldM (\ v k -> getPrim k >>= return . primPosition >>= return . flip diff3d rootPos >>= return . add3d v) (0,0,0) links 
             >>= return . scale3d (1 / fromIntegral (length links))
     ) >>= continueWith . vec2VVal
+
+llGetMass info@(ScriptInfo oid _ _ _ _) [] =
+    runErrFunc info "llGetMass" 1.0 (objectMass oid) >>= continueWith . FVal    
+
+objectMass oid = do
+    LSLObject links <- lift getObjects >>= M.lookup oid
+    foldM (\ v k -> getPrim k >>= ( \ prim -> return $ v + primMassApprox prim)) 0.0 links
+    
+llGetObjectMass info [KVal k] =
+    runErrFunc info "llGetObjectMass" 0.0 (do
+        avatars <- lift getWorldAvatars
+        case M.lookup k avatars of
+            Just _ -> return 80.0
+            Nothing -> objectMass k
+    ) >>= continueWith . FVal
+    
+llGetVel info@(ScriptInfo oid _ _ _ _) [] =
+    runErrFunc info "llGetVel" (0,0,0) (getPrimVelocity oid) >>= continueWith . vec2VVal
+
+llGetForce info@(ScriptInfo oid _ _ _ _) [] =
+    runErrFunc info "llGetForce" (0,0,0) (getPrimForce oid >>= return . fst) >>= continueWith . vec2VVal
+        
+llSetForce info@(ScriptInfo oid _ _ _ _) [v@(VVal x y z), IVal local] =
+    runErrFunc info "llSetForce" () (lift $ setPrimForce oid ((x,y,z), local /= 0)) >> continueWith VoidVal
     
 llGetPos (ScriptInfo _ _ _ pk _) [] = getPos pk >>= continueWith
 llGetRootPosition (ScriptInfo oid _ _ _ _) [] = getPos oid >>= continueWith
@@ -1260,6 +1286,7 @@ queryFaceVals f (IVal side) k =
         then getPrimFaces k >>= return . concat . (map f)
         else getPrimFaces k >>= fromErrorT [] . (\ faces -> (lookupByIndex side faces >>= return . f))
 
+-- TODO: get these out of here
 Just (Constant _ llcObjectUnknownDetail) = findConstant "OBJECT_UNKNOWN_DETAIL"
 Just (Constant _ llcObjectName) = findConstant "OBJECT_NAME"
 Just (Constant _ llcObjectDesc) = findConstant "OBJECT_DESC"
@@ -1269,19 +1296,6 @@ Just (Constant _ llcObjectVelocity) = findConstant "OBJECT_VELOCITY"
 Just (Constant _ llcObjectOwner) = findConstant "OBJECT_OWNER"
 Just (Constant _ llcObjectGroup) = findConstant "OBJECT_GROUP"
 Just (Constant _ llcObjectCreator) = findConstant "OBJECT_CREATOR"
-Just (Constant _ llcPrimTypeBox) = findConstant "PRIM_TYPE_BOX"
-Just (Constant _ llcPrimTypePrism) = findConstant "PRIM_TYPE_PRISM"
-Just (Constant _ llcPrimTypeTorus) = findConstant "PRIM_TYPE_TORUS"
-Just (Constant _ llcPrimTypeCylinder) = findConstant "PRIM_TYPE_CYLINDER"
-Just (Constant _ llcPrimTypeSphere) = findConstant "PRIM_TYPE_SPHERE"
-Just (Constant _ llcPrimTypeRing) = findConstant "PRIM_TYPE_RING"
-Just (Constant _ llcPrimTypeTube) = findConstant "PRIM_TYPE_TUBE"
-Just (Constant _ llcPrimTypeSculpt) = findConstant "PRIM_TYPE_SCULPT"
-
-IVal icPrimTypeSphere = llcPrimTypeSphere
-IVal icPrimTypeSculpt = llcPrimTypeSculpt
-IVal icPrimTypeTorus = llcPrimTypeTorus
-IVal icPrimTypeTube = llcPrimTypeTube
 
 queryPrimType k = do
     (PrimType version typecode holeshape cut twist holesize topshear hollow taper advancedcut roffset revs skew sculpt sculptType) <- 
@@ -1422,7 +1436,7 @@ updatePrimTypeBoxCylPrism ptype prim (IVal holeshape:VVal cx cy cz:FVal hollow:V
                                                 primTopshear = (sx,sy,sz) }}, rest)
 updatePrimTypeBoxCylPrism _ _ _ = fail "insufficient or incorret parameters for PRIM_TYPE (PRIM_TYPE_PRISM, PRIM_TYPE_CYLINDER, or PRIM_TYPE_BOX)"
 updatePrimTypeSphere prim (IVal holeshape:VVal cx cy cz:FVal hollow:VVal tx ty tz:VVal ax ay az:rest) =
-    return (prim { primTypeInfo = (primTypeInfo prim) { primTypeCode = icPrimTypeSphere, primHoleshape = holeshape, primCut = (cx,cy,cz),
+    return (prim { primTypeInfo = (primTypeInfo prim) { primTypeCode = cPrimTypeSphere, primHoleshape = holeshape, primCut = (cx,cy,cz),
                                                 primHollow = hollow, primTwist = (tx,ty,tz), primAdvancedCut = (ax,ay,az) } }, rest)
 updatePrimTypeSphere _ _ = fail "insufficient or incorrect parameters for PRIM_TYPE (PRIM_TYPE_SPHERE)"
 updatePrimTypeRingTorusTube ptype prim (IVal holeshape:VVal cx cy cz:FVal hollow:VVal twx twy twz:VVal hx hy hz:VVal sx sy sz:
@@ -1433,7 +1447,7 @@ updatePrimTypeRingTorusTube ptype prim (IVal holeshape:VVal cx cy cz:FVal hollow
                                                 primRevolutions = revs, primRadiusOffset = roffset, primSkew = skew } }, rest)
 updatePrimTypeRingTorusTube _ _ _ = fail "insufficient or incorrect parameters for PRIM_TYPE (PRIM_TYPE_RING, PRIM_TYPE_TORUS, or PRIM_TYPE_TUBE)"
 updatePrimTypeSculpt prim (SVal name:IVal sculptType:rest) =
-    return (prim { primTypeInfo = (primTypeInfo prim) { primTypeCode = icPrimTypeSculpt, primSculptTexture = Just name, primSculptType = sculptType } }, rest)
+    return (prim { primTypeInfo = (primTypeInfo prim) { primTypeCode = cPrimTypeSculpt, primSculptTexture = Just name, primSculptType = sculptType } }, rest)
 updatePrimTypeSculpt _ _ = fail "insufficient or incorrect parameters for PRIM_TYPE (PRIM_TYPE_SCULPT)"
 
 updatePrimTypeBoxCylPrismOld ptype prim (VVal cx cy cz:FVal hollow:FVal twisty:VVal tx ty tz:VVal sx sy sz:rest) =
@@ -1444,13 +1458,13 @@ updatePrimTypeBoxCylPrismOld ptype prim (VVal cx cy cz:FVal hollow:FVal twisty:V
 updatePrimTypeBoxCylPrismOld _ _ _ = fail "insufficient or inccorrect parameters for deprecated prim type (PRIM_TYPE_BOX, PRIM_TYPE_CYLINDER, or PRIM_TYPE_PRISM)"
 
 updatePrimTypeSphereOld prim (VVal cx cy cz:FVal hollow:VVal ax ay az:rest) =
-    return (prim { primTypeInfo = (primTypeInfo prim) { primTypeCode = icPrimTypeSphere, primCut = (cx,cy,cz), primHollow = hollow,
+    return (prim { primTypeInfo = (primTypeInfo prim) { primTypeCode = cPrimTypeSphere, primCut = (cx,cy,cz), primHollow = hollow,
                                                         primAdvancedCut = (ax,ay,az) }}, rest)
 updatePrimTypeSphereOld _ _ = fail "insufficient or incorrect parameters for deprecated prim type (PRIM_TYPE_SPHERE)"
 
 updatePrimTypeTorusOld prim (VVal cx cy cz:FVal hollow:FVal twisty:FVal tapery:VVal sx sy sz:VVal ax ay az:rest) =
     let info = primTypeInfo prim in
-    return (prim { primTypeInfo = info { primTypeCode = icPrimTypeTorus, primCut = (cx,cy,cz), primHollow = hollow,
+    return (prim { primTypeInfo = info { primTypeCode = cPrimTypeTorus, primCut = (cx,cy,cz), primHollow = hollow,
                                          primTwist = let (x,y,z) = primTwist info in (x,twisty,z),
                                          primTaper = let (x,y,z) = primTaper info in (x,tapery,z),
                                          primTopshear = (sx,sy,sz), primAdvancedCut = (ax,ay,az) } }, rest)
@@ -1458,14 +1472,14 @@ updatePrimTypeTorusOld _ _ = fail "insufficient or incorrect parameters for depr
 
 updatePrimTypeTubeOld prim (VVal cx cy cz:FVal hollow:FVal twisty:FVal shearx:rest) =
     let info = primTypeInfo prim in
-    return (prim { primTypeInfo = info { primTypeCode = icPrimTypeTube, primCut = (cx,cy,cz), primHollow = hollow,
+    return (prim { primTypeInfo = info { primTypeCode = cPrimTypeTube, primCut = (cx,cy,cz), primHollow = hollow,
                                          primTwist = let (x,y,z) = primTwist info in (x,twisty,z),
                                          primTopshear = let (x,y,z) = primTopshear info in (shearx,y,z) } }, rest)
 updatePrimTypeTubeOld _ _ = fail "insufficient or incorrect parameters for deprecated prim type (PRIM_TYPE_TUBE)"
 
 llGetObjectDetails _ [KVal k, LVal params] =
      -- TODO: this doesn't take into account multiple regions
-     do  result <- fromErrorT [] (getAvatarDetails k params `mplus` getPrimDetails k params)
+     do  result <- fromErrorT [] (getAvatarDetails k params <||> getPrimDetails k params)
          continueWith $ LVal result
      where getAvatarDetails k params = 
                do  avs <- lift getWorldAvatars
@@ -1740,6 +1754,14 @@ llSetSoundRadius info [FVal radius] = logFromScript info "llSetSoundRadius: call
 llSetSoundQueueing info [IVal bool] = logFromScript info ("llSetSoundQueuiing: set to " ++ (if bool /= 0 then "TRUE" else "FALSE")) >>
     continueWith VoidVal
 
+------------------------------------------------------------------------------
+llCollisionSprite info@(ScriptInfo _ _ _ pk _) [SVal impactSprite] =
+    runErrFunc info "llCollisionSprite" () (do
+        tk <- findTexture pk impactSprite
+        lift $ logFromScript info ("llCollisionSprite: set sprite to " ++ tk)
+    ) >> continueWith VoidVal
+--
+
 llGetKey (ScriptInfo _ _ _ pk _) [] = continueWith $ KVal pk
 
 llGetOwnerKey info@(ScriptInfo _ _ _ pk _) [KVal k] = 
@@ -1780,7 +1802,7 @@ llGetTimeOfDay (ScriptInfo _ _ _ _ _) [] = do
     t <- getTick
     continueWith $ FVal $ (ticksToDuration (t `mod` durationToTicks 4.0))
 getUnixTime :: (Monad (StateT (World a) a), Monad a) => StateT (World a) a Int
-getUnixTime = (liftM2 (+) (getWorldZeroTime) (getTick >>= return . floor . ticksToDuration))
+getUnixTime = (liftM2 (+) getWorldZeroTime (getTick >>= return . floor . ticksToDuration)) >>= return . fromIntegral
 getTimeOfDay :: (Monad (StateT (World a) a), Monad a) => StateT (World a) a ClockTime
 getTimeOfDay = getUnixTime >>= return . (flip TOD 0) . fromIntegral 
 
@@ -2184,6 +2206,7 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llCloseRemoteDataChannel",llCloseRemoteDataChannel),
         ("llCloud",llCloud),
         ("llCollisionSound",llCollisionSound),
+        ("llCollisionSprite",llCollisionSprite),
         ("llCreateLink",llCreateLink),
         ("llDetachFromAvatar", llDetachFromAvatar),
         ("llDetectedGrab",llDetectedGrab),
@@ -2214,6 +2237,7 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llGetColor",llGetColor),
         ("llGetCreator",llGetCreator),
         ("llGetDate",llGetDate),
+        ("llGetForce", llGetForce),
         ("llGetGeometricCenter",llGetGeometricCenter),
         ("llGetGMTclock",llGetGMTclock),
         ("llGetInventoryCreator",llGetInventoryCreator),
@@ -2232,10 +2256,12 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llGetLinkNumber", llGetLinkNumber),
         ("llGetLocalRot", llGetLocalRot),
         ("llGetLandOwnerAt", llGetLandOwnerAt),
+        ("llGetMass",llGetMass),
         ("llGetNotecardLine", llGetNotecardLine),
         ("llGetNumberOfNotecardLines",llGetNumberOfNotecardLines),
         ("llGetObjectDesc", llGetObjectDesc),
         ("llGetObjectDetails", llGetObjectDetails),
+        ("llGetObjectMass", llGetObjectMass),
         ("llGetObjectName", llGetObjectName),
         ("llGetObjectPermMask", llGetObjectPermMask),
         ("llGetObjectPrimCount", llGetObjectPrimCount),
@@ -2270,6 +2296,7 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llGetTimestamp",llGetTimestamp),
         ("llGetUnixTime",llGetUnixTime),
         ("llGetWallclock",llGetWallclock),
+        ("llGetVel",llGetVel),
         ("llGiveInventory", llGiveInventory),
         ("llGiveMoney",llGiveMoney),
         ("llHTTPRequest",llHTTPRequest),
@@ -2329,6 +2356,7 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llSetAlpha", llSetAlpha),
         ("llSetClickAction", llSetClickAction),
         ("llSetColor", llSetColor),
+        ("llSetForce", llSetForce),
         ("llSetLinkAlpha",llSetLinkAlpha),
         ("llSetLinkColor",llSetLinkColor),
         ("llSetLinkPrimitiveParams",llSetLinkPrimitiveParams),
@@ -2445,7 +2473,7 @@ pushDeferredScriptEventToObject event oid delay =
 putHTTPTimeoutEvent pk sn key delay = 
     pushDeferredScriptEvent (Event "http_response" [KVal key, IVal 499, LVal [], SVal ""] M.empty) pk sn delay
 putHTTPResponseEvent pk sn key status metadata body delay =
-    pushDeferredScriptEvent (Event "http_response" [KVal key, IVal 499, LVal [], SVal ""] M.empty) pk sn delay
+    pushDeferredScriptEvent (Event "http_response" [KVal key, IVal status, LVal metadata, body] M.empty) pk sn delay
     
 getObjectNames :: (Monad m) => WorldM m [String]
 getObjectNames = getObjects >>= (return . M.keys)
@@ -2482,7 +2510,8 @@ newWorld slice maxt iq = World {
                worldOutputQueue = [],
                worldPendingHTTPRequests = [],
                worldOpenDataChannels = (M.empty,M.empty),
-               worldXMLRequestRegistry = M.empty
+               worldXMLRequestRegistry = M.empty,
+               worldPhysicsTime = 0
            }
            
 newWorld' slice maxt iq lib scripts avatars = 
@@ -2872,7 +2901,7 @@ matchListener (Chat chan' sender' key' msg' (region,position) range) ((Listener 
     chan == chan' &&
     key' /= pkey &&
     (sender == "" || sender == sender') &&
-    (key == nullKey || key == key') &&
+    (key == "" || key == nullKey || key == key') &&
     (msg == "" || msg == msg') &&
     (case range of
         Nothing -> True
@@ -2880,6 +2909,32 @@ matchListener (Chat chan' sender' key' msg' (region,position) range) ((Listener 
 
 listenAddress l = (listenerPrimKey l, listenerScriptName l)
 
+nextActivity :: (Monad (StateT (World a) a), Monad a) => StateT (World a) a (Maybe Int)
+nextActivity = 
+    do 
+        scripts <- getWorldScripts
+        t <- getTick
+        let ns = foldl (calcNxt t) Nothing $ M.elems scripts
+        wq <- getWQueue
+        let ne = case wq of
+                     [] -> Nothing
+                     ((i,_):_) -> Just i
+        return $ mmin ne ns
+    where calcNxt t n (Script { scriptImage = (Invalid _) }) = n
+          calcNxt t n (Script { scriptActive = False }) = n
+          calcNxt t n (Script { scriptImage = (Valid img) , scriptEventQueue = q }) =
+              case executionState img of
+                  Executing -> (Just t)
+                  Suspended _ -> (Just t)
+                  Waiting -> if null q then n else (Just t)
+                  WaitingTil i -> if isNothing n then Just (max t i) else fmap (max t . min i) n 
+                  SleepingTil i -> if isNothing n then Just (max t i) else fmap (max t . min i) n
+                  _ -> n
+          mmin Nothing Nothing = Nothing
+          mmin Nothing (Just i) = (Just i)
+          mmin (Just i) Nothing = (Just i)
+          mmin (Just i) (Just j) = Just (min i j)
+                  
 runScripts :: Monad m => WorldM m ()
 runScripts =
     do scripts <- getWorldScripts
@@ -2924,10 +2979,32 @@ runScript parent index pkey sname primName img q =
                            Suspended bp -> setWorldSuspended (Just (pkey,sname))
                            _ -> setWorldSuspended Nothing
 
+                           
+runPhysics :: Monad m => WorldM m ()
+runPhysics = do
+    t0 <- getWorldPhysicsTime
+    t1 <- getTick
+    os <- getObjects
+    when (t1 > t0) $ do
+        flip mapM_ (M.keys os) $ \ pk -> runErrPrim pk () $ do
+            prim <- getPrim pk
+            when (testBit primPhysicsBit $ primStatus prim) $ do
+                mass <- objectMass pk
+                let force = fst (primForce prim) `rot3d` rotation where rotation = if snd $ primForce prim then primRotation prim else (0,0,0,1)
+                let impulse = ((fst . fst . primImpulse) prim `rot3d` rotation, (snd . primImpulse) prim)
+                        where rotation = if (snd . fst . primImpulse) prim then primRotation prim else (0,0,0,1)
+                let (pos,vel) = kin t0 t1 ticksToDuration 0 mass (primPosition prim) (primVelocity prim) force impulse
+                lift $ setPrimPosition pk $! pos
+                lift $ setPrimVelocity pk $! vel
+                return ()
+    setWorldPhysicsTime $! t1
+
 simulate :: Monad m => WorldM m ()
 simulate =
     do processEvents
        runScripts
+       runPhysics
+       --n <- nextActivity
        t <- getTick
        setTick (t + 1)
        pauseTime <- getNextPause

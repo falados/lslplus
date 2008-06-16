@@ -756,7 +756,7 @@ validStatement funcs vars rtype labels locals _ (Return Nothing) =
         return (locals,True)
 validStatement funcs vars rtype labels locals _ (Return (Just expr)) = 
     do  t <- validCtxExpr expr funcs vars locals
-        when (t /= rtype) (fail "inappropriate return type for function/handler")
+        when (t /= rtype && not (all (`elem` [LLString,LLKey]) [t,rtype])) (fail "inappropriate return type for function/handler")
         return (locals,True)
 validStatement funcs vars rtype labels locals returns (StateChange name) = return (locals,returns)
 validStatement funcs vars rtype labels locals returns (Do expr) = validCtxExpr expr funcs vars locals>>return (locals,returns)

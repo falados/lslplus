@@ -6,6 +6,7 @@ import Control.Monad.Identity
 import Control.Monad.Error
 import Data.List
 import Data.Bits
+import Data.Int
 import Data.Map(Map)
 import Data.Maybe
 import qualified Data.Map as M
@@ -65,7 +66,8 @@ data World m = World {
                     worldOutputQueue :: [SimEvent],
                     worldPendingHTTPRequests :: [String],
                     worldOpenDataChannels :: (Map String (String,String),Map (String,String) String),
-                    worldXMLRequestRegistry :: Map String XMLRequestSourceType
+                    worldXMLRequestRegistry :: Map String XMLRequestSourceType,
+                    worldPhysicsTime :: Int
                 } deriving (Show)
 
 -- a state monad for the World
@@ -137,6 +139,8 @@ getWorldEventHandler :: Monad m => WorldM m (Maybe (String,[(String,LSLValue)]))
 getWorldEventHandler = queryWorld worldEventHandler
 getWorldXMLRequestRegistry :: Monad m => WorldM m (Map String XMLRequestSourceType)
 getWorldXMLRequestRegistry = queryWorld worldXMLRequestRegistry
+getWorldPhysicsTime :: Monad m => WorldM m Int
+getWorldPhysicsTime = queryWorld worldPhysicsTime
 
 getRegion index = (lift getWorldRegions >>= M.lookup index)
 
@@ -168,6 +172,9 @@ getPrimPassCollisions k = getPrimVal k primPassCollisions
 getPrimPayInfo k = getPrimVal k primPayInfo
 getPrimPendingEmails k = getPrimVal k primPendingEmails
 getPrimRemoteScriptAccessPin k = getPrimVal k primRemoteScriptAccessPin
+getPrimVelocity k = getPrimVal k primVelocity
+getPrimForce k = getPrimVal k primForce
+getPrimImpulse k = getPrimVal k primImpulse
 
 getPrimInventory k = getPrimVal k primInventory
 
@@ -202,7 +209,7 @@ setNextListenerId i = updateWorld (\w -> w { nextListenerId = i })
 setObjects os = updateWorld (\w -> w { wobjects = os })
 setPrims ps = updateWorld (\w -> w { wprims = ps })
 setInventory i = updateWorld (\w -> w { inventory = i })
-setTick t = updateWorld (\w -> w { tick = t })
+setTick t = t `seq` updateWorld (\w -> w { tick = t })
 setMsgLog l = updateWorld (\w -> w { msglog = l })
 setWQueue q = updateWorld (\w -> w { wqueue = q })
 setRandGen g = updateWorld (\w -> w { randGen = g })
@@ -217,6 +224,7 @@ setWorldPendingHTTPRequests p = updateWorld (\ w -> w { worldPendingHTTPRequests
 setWorldOpenDataChannels o = updateWorld (\ w -> w { worldOpenDataChannels = o })
 setWorldEventHandler e = updateWorld (\ w -> w { worldEventHandler = e })
 setWorldXMLRequestRegistry r = updateWorld (\ w -> w { worldXMLRequestRegistry = r })
+setWorldPhysicsTime t = updateWorld (\ w -> w { worldPhysicsTime = t })
 
 setPrim k p = (getPrims >>= return . (M.insert k p) >>= setPrims)
 updatePrimVal k f = runErrPrim k () $ (lift getPrims >>= M.lookup k >>= return . f >>= lift . (setPrim k))
@@ -248,6 +256,10 @@ setPrimAttachment k v =  updatePrimVal k (\ p -> p { primAttachment = v } )
 setPrimInventory k v =  updatePrimVal k (\ p -> p { primInventory = v } )
 setPrimPendingEmails k v =  updatePrimVal k (\ p -> p { primPendingEmails = v })
 setPrimRemoteScriptAccessPin k v = updatePrimVal k (\ p -> p { primRemoteScriptAccessPin = v })
+setPrimVelocity k v = updatePrimVal k (\ p -> p { primVelocity = v })
+setPrimForce k v = updatePrimVal k (\ p -> p { primForce = v })
+setPrimImpulse k v = updatePrimVal k (\ p -> p { primImpulse = v })
+
 setRegion regionIndex region = getWorldRegions >>= return . (M.insert regionIndex region) >>= setWorldRegions
 
 updatePrimFace k i f = do
@@ -443,7 +455,7 @@ insertScriptChannelPair script chan = lift $ do
 
 ----- MISC ----
 durationToTicks dur = floor (1000.0 * dur)
-ticksToDuration ticks = fromInt ticks / 1000.0
+ticksToDuration ticks = fromIntegral ticks / 1000.0
 
 nextTick :: Monad m => WorldM m Int
 nextTick = do

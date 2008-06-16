@@ -446,6 +446,20 @@ stateDecl = do name <- ctxify stateName
 stateDecls = many stateDecl
 
 --------------------------------------------------------------
+varOrFunc =   do (Ctx ctx (t,id)) <- ctxify $ do
+                     t <- try typeName
+                     id <- ctxify identifier <?> "identifier"
+                     return (t,id)
+                 choice [func t id, gvar ctx t id]
+          <|> do id <- ctxify identifier <?> "identifier"
+                 func LLVoid id
+func t id = do ps <- parens params
+               stmts <- braces statements
+               return $ GF $ Func (FuncDec id t ps) stmts
+gvar ctx t (Ctx _ id) = do mexpr <- option Nothing (reservedOp "=" >> expr >>= return . Just)
+                           semi
+                           return $ GV (Ctx ctx (Var id t)) mexpr
+--------------------------------------------------------------
 -- FUNCTION parsing
 
 param = ctxify $
@@ -454,25 +468,25 @@ param = ctxify $
            return $ Var id t
 params = sepBy param comma
 
-function = do (t,id,ps) <- try $ do t <- option LLVoid typeName <?> "type name"
-                                    id <- ctxify identifier <?> "function name"
-                                    ps <- parens params
-                                    return (t,id,ps)
-              stmts <- braces statements
-              return $ GF $ Func (FuncDec id t ps) stmts
+-- function = do (t,id,ps) <- try $ do t <- option LLVoid typeName <?> "type name"
+--                                     id <- ctxify identifier <?> "function name"
+--                                     ps <- parens params
+--                                     return (t,id,ps)
+--               stmts <- braces statements
+--               return $ GF $ Func (FuncDec id t ps) stmts
 ---------------------------------------------------------------
 -- GLOBAL VARIABLES parsing
 
 -- globals allow no initialization or initialization by 'constant' expressions... 
 -- we can allow any expressions though and have semantic analysis catch problems
 
-globvar = do var <- ctxify $ do
-                 t <- typeName <?> "type name"
-                 id <- identifier
-                 return (Var id t)
-             mexpr <- option Nothing (reservedOp "=" >> expr >>= return.Just)
-             semi
-             return $ GV var mexpr
+-- globvar = do var <- ctxify $ do
+--                  t <- typeName <?> "type name"
+--                  id <- identifier
+--                  return (Var id t)
+--              mexpr <- option Nothing (reservedOp "=" >> expr >>= return.Just)
+--              semi
+--              return $ GV var mexpr
 ----------------------------------------------------------------
 -- IMPORT (meta-lsl directive) parsing
 
@@ -490,7 +504,7 @@ gimport = do reserved "$import" <?> "$import keyword"
 ----------------------------------------------------------------
 -- all globals parsing             
 
-globals = many $ choice [function,globvar,gimport]
+globals = many $ choice [gimport,varOrFunc]
 
 lslParser = do whiteSpace
                globs <- globals

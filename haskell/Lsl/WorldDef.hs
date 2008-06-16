@@ -48,6 +48,7 @@ module Lsl.WorldDef(Avatar(..),
 import Control.Monad
 import Control.Monad.Error
 import qualified Control.Monad.State as SM
+import Data.Int
 import Data.List
 import qualified Data.Map as M
 import qualified Data.IntMap as IM
@@ -249,7 +250,10 @@ data Prim = Prim {
                     primPassCollisions :: Bool,
                     primPayInfo :: (Int,Int,Int,Int,Int),
                     primAttachment :: Maybe Attachment,
-                    primRemoteScriptAccessPin :: Int } deriving (Show)
+                    primRemoteScriptAccessPin :: Int,
+                    primVelocity :: (Float,Float,Float),
+                    primForce :: ((Float,Float,Float),Bool),
+                    primImpulse :: (((Float,Float,Float),Bool),Int) } deriving (Show)
 
 data PrimType = PrimTypeUnknown
               | PrimType {
@@ -270,7 +274,7 @@ data PrimType = PrimTypeUnknown
                    primSculptType :: Int
                 } deriving (Show)
                    
-basicBox = PrimType 9 0 0 (0,0.0,0) (0,0,0) (0,0,0) (0,0,0) 0 (0,0,0) (0,0,0) 0 0 0 Nothing 0
+basicBox = PrimType 9 0 0 (0,1,0) (0,0,0) (0,0,0) (0,0,0) 0 (0,0,0) (0,1,0) 0 0 0 Nothing 0
 
 data Attachment = Attachment { attachmentKey :: String, attachmentPoint :: Int } deriving (Show)
 
@@ -346,7 +350,10 @@ emptyPrim name key =
            primPassCollisions = False,
            primPayInfo = ( -2, -2, -2, -2, -2),
            primAttachment = Nothing,
-           primRemoteScriptAccessPin = 0 }
+           primRemoteScriptAccessPin = 0,
+           primVelocity = (0,0,0),
+           primForce = ((0,0,0),False),
+           primImpulse = (((0,0,0),False),0) }
 
 data Region = Region {
         regionName :: String,
@@ -540,7 +547,10 @@ primElement = ElemAcceptor "prim" $
                             primPassCollisions = False,
                             primPayInfo = (-2, -2, -2, -2, -2),
                             primAttachment = Nothing,
-                            primRemoteScriptAccessPin = 0 }
+                            primRemoteScriptAccessPin = 0,
+                            primVelocity = (0,0,0),
+                            primForce = ((0,0,0),False),
+                            primImpulse = (((0,0,0),False),0) }
 
 acceptInventoryItem e = matchChoice (map (uncurry mkInventoryItemAcceptor) 
     [("notecardItem",acceptNotecardData),
@@ -567,7 +577,7 @@ acceptSoundData contents = do
     return (InvSound duration,c1)
 acceptAnimationData contents = do
     (duration,c1) <- findValue "duration" contents
-    return (InvAnimation duration,c1)
+    return (InvAnimation (if duration == 0 then Nothing else Just duration),c1)
 acceptInventoryObjectData contents = do
     (prims,c1) <- findElement primsElement contents
     return (InvObject prims,c1)

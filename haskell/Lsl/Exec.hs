@@ -21,6 +21,7 @@ module Lsl.Exec(
 
 import Debug.Trace
 import Data.Bits
+import Data.Int
 import Data.List
 import qualified Data.Map as M
 import Data.Maybe

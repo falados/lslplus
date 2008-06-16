@@ -40,6 +40,14 @@ llcChangedLink = IVal cChangedLink
 (cPermMove,llcPermMove) = mkIConst 0x00080000
 cFullPerm = cPermModify .|. cPermMove .|. cPermTransfer .|. cPermCopy
 
+(cPrimTypeBox,llcPrimTypeBox) = mkIConst 0
+(cPrimTypeCylinder,llcPrimTypeCylinder) = mkIConst 1
+(cPrimTypePrism,llcPrimTypePrism) = mkIConst 2
+(cPrimTypeRing,llcPrimTypeRing) = mkIConst 6
+(cPrimTypeSphere,llcPrimTypeSphere) = mkIConst 3
+(cPrimTypeSculpt,llcPrimTypeSculpt) = mkIConst 7
+(cPrimTypeTorus,llcPrimTypeTorus) = mkIConst 4
+(cPrimTypeTube,llcPrimTypeTube) = mkIConst 5
 
 validAttachmentPoints = [0..36]::[Int]
 
@@ -418,14 +426,14 @@ allConstants = [
     Constant "PRIM_TEXTURE" llcPrimTexture,
     --Constant "PRIM_TYPE" (IVal 1),
     Constant "PRIM_TYPE" llcPrimType,
-    Constant "PRIM_TYPE_BOX" (IVal 0),
-    Constant "PRIM_TYPE_CYLINDER" (IVal 1),
-    Constant "PRIM_TYPE_PRISM" (IVal 2),
-    Constant "PRIM_TYPE_RING" (IVal 6),
-    Constant "PRIM_TYPE_SPHERE" (IVal 3),
-    Constant "PRIM_TYPE_SCULPT" (IVal 7),
-    Constant "PRIM_TYPE_TORUS" (IVal 4),
-    Constant "PRIM_TYPE_TUBE" (IVal 5),
+    Constant "PRIM_TYPE_BOX" llcPrimTypeBox,
+    Constant "PRIM_TYPE_CYLINDER" llcPrimTypeCylinder,
+    Constant "PRIM_TYPE_PRISM" llcPrimTypePrism,
+    Constant "PRIM_TYPE_RING" llcPrimTypeRing,
+    Constant "PRIM_TYPE_SPHERE" llcPrimTypeSphere,
+    Constant "PRIM_TYPE_SCULPT" llcPrimTypeSculpt,
+    Constant "PRIM_TYPE_TORUS" llcPrimTypeTorus,
+    Constant "PRIM_TYPE_TUBE" llcPrimTypeTube,
     Constant "PSYS_PART_BOUNCE_MASK" (IVal 0x4),
     Constant "PSYS_PART_EMISSIVE_MASK" (IVal 0x100),
     Constant "PSYS_PART_END_ALPHA" (IVal 4),
