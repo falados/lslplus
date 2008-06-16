@@ -2,6 +2,7 @@ package lslplus.debug;
 
 import java.util.HashSet;
 
+import org.eclipse.debug.core.DebugException;
 import org.eclipse.debug.core.model.IValue;
 import org.eclipse.debug.ui.IDebugModelPresentation;
 import org.eclipse.debug.ui.ISourcePresentation;
@@ -14,7 +15,13 @@ public class LslDebugModelPresentation implements IDebugModelPresentation {
     private ISourcePresentation presentation = new LslSourceLocator();
     private HashSet listeners = new HashSet();
     public void computeDetail(IValue value, IValueDetailListener listener) {
-        listener.detailComputed(value, null);
+        String result;
+        try {
+            result = value.getValueString();
+        } catch (DebugException e) {
+            result = ""; //$NON-NLS-1$
+        }
+        listener.detailComputed(value, result);
     }
 
     public Image getImage(Object element) {
