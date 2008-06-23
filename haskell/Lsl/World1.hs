@@ -40,7 +40,6 @@ import Lsl.WorldState
 
 import System.Random
 import System.Time
-import Test.QuickCheck
 import Text.Printf
 
 -- execute a predefined ('ll') function
@@ -1262,12 +1261,12 @@ queryPrimScale k = getPrimScale k >>= return . return . vec2VVal
 queryPrimFlexible k = 
     getPrimFlexibility k >>= (\ flex -> case flex of
         Nothing -> return [IVal 0, IVal 0, FVal 0, FVal 0, FVal 0, FVal 0, VVal 0.0 0.0 0.0]
-        Just flex' -> return $ map ($flex') [const (IVal 1),IVal . flexSoftness, FVal . flexGravity, FVal . flexFriction,
+        Just flex' -> return $ map ($ flex') [const (IVal 1),IVal . flexSoftness, FVal . flexGravity, FVal . flexFriction,
                                              FVal . flexWind, FVal . flexTension, vec2VVal . flexForce])
 queryPrimLight k =
     getPrimLight k >>= (\ light -> case light of
         Nothing -> return [IVal 0, VVal 0 0 0, FVal 0, FVal 0, FVal 0]
-        Just light' -> return $ map ($light') [const (IVal 1), vec2VVal . lightColor, FVal . lightIntensity, FVal . lightRadius, FVal . lightFalloff])
+        Just light' -> return $ map ($ light') [const (IVal 1), vec2VVal . lightColor, FVal . lightIntensity, FVal . lightRadius, FVal . lightFalloff])
     
 queryPrimMaterial k = getPrimMaterial k >>= return . return . IVal
 queryPrimStatus bit k =  getPrimStatus k >>= return . return . IVal . (\ i -> if testBit i bit then 1 else 0)
@@ -1276,7 +1275,7 @@ queryPrimBumpShiny side =  queryFaceVals bumpShiny side
 queryPrimColor side = queryFaceVals colorAlpha side
     where colorAlpha face = [vec2VVal $ faceColor face, FVal $ faceAlpha face]
 queryPrimTexture side = queryFaceVals textureInfo side
-    where textureInfo face = let tinfo = faceTextureInfo face in map ($tinfo) 
+    where textureInfo face = let tinfo = faceTextureInfo face in map ($ tinfo) 
                                    [SVal .textureKey,vec2VVal . textureRepeats,vec2VVal . textureOffsets,FVal . textureRotation]
 queryPrimTexgen side = queryFaceVals (return . IVal . faceTextureMode) side
 queryPrimFullbright side = queryFaceVals (\ face -> if faceFullbright face then [IVal 1] else [IVal 0]) side

@@ -133,6 +133,9 @@ cClickActions = [cClickActionTouch,cClickActionSit,cClickActionBuy,cClickActionP
 (cRemoteDataRequest,llcRemoteDataRequest) = mkIConst 2
 (cRemoteDataReply,llcRemoteDataReply) = mkIConst 3
 
+llcZeroVector = VVal 0 0 0
+llcZeroRotation = RVal 0 0 0 1
+
 mkIConst :: Int -> (Int,LSLValue)
 mkIConst i = (i,IVal i)
 
@@ -558,8 +561,8 @@ allConstants = [
     Constant "VEHICLE_TYPE_SLED" (IVal 1),
     Constant "VEHICLE_VERTICAL_ATTRACTION_EFFICIENCY" (IVal 36),
     Constant "VEHICLE_VERTICAL_ATTRACTION_TIMESCALE" (IVal 37),
-    Constant "ZERO_ROTATION" (RVal 0.0 0.0 0.0 1.0),
-    Constant "ZERO_VECTOR" (VVal 0.0 0.0 0.0)
+    Constant "ZERO_ROTATION" llcZeroRotation,
+    Constant "ZERO_VECTOR" llcZeroVector
     ]
 
 findConstant s = findM (\ c -> s == constName c) allConstants

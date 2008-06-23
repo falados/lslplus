@@ -92,8 +92,8 @@ renderStatement' n (While expr stmt) =
 renderStatement' n (DoWhile stmt expr) = 
     renderString "do " . renderStatement True n stmt . renderString " while (" . renderCtxExpr expr . renderChar ')'
 renderStatement' n (For mexpr1 mexpr2 mexpr3 stmt) =
-    renderString "for (" . renderOptionalExpression mexpr1 . renderString "; " . renderOptionalExpression mexpr2 .
-    renderString "; " . renderOptionalExpression mexpr3 . renderString ")" . renderStatement True n stmt
+    renderString "for (" . renderCtxExprs "" mexpr1 . renderString "; " . renderOptionalExpression mexpr2 .
+    renderString "; " . renderCtxExprs "" mexpr3 . renderString ")" . renderStatement True n stmt
 renderStatement' n (If expr stmt1 stmt2) =
     renderString "if (" . renderCtxExpr expr . renderChar ')' . renderStatement True n stmt1 . 
         case stmt2 of 

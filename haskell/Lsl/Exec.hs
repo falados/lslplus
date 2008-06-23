@@ -332,7 +332,7 @@ data EvalElement = EvBlock [Ctx Statement] | EvCtxStatement (Ctx Statement)
                  | EvCons | EvMkVec | EvMkRot | EvPop
                  | EvReturn | EvDiscard | EvBind String LSLType
                  | EvCond Statement Statement | EvCall String SourceContext [Var] [Ctx Statement] Bool
-                 | EvPredef String | EvLoop Expr (Maybe Expr) Statement
+                 | EvPredef String | EvLoop Expr [Ctx Expr] Statement
     deriving (Show)
     
 -- Note: lifted from Hudak, p.273
@@ -714,18 +714,16 @@ eval' =
                       continue
                EvStatement (Decl (Var name t) mexpr) -> pushElements [EvBind name t,EvMexpr $ fromMCtx mexpr]
                EvStatement (If expr stmt1 stmt2) -> pushElements [EvCond stmt1 stmt2,EvExpr $ ctxItem expr]
-               EvStatement (While expr stmt) -> pushElements [EvLoop (ctxItem expr) Nothing stmt,EvExpr $ ctxItem expr]
+               EvStatement (While expr stmt) -> pushElements [EvLoop (ctxItem expr) [] stmt,EvExpr $ ctxItem expr]
                EvStatement (DoWhile stmt expr) -> 
-                   pushElements [EvLoop (ctxItem expr) Nothing stmt, EvExpr (ctxItem expr),EvStatement stmt]
+                   pushElements [EvLoop (ctxItem expr) [] stmt, EvExpr (ctxItem expr),EvStatement stmt]
                EvStatement (For mexpr1 mexpr2 mexpr3 stmt) ->
                    do let expr =  case mexpr2 of
                                       Nothing -> (IntLit 1)
                                       Just expr2 -> ctxItem expr2
-                      pushElement (EvLoop expr (fromMCtx mexpr3) stmt)
+                      pushElement (EvLoop expr (mexpr3) stmt)
                       pushElement (EvExpr $ expr)
-                      case mexpr1 of
-                          Nothing -> return ()
-                          Just expr1 -> pushElement (EvExpr $ ctxItem expr1)
+                      pushElements [EvDiscard, EvExpr (ListExpr mexpr1)]
                       continue
                EvStatement (Compound ss) ->
                    do pushScope [] $ labelBlocks ss
@@ -745,18 +743,16 @@ eval' =
                       initVar1 name t (Just val)
                       continue
                EvLoop expr mexpr stmt ->
-                   do (IVal i) <- popVal
-                      when (i /= 0) $ do
+                   do val <- popVal
+                      when (trueCondition val) $ do
                               pushElement element               -- last, re-evaluate loop
                               pushElement (EvExpr expr)         -- next-to-last, re-evaluate expr)
-                              case mexpr of                     -- if there's an end-of-loop expression, evaluate it
-                                 Nothing -> return ()
-                                 Just expr1 -> pushElement (EvExpr expr1)
+                              pushElements [EvDiscard, EvExpr (ListExpr mexpr)]  -- evaluate end-of-loop expressions
                               pushElement (EvStatement stmt)    -- first, evaluate statement)
                       continue
                EvCond stmt1 stmt2 ->
-                   do (IVal i) <- popVal
-                      pushElement (EvStatement (if i == 0 then stmt2 else stmt1))
+                   do val <- popVal
+                      pushElement (EvStatement (if trueCondition val then stmt1 else stmt2))
                       continue
                EvExpr (IntLit i) -> pushVal (IVal i) >> continue
                EvExpr (FloatLit f) -> pushVal (FVal f) >> continue
@@ -1016,8 +1012,18 @@ eval' =
                    x <- popVal
                    pushVal $ RVal (toFloat x) (toFloat y) (toFloat z) (toFloat s)
                    continue
-               x -> error ("TODO: add all operators: " ++ (show x))
 
+trueCondition (IVal i) = (i /= 0)
+trueCondition (FVal f) = (f /= 0)
+trueCondition (SVal s) = not (null s)
+trueCondition (LVal l) = not (null l)
+trueCondition v@(VVal _ _ _) = v /= llcZeroVector
+trueCondition r@(RVal _ _ _ _) = r /= llcZeroRotation
+trueCondition (KVal k) = k /= nullKey &&
+    case map tr k of
+        "ffffffff-ffff-ffff-ffff-ffffffffffff" -> True
+        _ -> False
+    where tr c = if c `elem` "0123456789abcdef" then 'f' else c
 -- TODO: LSL also will parse hex notation for strings and floats...
 parseVector s =
     case [(VVal x y z,t) | ("<",t0) <- lex s,

@@ -110,7 +110,7 @@ data Expr = IntLit Int
 data Statement = Compound [CtxStmt]
                | While CtxExpr Statement
                | DoWhile Statement CtxExpr
-               | For (Maybe CtxExpr) (Maybe CtxExpr) (Maybe CtxExpr) Statement
+               | For ([CtxExpr]) (Maybe CtxExpr) ([CtxExpr]) Statement
                | If CtxExpr Statement Statement
                | Decl Var (Maybe CtxExpr)
                | NullStmt
@@ -659,6 +659,8 @@ validListExprElement (Ctx ctx e) funcs vars locals = do
 validMExpression Nothing funcs vars locals = return LLVoid
 validMExpression (Just expr) funcs vars locals = validCtxExpr expr funcs vars locals
 
+validExpressions es funcs vars locals = mapM_ (\ e -> validCtxExpr e funcs vars locals) es
+
 validRelExpr (expr1,expr2) funcs vars locals =
     do (t1,t2) <- validEach (expr1,expr2) funcs vars locals
        case (t1,t2) of
@@ -729,24 +731,24 @@ validStatement funcs vars rtype labels locals@(scope:scopes) returns (Decl var@(
                             return ((var:scope):scopes,returns)
 validStatement funcs vars rtype labels locals returns (While expr statement) =
     do t <- validCtxExpr expr funcs vars locals
-       when (t /= LLInteger) $ vfail (srcCtx expr, "expression is not a valid loop condition")
+       --when (t /= LLInteger) $ vfail (srcCtx expr, "expression is not a valid loop condition")
        validStatement funcs vars rtype labels locals False statement
        return (locals,returns)
 validStatement funcs vars rtype labels locals returns (DoWhile statement expr) =
     do t <- validCtxExpr expr funcs vars locals
-       when (t /= LLInteger) $ vfail (srcCtx expr, "expression is not a valid loop condition")
+       --when (t /= LLInteger) $ vfail (srcCtx expr, "expression is not a valid loop condition")
        validStatement funcs vars rtype labels locals False statement
        return (locals,returns)
 validStatement funcs vars rtype labels locals returns (For mexpr1 mexpr2 mexpr3 statement) =
-    do  validMExpression mexpr1 funcs vars locals
-        validMExpression mexpr3 funcs vars locals
+    do  validExpressions mexpr1 funcs vars locals
+        validExpressions mexpr3 funcs vars locals
         t <- validMExpression mexpr2 funcs vars locals
-        when (t /= LLInteger) $ fail ("expression is not a valid loop condition")
+        --when (t /= LLInteger) $ fail ("expression is not a valid loop condition")
         validStatement funcs vars rtype labels locals False statement
         return (locals,returns)
 validStatement funcs vars rtype labels locals returns (If expr thenStmt elseStmt) =
     do t <- validCtxExpr expr funcs vars locals
-       when (t /= LLInteger) $ vfail (srcCtx expr, "expression is not a valid 'if' condition")
+       --when (t /= LLInteger) $ vfail (srcCtx expr, "expression is not a valid 'if' condition")
        (_,ret1) <- validStatement funcs vars rtype labels locals False thenStmt
        (_,ret2) <- validStatement funcs vars rtype labels locals False elseStmt
        return (locals,returns || ret1 && ret2)
@@ -883,8 +885,9 @@ rewriteStatement n bindings (DoWhile stmt expr) =
     (n, bindings, DoWhile stmt' (rewriteCtxExpr bindings expr))
 rewriteStatement n bindings (For mexpr1 mexpr2 mexpr3 stmt) =
     let (_,_,stmt') = rewriteStatement n bindings stmt
-        rewriteMExpr = rewriteMExpression bindings in
-    (n, bindings, For (rewriteMExpr mexpr1) (rewriteMExpr mexpr2) (rewriteMExpr mexpr3) stmt')
+        rewriteMExpr = rewriteMExpression bindings 
+        rewriteEs = rewriteCtxExprs bindings in
+    (n, bindings, For (rewriteEs mexpr1) (rewriteMExpr mexpr2) (rewriteEs mexpr3) stmt')
 rewriteStatement n bindings (If expr stmt1 stmt2) = 
     let (_,_,stmt1') = rewriteStatement n bindings stmt1
         (_,_,stmt2') = rewriteStatement n bindings stmt2 in
@@ -899,8 +902,7 @@ rewriteStatement n bindings (Return (Just expr)) = (n, bindings, Return $ Just $
 rewriteStatement n bindings (Do expr) = (n, bindings, Do $ rewriteCtxExpr bindings expr)
 rewriteStatement n bindings s = (n, bindings, s)
 
-rewriteExpressions bindings [] = []
-rewriteExpressions bindings (e:es) = (rewriteExpression bindings e):(rewriteExpressions bindings es)
+--rewriteExpressions bindings es = map (rewriteExpression bindings) es
 
 rewriteCtxExpr bindings (Ctx ctx expr) = Ctx ctx $ rewriteExpression bindings expr
 rewriteCtxExprs bindings ctxExprs = map (rewriteCtxExpr bindings) ctxExprs

@@ -31,7 +31,9 @@ lslStyle = javaStyle
                P.reservedNames = ["state","default","string","integer","list","vector","rotation","key","float","if","else",
                                 "while","for","do","jump","return","default", "$import", "$module","quaternion"],
                P.caseSensitive = True,
-               P.identStart = letter <|> char '_' }
+               P.identStart = letter <|> char '_',
+               P.opLetter = oneOf "*/+:!#$%&*+./=?@\\^|-~",
+               P.opStart = oneOf ":!#$%&*+./<=>?@\\^|-~" }
 lexer :: P.TokenParser ()
 lexer  = P.makeTokenParser lslStyle
 
@@ -385,11 +387,11 @@ stateStatement = do reserved "state"
 forStatement = do reserved "for"
                   char '('
                   whiteSpace
-                  mexpr1 <- option Nothing (expr >>= return . Just)
+                  mexpr1 <- sepBy expr comma
                   semi
                   mexpr2 <- option Nothing (expr >>= return . Just)
                   semi
-                  mexpr3 <- option Nothing (expr >>= return . Just)
+                  mexpr3 <- sepBy expr comma
                   char ')'
                   whiteSpace
                   stmt <- statement
