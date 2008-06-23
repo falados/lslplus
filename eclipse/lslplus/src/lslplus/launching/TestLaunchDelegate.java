@@ -17,10 +17,10 @@ import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.Path;
 import org.eclipse.debug.core.ILaunch;
 import org.eclipse.debug.core.ILaunchConfiguration;
-import org.eclipse.debug.core.model.ILaunchConfigurationDelegate;
+import org.eclipse.debug.core.model.LaunchConfigurationDelegate;
 import org.eclipse.jface.dialogs.MessageDialog;
 
-public class TestLaunchDelegate implements ILaunchConfigurationDelegate {
+public class TestLaunchDelegate extends LaunchConfigurationDelegate {
 
 	static final String BLANK = ""; //$NON-NLS-1$
     private static final String UNIT_TESTER_EXE = "UnitTester2.exe"; //$NON-NLS-1$
