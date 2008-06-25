@@ -90,7 +90,7 @@ renderStatement' n (Compound stmts) =
 renderStatement' n (While expr stmt) = 
     renderString "while (" . renderCtxExpr expr . renderChar ')' . renderStatement True n stmt
 renderStatement' n (DoWhile stmt expr) = 
-    renderString "do " . renderStatement True n stmt . renderString " while (" . renderCtxExpr expr . renderChar ')'
+    renderString "do " . renderStatement True n stmt . doHang False n . renderString "while (" . renderCtxExpr expr . renderString ");\n"
 renderStatement' n (For mexpr1 mexpr2 mexpr3 stmt) =
     renderString "for (" . renderCtxExprs "" mexpr1 . renderString "; " . renderOptionalExpression mexpr2 .
     renderString "; " . renderCtxExprs "" mexpr3 . renderString ")" . renderStatement True n stmt

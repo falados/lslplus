@@ -272,9 +272,9 @@ validLSLScript library (LSLScript globs states) =
         let vars = reverse typedVars
         let funcDecs = typedFuncs ++ predefFuncs
         (globvars,funcs,_,_) <- foldM (validGlob library vars funcDecs) ([],[],[],[]) globs
-        validStates [] vars funcDecs states
+        validStates snames [] vars funcDecs states
         return (reverse globvars,funcs,states)
-
+    where snames = let sname (State cn _) = ctxItem cn in map sname states
 validGlob _ vars funcDecs (globvars,funcs,imports,namesUsed) (GV v mexpr) =
     do when (isConstant $ varName v') $ vfail (srcCtx v, varName v' ++ " is a predefined constant")
        -- find the vars that are defined prior to this global variable -- only one of these
@@ -292,7 +292,7 @@ validGlob _ vars funcDecs (globvars,funcs,imports,namesUsed) (GV v mexpr) =
 validGlob _ vars funcDecs (globvars,funcs,imports,namesUsed) (GF f@(Func (FuncDec name t params) statements)) =
     do  noDupVars [] params
         when (ctxItem name `elem` namesUsed) $ vfail (srcCtx name, ctxItem name ++ " is already defined")
-        returns <- validStatements funcDecs vars t [] [[],params'] statements
+        returns <- validStatements False [] funcDecs vars t [] [[],params'] statements
         when (not returns && t /= LLVoid) $
             vfail (srcCtx name, "function " ++ (ctxItem name) ++ ": not all code paths return a value")
         return (globvars,f:funcs,imports,(ctxItem name):namesUsed)
@@ -349,15 +349,15 @@ validBindings vars freevars bindings =
                             | otherwise -> f xys
          in f bindings
 
-validState used vars funcs (State (Ctx ctx name) handlers) =
+validState snames used vars funcs (State (Ctx ctx name) handlers) =
     do when (name `elem` used) $ vfail (ctx, name ++ " already used")
-       incontext (ctx,"") $ validHandlers [] funcs vars handlers
+       incontext (ctx,"") $ validHandlers snames [] funcs vars handlers
        return name
        
-validStates used vars funcs [] = return ()
-validStates used vars funcs (s:ss) =
-    do  name <- validState used vars funcs s
-        validStates (name:used) vars funcs ss
+validStates snames used vars funcs [] = return ()
+validStates snames used vars funcs (s:ss) =
+    do  name <- validState snames used vars funcs s
+        validStates snames (name:used) vars funcs ss
         
 validCast t0 t1 =
     let validCasts = [(LLInteger,LLFloat), (LLFloat,LLInteger),
@@ -721,7 +721,7 @@ incompatibleOperands expr t0 t1 =
 defined :: String -> [Var] -> Bool
 defined n = any (\ (Var n' _) -> n == n')
 
-validStatement funcs vars rtype labels locals@(scope:scopes) returns (Decl var@(Var name t) expr) = 
+validStatement _ _ funcs vars rtype labels locals@(scope:scopes) returns (Decl var@(Var name t) expr) = 
     do when (defined name $ concat locals) $ fail ("variable " ++ name ++ " already defined") -- can't hide another local, even in a surrounding scope
        when (isConstant name) $ fail ("variable " ++ name ++ " is a predefined constant")
        case expr of
@@ -729,70 +729,73 @@ validStatement funcs vars rtype labels locals@(scope:scopes) returns (Decl var@(
            Just expr' -> do t' <- validCtxExpr expr' funcs vars locals
                             when (not $ matchTypes t t') $ vfail (srcCtx expr', "type of expression in declaration of " ++ name ++ " does not match " ++ lslTypeString t)
                             return ((var:scope):scopes,returns)
-validStatement funcs vars rtype labels locals returns (While expr statement) =
+validStatement scallow snames funcs vars rtype labels locals returns (While expr statement) =
     do t <- validCtxExpr expr funcs vars locals
        --when (t /= LLInteger) $ vfail (srcCtx expr, "expression is not a valid loop condition")
-       validStatement funcs vars rtype labels locals False statement
+       validStatement scallow snames funcs vars rtype labels locals False statement
        return (locals,returns)
-validStatement funcs vars rtype labels locals returns (DoWhile statement expr) =
+validStatement scallow snames funcs vars rtype labels locals returns (DoWhile statement expr) =
     do t <- validCtxExpr expr funcs vars locals
        --when (t /= LLInteger) $ vfail (srcCtx expr, "expression is not a valid loop condition")
-       validStatement funcs vars rtype labels locals False statement
+       validStatement scallow snames funcs vars rtype labels locals False statement
        return (locals,returns)
-validStatement funcs vars rtype labels locals returns (For mexpr1 mexpr2 mexpr3 statement) =
+validStatement scallow snames funcs vars rtype labels locals returns (For mexpr1 mexpr2 mexpr3 statement) =
     do  validExpressions mexpr1 funcs vars locals
         validExpressions mexpr3 funcs vars locals
         t <- validMExpression mexpr2 funcs vars locals
         --when (t /= LLInteger) $ fail ("expression is not a valid loop condition")
-        validStatement funcs vars rtype labels locals False statement
+        validStatement scallow snames funcs vars rtype labels locals False statement
         return (locals,returns)
-validStatement funcs vars rtype labels locals returns (If expr thenStmt elseStmt) =
+validStatement scallow snames funcs vars rtype labels locals returns (If expr thenStmt elseStmt) =
     do t <- validCtxExpr expr funcs vars locals
        --when (t /= LLInteger) $ vfail (srcCtx expr, "expression is not a valid 'if' condition")
-       (_,ret1) <- validStatement funcs vars rtype labels locals False thenStmt
-       (_,ret2) <- validStatement funcs vars rtype labels locals False elseStmt
+       (_,ret1) <- validStatement scallow snames funcs vars rtype labels locals False thenStmt
+       (_,ret2) <- validStatement scallow snames funcs vars rtype labels locals False elseStmt
        return (locals,returns || ret1 && ret2)
-validStatement _ _ _ _ locals returns NullStmt = return (locals,returns)
-validStatement funcs vars rtype labels locals _ (Return Nothing) = 
+validStatement _ _ _ _ _ _ locals returns NullStmt = return (locals,returns)
+validStatement _ _ funcs vars rtype labels locals _ (Return Nothing) = 
     do  when (rtype /= LLVoid) (fail "function must return a value")
         return (locals,True)
-validStatement funcs vars rtype labels locals _ (Return (Just expr)) = 
+validStatement _ _ funcs vars rtype labels locals _ (Return (Just expr)) = 
     do  t <- validCtxExpr expr funcs vars locals
         when (t /= rtype && not (all (`elem` [LLString,LLKey]) [t,rtype])) (fail "inappropriate return type for function/handler")
         return (locals,True)
-validStatement funcs vars rtype labels locals returns (StateChange name) = return (locals,returns)
-validStatement funcs vars rtype labels locals returns (Do expr) = validCtxExpr expr funcs vars locals>>return (locals,returns)
-validStatement funcs vars rtype labels locals returns (Compound stmts) = 
-    do  returns' <- validStatements funcs vars rtype labels ([]:locals) stmts
+validStatement scallow snames funcs vars rtype labels locals returns (StateChange name) = do
+    when (not scallow) $ fail ("state changes not allowed from this context")
+    when (not (name `elem` snames)) $ fail (name ++ " is not a valid state")
+    return (locals,returns)
+validStatement _ _ funcs vars rtype labels locals returns (Do expr) = validCtxExpr expr funcs vars locals>>return (locals,returns)
+validStatement scallow snames funcs vars rtype labels locals returns (Compound stmts) = 
+    do  returns' <- validStatements  scallow snames funcs vars rtype labels ([]:locals) stmts
         return (locals,returns || returns')
-validStatement funcs vars rtype labels locals _ (Label _) = return (locals,False)
-validStatement funcs vars rtype labels locals returns (Jump s) = 
+validStatement _ _ funcs vars rtype labels locals _ (Label _) = return (locals,False)
+validStatement _ _ funcs vars rtype labels locals returns (Jump s) = 
     do when (s `notElem` concat labels) $ fail ("no such label to jump to: " ++ s)
        return (locals,returns)
 
-validStatement' funcs vars rtype labels locals returns line (Ctx ctx stmt) = 
-  incontext (ctx, "") $ validStatement funcs vars rtype labels locals returns stmt
+validStatement' scallow snames funcs vars rtype labels locals returns line (Ctx ctx stmt) = 
+  incontext (ctx, "") $ validStatement scallow snames funcs vars rtype labels locals returns stmt
 
-validStatements :: [FuncDec] -> [Var] -> LSLType -> [[String]] -> [[Var]] -> [CtxStmt] -> Validity Bool
-validStatements funcs vars rtype labels locals stmts =
+validStatements :: Bool -> [String] -> [FuncDec] -> [Var] -> LSLType -> [[String]] -> [[Var]] -> [CtxStmt] -> Validity Bool
+validStatements scallow snames funcs vars rtype labels locals stmts =
     do let newLabels = map (\ (Label s) -> s) $ filter isLabel (ctxItems stmts)
        (_,r') <- foldM (\ (l,r) (n, s) -> 
-           validStatement' funcs vars rtype (newLabels:labels) l r n s) (locals,False) $ zip [1..] stmts
+           validStatement' scallow snames funcs vars rtype (newLabels:labels) l r n s) (locals,False) $ zip [1..] stmts
        return r'
 
-validHandler used funcs vars (Handler (Ctx ctx name) args stmts) = 
+validHandler snames used funcs vars (Handler (Ctx ctx name) args stmts) = 
     do  when (name `elem` used) $ vfail (ctx,name ++ " already used in state")
         types <- incontext (ctx,"handler: ") $ lookupM name goodHandlers
         when (types /= map varType args') $ vfail (ctx,"invalid argument types for handler " ++ name)
         when (length args /= (length $ nub $ map varName args')) $ vfail (ctx,"not all argument names are unique for handler " ++ name)
-        validStatements funcs vars LLVoid [] [[],args'] stmts
+        validStatements True snames funcs vars LLVoid [] [[],args'] stmts
         return name
     where args' = ctxItems args
         
-validHandlers _ _ _ [] = return ()
-validHandlers used funcs vars (h:hs) =
-    do  name <- validHandler used funcs vars h
-        validHandlers (name:used) funcs vars hs
+validHandlers _ _ _ _ [] = return ()
+validHandlers snames used funcs vars (h:hs) =
+    do  name <- validHandler snames used funcs vars h
+        validHandlers snames (name:used) funcs vars hs
 
 -- Validating a library of modules
 
