@@ -646,6 +646,7 @@ public class TestEditor extends EditorPart implements NodeListener {
 			    curEditor = new TextCellEditor(fTree);
 			    curEditor.setValidator(new ICellEditorValidator() {
                     public String isValid(Object value) {
+                        if (value == null) return null;
                         NodeStatus status = n.checkValueString(value.toString());
                         if (status.isOk()) return null;
                         return status.toString();

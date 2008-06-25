@@ -361,7 +361,8 @@ public class TestProject {
         }
 
         public String getValueString() {
-            return (String)getValue();
+            String s = (String)getValue();
+            return s == null ? "" : s;
         }
 
         public boolean isDeletable() {
