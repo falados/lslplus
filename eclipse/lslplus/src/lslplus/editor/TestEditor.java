@@ -824,7 +824,9 @@ public class TestEditor extends EditorPart implements NodeListener {
 		simProjectName = fullPath.removeFileExtension().lastSegment();
 		if (file != null) {
 			try {
-				world = TestProject.fromLslTestSuite(LslTestSuite.fromXml(file.getContents(), file));
+			    boolean dirty[] = { false };
+				world = TestProject.fromLslTestSuite(LslTestSuite.fromXml(file.getContents(), file), dirty);
+				if (dirty[0]) incChangeCount();
 			} catch (CoreException e) {
 				Util.log(e, "Corrupted sim project file: " + e.getMessage()); //$NON-NLS-1$
 				world = null;
