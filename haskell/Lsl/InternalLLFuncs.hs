@@ -211,17 +211,19 @@ llInsertString _ [SVal dst, IVal pos, SVal src] =
 
 separate :: Eq a => [a] -> [[a]] -> [[a]] -> [a] -> Bool -> [[a]]
 separate [] _ _ accum keepNulls = if keepNulls || length accum > 0 then [reverse accum] else []
-separate l@(a:as) seps spacers accum keepNulls =
+separate l seps spacers accum keepNulls =
    case find ((flip isPrefix) l) seps of
-       Nothing -> 
+       Nothing ->  
            case find ((flip isPrefix) l) spacers of
-               Nothing -> separate as seps spacers (a:accum) keepNulls
-               Just p -> if accum == [] && not keepNulls then
-                             p:(separate as seps spacers [] keepNulls)
-                         else (reverse accum):p:(separate as seps spacers [] keepNulls)
-       Just p -> if accum == [] && not keepNulls then
-                     separate as seps spacers [] keepNulls
-                 else (reverse accum):(separate as seps spacers [] keepNulls)
+               Nothing -> let rest = tail l in separate rest seps spacers (head l:accum) keepNulls
+               Just p -> let rest = drop (length p) l in
+                         if accum == [] && not keepNulls then
+                             p:(separate rest seps spacers [] keepNulls)
+                         else (reverse accum):p:(separate rest seps spacers [] keepNulls)
+       Just p -> let rest = drop (length p) l in
+                 if accum == [] && not keepNulls then
+                     separate rest seps spacers [] keepNulls
+                 else (reverse accum):(separate rest seps spacers [] keepNulls)
 
 
 llStringTrim _ [SVal string, trimType ] = 

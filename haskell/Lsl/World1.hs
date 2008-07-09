@@ -1204,7 +1204,7 @@ llSetTimerEvent (ScriptInfo _ _ sn pk _) [FVal interval] =
               let wq' = flip filter wq $ \ e -> case e of
                       (_,TimerEvent _ (pk',sn')) -> pk /= pk' || sn /= sn'
                       _ -> True
-              setWQueue wq
+              setWQueue wq'
               
 llSetVehicleFlags info@(ScriptInfo _ _ _ pk _) [IVal flagsToSet] =
     runErrFunc info "llSetVehicleFlags" () (do
