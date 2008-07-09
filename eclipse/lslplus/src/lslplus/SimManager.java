@@ -222,6 +222,8 @@ public class SimManager implements SimEventListener {
             protected IStatus run(IProgressMonitor monitor) {
                 String metaDataString = LslPlusPlugin.runTask("SimMetaData", "");  //$NON-NLS-2$
                 Util.log("metaDataString = " + metaDataString);
+                if (metaDataString == null) return new Status(IStatus.ERROR, LslPlusPlugin.PLUGIN_ID,
+                        "Can't get simulator information.  Possible plugin misconfiguration or incompatibility with host platform");
                 SimMetaData metaData = SimMetaData.fromXML(metaDataString);
                 
                 HashMap map = new HashMap();

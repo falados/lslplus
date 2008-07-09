@@ -141,7 +141,10 @@ public class LslPlusPlugin extends AbstractUIPlugin {
     public static Process launchCoreCommand(String command, boolean redir) {
         try {
             File f = findExecutable(LSL_EXECUTABLE);
-            if (f == null) return null;
+            if (f == null) {
+                Util.error("Can't find executable (" + LSL_EXECUTABLE + ")");
+                return null;
+            }
             
             ProcessBuilder builder = new ProcessBuilder(new String[] { f.getPath(), command });
             builder.redirectErrorStream(redir);
@@ -204,6 +207,9 @@ public class LslPlusPlugin extends AbstractUIPlugin {
         if (DEBUG) Util.log("expression: " + expression);
         String result = runTask("ExpressionHandler", expression); //$NON-NLS-1$
         if (DEBUG) Util.log("result: " + result);
+        if (result == null) {
+            return "Can't evaluate expression (internal error)";
+        }
         XStream xstream = new XStream(new DomDriver());
         xstream.alias("result", ValidationResult.class); //$NON-NLS-1$
         ValidationResult e = (ValidationResult) xstream.fromXML(result);
