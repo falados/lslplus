@@ -738,13 +738,22 @@ public class TestProject {
         return n;
     }
     
-    public static SuiteNode fromLslTestSuite(LslTestSuite suite) {
+    public static SuiteNode fromLslTestSuite(LslTestSuite suite, boolean[] dirty) {
         SuiteNode suiteNode = new SuiteNode(null, suite.getResource().getProjectRelativePath().lastSegment());
         suiteNode.setResource((IFile)suite.getResource());
         for (int i = 0; i < suite.getTests().length; i++) {
             LslTest t = suite.getTests()[i];
-            TestNode node = new TestNode(suiteNode,t.getName(), t.getEntryPoint().getFileName() +
-                    "/" + t.getEntryPoint().getPath()); //$NON-NLS-1$
+            TestNode node = null;
+            try {
+                node = new TestNode(suiteNode,t.getName(), t.getEntryPoint().getFileName() +
+                        "/" + t.getEntryPoint().getPath());
+            } catch (RuntimeException e) {
+                Util.log(e, "couldn't load test");
+                if (dirty.length >= 0) dirty[0] = true;
+                continue;
+            }
+            
+            
             suiteNode.addChild(node);
             
             ArgumentsListNode argsList = (ArgumentsListNode) node.findChildByName("args");
