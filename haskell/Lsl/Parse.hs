@@ -276,10 +276,11 @@ invExpr = ctxify ((char '~' <?> "prefix operator") >> whiteSpace >> expr2 >>= re
 negExpr = ctxify ((char '-' <?> "prefix operator") >> whiteSpace >> expr2 >>= return.Neg)
 
 atomicExpr = (ctxify $
-              do n <- naturalOrFloat
-                 return $ case n of
-                    Left nat -> (IntLit $ fromIntegral nat)
-                    Right flt -> (FloatLit $ fromRational $ toRational flt))
+              try ( do m <- option 1 (reservedOp "-" >> return (-1))
+                       n <- naturalOrFloat
+                       return $ case n of
+                           Left nat -> (IntLit $ m * fromIntegral nat)
+                           Right flt -> (FloatLit $ fromRational $ toRational m * toRational flt)))
          <|> (ctxify (stringLiteral >>= return.StringLit))
          <|> (ctxify listExpr)
          <|> (ctxify vecRotExpr)
@@ -299,7 +300,7 @@ prefixExpr = ctxify $
                 v <- var
                 return $ f v
                             
-unaryExpr = choice [try prefixExpr,notExpr,invExpr,negExpr,try castExpr,atomicExpr]
+unaryExpr = choice [try prefixExpr,notExpr,invExpr, negExpr,try castExpr,atomicExpr]
 
 expr2 :: GenParser Char () (Ctx Expr)
 expr2 = choice [try assignment, try postfixExpr, unaryExpr]
