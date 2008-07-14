@@ -2640,7 +2640,7 @@ processEvent chat@(Chat chan name key msg location range) =
        let listeners'= [ l | (l,_,_) <- filter (matchListener chat) locatedListeners]
        -- event goes to all UNIQUE addresses in list
        let addresses = nub $ map listenAddress listeners'
-       mapM (\ (key,sid) -> pushEvent (Event "listen" [IVal chan, SVal name, KVal key, SVal msg] M.empty) key sid) addresses
+       mapM (\ (key',sid) -> pushEvent (Event "listen" [IVal chan, SVal name, KVal key, SVal msg] M.empty) key' sid) addresses
        return ()
     where locateListener (listener,active) = do
               (VVal x y z) <- getPos (listenerPrimKey listener)
