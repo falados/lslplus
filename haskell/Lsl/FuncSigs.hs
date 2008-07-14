@@ -157,7 +157,7 @@ funcSigs = [
     ("llGetWallclock",LLFloat,[]),
     ("llGiveInventory",LLVoid,[LLKey,LLString]),
     ("llGiveInventoryList",LLVoid,[LLKey,LLString,LLList]),
-    ("llGiveMoney",LLVoid,[LLKey,LLInteger]),
+    ("llGiveMoney",LLInteger,[LLKey,LLInteger]),
     ("llGodLikeRezObject",LLVoid,[LLKey,LLVector]),
     ("llGround",LLFloat,[LLVector]),
     ("llGroundContour",LLVector,[LLVector]),

@@ -738,7 +738,7 @@ llGiveMoney info@(ScriptInfo _ _ sn pk _) [KVal ak, IVal amount] =
         perm <- M.lookup permKey (scriptPermissions script)
         when (perm .&. cPermissionAttach == 0) $ throwError "no permission"
         lift $ logFromScript info ("llGiveMoney: pretending to give " ++ show amount ++ " to avatar with key " ++ ak)
-    ) >> continueWith VoidVal
+    ) >> continueWith (IVal 0)
     
 llGetPermissionsKey (ScriptInfo _ _ sid pk _) [] =
     fromErrorT nullKey (lift getWorldScripts >>= M.lookup (pk,sid) >>= return . fromMaybe nullKey . scriptLastPerm) >>= continueWith . KVal

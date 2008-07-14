@@ -229,7 +229,41 @@ listExpr = do whiteSpace
               exprs <- (brackets $ sepBy expr comma) <?> "list expression"
               return $ ListExpr exprs
               
-structExpr = do  whiteSpace
+-- structExpr = do  whiteSpace
+--                  char '<' <?> "vector/rotation expression"
+--                  whiteSpace
+--                  e1 <- expr
+--                  mtrace "structExpr:1 " e1
+--                  char ','
+--                  whiteSpace
+--                  e2 <- expr
+--                  mtrace "structExpr:2 " e2
+--                  char ','
+--                  whiteSpace
+--                  e3 <- expr
+--                  mtrace "structExpr:3 " e3
+--                  return (e1,e2,e3)
+-- vecRotExpr = do  (x,y,z) <- structExpr
+--                  mtrace "vec/rot" "hi"
+--                  (do char '>'
+--                      whiteSpace
+--                      return $ VecExpr x y z) <|> 
+--                         (do char ',' 
+--                             whiteSpace
+--                             e <- expr 
+--                             char '>'
+--                             whiteSpace
+--                             return $ RotExpr x y z e)
+
+-- there's a conflict between a relational expression embedded in the last component of a vector/rotation and the
+-- the normal end of the expression... in particular:
+-- v = <1,1,1 > -<1,2,3>>; 
+-- is not a syntax error (but is a type error), but you can't tell the difference between that and
+-- v = <1,1,1 > -<1,2,3>;
+-- which is the difference between two vectors (which is both syntactically correct and type correct) until you
+-- parse the ';'.  So the complexity of the grammar here exists to disambiguate these cases (which requires a
+-- bit of lookahead...)
+structStart = do whiteSpace
                  char '<' <?> "vector/rotation expression"
                  whiteSpace
                  e1 <- expr
@@ -238,23 +272,23 @@ structExpr = do  whiteSpace
                  whiteSpace
                  e2 <- expr
                  mtrace "structExpr:2 " e2
-                 char ','
-                 whiteSpace
-                 e3 <- expr
-                 mtrace "structExpr:3 " e3
-                 return (e1,e2,e3)
-vecRotExpr = do (x,y,z) <- structExpr
-                mtrace "vec/rot" "hi"
-                (do char '>'
-                    whiteSpace
-                    return $ VecExpr x y z) <|> 
-                        (do char ',' 
-                            whiteSpace
-                            e <- expr 
-                            char '>'
-                            whiteSpace
-                            return $ RotExpr x y z e)
-
+                 char ',' >> whiteSpace
+                 return (e1,e2)
+                 
+vecRotExpr = do (x,y) <- structStart
+                ((try (do z <- expr
+                          char ','
+                          s <- tailStruct
+                          return $ RotExpr x y z s)) <|>
+                 (do z <- tailStruct
+                     return $ VecExpr x y z))
+                     
+tailStruct = (try (do e <- expr
+                      char '>' >> whiteSpace
+                      return e))
+             <|> (do e <- shiftExpr
+                     char '>' >> whiteSpace
+                     return e)                 
 callExpr = do 
     name <- ctxify identifier
     exprs <- parens $ sepBy expr comma
