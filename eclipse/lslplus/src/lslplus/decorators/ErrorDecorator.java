@@ -42,6 +42,7 @@ public class ErrorDecorator implements ILightweightLabelDecorator {
 			return;
 		}
 		try {
+		    if (!project.isOpen()) return;
 			project.open(null);
 			if (project.hasNature(LslProjectNature.ID)) { 
 				LslProjectNature nature = (LslProjectNature) project.getNature(LslProjectNature.ID);
