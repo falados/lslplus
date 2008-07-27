@@ -146,7 +146,7 @@ funcSigs = [
     ("llGetSunDirection",LLVector,[]),
     ("llGetTexture",LLString,[LLInteger]),
     ("llGetTextureOffset",LLVector,[LLInteger]),
-    ("llGetTextureRot",LLRot,[LLInteger]),
+    ("llGetTextureRot",LLFloat,[LLInteger]),
     ("llGetTextureScale",LLVector,[LLInteger]),
     ("llGetTime",LLFloat,[]),
     ("llGetTimeOfDay",LLFloat,[]),

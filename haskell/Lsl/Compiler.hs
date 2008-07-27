@@ -17,6 +17,7 @@ import System.Time
 import Text.XML.HaXml hiding (when,xmlEscape)
 import Text.XML.HaXml.Posn
 import Text.XML.HaXml.Pretty
+import Lsl.Optimize(optimizeScript) 
 import Lsl.Util
 import Lsl.XmlCreate hiding (emit)
 import qualified Lsl.XmlCreate as E
@@ -130,7 +131,7 @@ renderScriptsToFiles compiledScripts pathTable =
 
 renderScriptToFile stamp path script =
    let newPath = replaceExtension path ".lsl"
-       text = renderCompiledScript stamp script "" in writeFile newPath text
+       text = renderCompiledScript stamp (optimizeScript script) "" in writeFile newPath text
        
 removeOutputScript path = 
     do exists <- doesFileExist outpath

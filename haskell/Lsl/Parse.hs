@@ -277,7 +277,7 @@ structStart = do whiteSpace
                  
 vecRotExpr = do (x,y) <- structStart
                 ((try (do z <- expr
-                          char ','
+                          char ',' >> whiteSpace
                           s <- tailStruct
                           return $ RotExpr x y z s)) <|>
                  (do z <- tailStruct
