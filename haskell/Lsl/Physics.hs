@@ -1,7 +1,8 @@
 module Lsl.Physics(
                    bbIntersect,
                    kin,
-                   primMassApprox
+                   primMassApprox,
+                   checkIntersections
                    )where
 
 import Lsl.Math
@@ -52,3 +53,8 @@ kin t0 t1 t2d zoffs m p0 v0 f (i,ti) =
        di = max 0 (min (t2d (ti - t0)) d)
    in limit (p0 `add3d` (scale3d d v0) `add3d` (scale3d (d^2 / 2) accel) `add3d` (scale3d (di^2/2) accel1), 
              v0 `add3d` (scale3d d accel) `add3d` (scale3d di accel1))
+             
+checkIntersections toBB cmp objects = concat (go objects)
+    where go [] = []
+          go (o:os) = [ pair o o' | (True,o') <- zip (map (bbIntersect (toBB o) . toBB ) os) os] : (go os)
+          pair o o' = if cmp o o' == LT then (o,o') else (o',o)

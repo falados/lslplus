@@ -30,7 +30,6 @@ import Lsl.Parse
 import Lsl.Structure
 import Lsl.Type
 import Lsl.Util
-import Lsl.ValueDB
 import Lsl.WorldDef
 
 import System.Random
@@ -38,36 +37,36 @@ import Test.QuickCheck
 
 -- a data type that defines the state of the 'world'
 data World m = World {
-                    sliceSize :: Int,
-                    maxTick :: Int,
-                    nextPause :: Int,
-                    wqueue :: WorldEventQueue,
-                    wlisteners :: [(Int,(Listener,Bool))],
-                    nextListenerId :: Int,
-                    wobjects :: Map String LSLObject,
-                    wprims :: Map String Prim,
-                    worldScripts :: Map (String,String) Script, 
-                    inventory :: [(String,LSLObject)],
-                    tick :: Int,
-                    msglog :: [LogMessage],
-                    predefs :: [PredefFunc m],
-                    randGen :: StdGen,
-                    wlibrary :: [(String,Validity LModule)],
-                    wscripts :: [(String,Validity CompiledLSLScript)],
-                    worldDB :: ValueDB,
-                    worldEventHandler :: Maybe (String, [(String,LSLValue)]),
-                    worldAvatars :: Map String Avatar,
-                    worldBreakpointManager :: BreakpointManager,
-                    worldSuspended :: Maybe (String,String), -- prim-key, script-name, image
-                    worldRegions :: Map (Int,Int) Region,
-                    worldZeroTime :: Int,
-                    worldKeyIndex :: Integer,
-                    worldWebHandling :: WebHandling,
-                    worldOutputQueue :: [SimEvent],
-                    worldPendingHTTPRequests :: [String],
-                    worldOpenDataChannels :: (Map String (String,String),Map (String,String) String),
-                    worldXMLRequestRegistry :: Map String XMLRequestSourceType,
-                    worldPhysicsTime :: Int
+                    sliceSize :: !Int,
+                    maxTick :: !Int,
+                    nextPause :: !Int,
+                    wqueue :: !WorldEventQueue,
+                    wlisteners :: ![(Int,(Listener,Bool))],
+                    nextListenerId :: !Int,
+                    wobjects :: !(Map String LSLObject),
+                    wprims :: !(Map String Prim),
+                    worldScripts :: !(Map (String,String) Script), 
+                    inventory :: ![(String,LSLObject)],
+                    tick :: !Int,
+                    msglog :: ![LogMessage],
+                    predefs :: ![PredefFunc m],
+                    randGen :: !StdGen,
+                    wlibrary :: ![(String,Validity LModule)],
+                    wscripts :: ![(String,Validity CompiledLSLScript)],
+                    worldEventHandler :: !(Maybe (String, [(String,LSLValue)])),
+                    worldAvatars :: !(Map String Avatar),
+                    worldBreakpointManager :: !BreakpointManager,
+                    worldSuspended :: !(Maybe (String,String)), -- prim-key, script-name, image
+                    worldRegions :: !(Map (Int,Int) Region),
+                    worldZeroTime :: !Int,
+                    worldKeyIndex :: !Integer,
+                    worldWebHandling :: !WebHandling,
+                    worldOutputQueue :: ![SimEvent],
+                    worldPendingHTTPRequests :: ![String],
+                    worldOpenDataChannels :: !(Map String (String,String),Map (String,String) String),
+                    worldXMLRequestRegistry :: !(Map String XMLRequestSourceType),
+                    worldPhysicsTime :: !Int,
+                    worldCollisions :: S.Set (String,String)
                 } deriving (Show)
 
 -- a state monad for the World
@@ -78,10 +77,6 @@ worldM f = StateT (\ s -> return (f s))
 -- extracting/updating the world state -----------------------------------------------------                   
 queryWorld q = worldM (\w -> (q w, w))
 updateWorld u = worldM (\w -> ((), u w))
-
-getWorldDB :: Monad m => WorldM m ValueDB
-getWorldDB = queryWorld worldDB
-setWorldDB db = updateWorld (\ w -> w { worldDB = db })
 
 getSliceSize :: Monad m => WorldM m Int
 getSliceSize = queryWorld sliceSize
@@ -141,6 +136,8 @@ getWorldXMLRequestRegistry :: Monad m => WorldM m (Map String XMLRequestSourceTy
 getWorldXMLRequestRegistry = queryWorld worldXMLRequestRegistry
 getWorldPhysicsTime :: Monad m => WorldM m Int
 getWorldPhysicsTime = queryWorld worldPhysicsTime
+getWorldCollisions :: Monad m => WorldM m (S.Set (String,String))
+getWorldCollisions = queryWorld worldCollisions
 
 getRegion index = (lift getWorldRegions >>= M.lookup index)
 
@@ -169,6 +166,7 @@ getPrimSittingAvatar k = getPrimVal k primSittingAvatar
 getPrimAttachment k = getPrimVal k primAttachment
 getPrimPassTouches k = getPrimVal k primPassTouches
 getPrimPassCollisions k = getPrimVal k primPassCollisions
+getPrimVolumeDetect k = getPrimVal k primVolumeDetect
 getPrimPayInfo k = getPrimVal k primPayInfo
 getPrimPendingEmails k = getPrimVal k primPendingEmails
 getPrimRemoteScriptAccessPin k = getPrimVal k primRemoteScriptAccessPin
@@ -191,6 +189,17 @@ getPrimScripts k = getPrimInventory k >>= return . filter isInvScriptItem
 
 getRootPrim pk =  (getPrimParent pk) >>= return . maybe pk id
  
+getPrimLinkNum pk = do
+    mp <- getPrimParent pk
+    case mp of
+        Nothing -> do  -- this is the root prim
+            links <- lift getObjects >>= M.lookup pk >>= return . primKeys
+            return (if null links then 0 else 1)
+        Just ok -> do
+            links <- lift getObjects >>= M.lookup ok >>= return . primKeys
+            case elemIndex pk links of
+                Nothing -> throwError "internal error, can't find prim in link list of parent object"
+                Just i -> return (i + 1)
 -- TODO: temp until introduce region into Prim definition
 getPrimRegion _ = (lift (return (0 :: Int,0 :: Int)))
 primRegion :: a -> (Int,Int)
@@ -225,6 +234,7 @@ setWorldOpenDataChannels o = updateWorld (\ w -> w { worldOpenDataChannels = o }
 setWorldEventHandler e = updateWorld (\ w -> w { worldEventHandler = e })
 setWorldXMLRequestRegistry r = updateWorld (\ w -> w { worldXMLRequestRegistry = r })
 setWorldPhysicsTime t = updateWorld (\ w -> w { worldPhysicsTime = t })
+setWorldCollisions s = updateWorld (\ w -> w { worldCollisions = s })
 
 setPrim k p = (getPrims >>= return . (M.insert k p) >>= setPrims)
 updatePrimVal k f = runErrPrim k () $ (lift getPrims >>= M.lookup k >>= return . f >>= lift . (setPrim k))
@@ -251,6 +261,7 @@ setPrimSitTarget k v =  updatePrimVal k (\ p -> p { primSitTarget = v })
 setPrimSittingAvatar k v =  updatePrimVal k (\ p -> p { primSittingAvatar = v } )
 setPrimPassTouches k v  =  updatePrimVal k (\ p -> p { primPassTouches = v } )
 setPrimPassCollisions k v  = updatePrimVal k (\ p -> p { primPassCollisions = v } )
+setPrimVolumeDetect k v  = updatePrimVal k (\ p -> p { primVolumeDetect = v } )
 setPrimPayInfo k v = updatePrimVal k (\ p -> p { primPayInfo = v } )
 setPrimAttachment k v =  updatePrimVal k (\ p -> p { primAttachment = v } )
 setPrimInventory k v =  updatePrimVal k (\ p -> p { primInventory = v } )
@@ -270,14 +281,6 @@ updatePrimFace k i f = do
 setPrimFaceAlpha k i v = runErrFace k i () $ updatePrimFace k i (\ f -> f { faceAlpha = v })
 setPrimFaceColor k i v = runErrFace k i () $ updatePrimFace k i (\ f -> f { faceColor = v })
 
-insertWorldDB path value = do
-    wdb <- getWorldDB
-    setWorldDB (insertDB path value wdb)
-
-lookupWorldDB path = do
-    wdb <- getWorldDB
-    return $ lookupDB path wdb
-    
 data WorldEventType = CreatePrim { wePrimName :: String, wePrimKey :: String }
                     | AddScript (String,String) String Bool -- script, prim key, activate
                     | ResetScript String String -- prim key, script name
@@ -439,7 +442,7 @@ primHasActiveHandler pk handler =
               let scriptIndices = map (((,)pk) . fst . inventoryItemNameKey . inventoryItemIdentification) scriptItems
               allScripts <- getWorldScripts
               let scripts = map (flip M.lookup allScripts) scriptIndices
-              return [ image | Just (Script (Valid image) _ _ _ _ _ _ _) <- scripts ]
+              return [ image | Just (Script { scriptImage = (Valid image)} ) <- scripts ]
 scriptHasActiveHandler pk sn handler =
     do script <- lift getWorldScripts >>= M.lookup (pk,sn)
        Valid image <- return $ scriptImage script

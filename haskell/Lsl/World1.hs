@@ -926,6 +926,11 @@ llGetForce info@(ScriptInfo oid _ _ _ _) [] =
 llSetForce info@(ScriptInfo oid _ _ _ _) [v@(VVal x y z), IVal local] =
     runErrFunc info "llSetForce" () (lift $ setPrimForce oid ((x,y,z), local /= 0)) >> continueWith VoidVal
     
+llApplyImpulse info@(ScriptInfo oid _ _ _ _) [v@(VVal x y z), IVal local] =
+    runErrFunc info "llApplyImpulse" () (do
+        t <- lift getTick
+        lift $ setPrimImpulse oid (((x,y,z), local /= 0), t + durationToTicks 1)) >> continueWith VoidVal
+        
 llGetPos (ScriptInfo _ _ _ pk _) [] = getPos pk >>= continueWith
 llGetRootPosition (ScriptInfo oid _ _ _ _) [] = getPos oid >>= continueWith
 
@@ -1172,27 +1177,22 @@ llSetScale (ScriptInfo _ _ _ pk _) [scale] =
           tooSmall = (x < 0.01 || y < 0.01 || z < 0.01)
           clippedVec = (min x 10.0, min y 10.0, min z 10.0) 
   
-llGetBoundingBox _ [KVal k] =
+llGetBoundingBox info [KVal k] =
     do 
         logAMessage LogInfo "sim" "note: llGetBoundingBox does not return accurate results (yet)"
         avatars <- getWorldAvatars
         case M.lookup k avatars of
             Just avatar -> let pos = avatarPosition avatar in
                 continueWith (LVal $ map (vec2VVal . (add3d pos)) [(-1.0,-1.0,-1.0),(1.0,1.0,1.0)])
-            Nothing -> do
-                result <- evalErrorT (getPrimParent k)
+            Nothing -> runErrFunc info "llGetBoundingBox" [] (do
+                result <- getPrimParent k
                 case result of
-                    Left _ -> continueWith $ LVal [VVal 0.0 0.0 0.0]
-                    Right Nothing ->  primBox k
-                    Right (Just oid) -> primBox oid        
-    where primBox pk = do
-            (pos,(xs,ys,zs)) <- fromErrorT ((128,128,0),(1,1,1)) $ do
-                pos <- getPrimPosition k
-                scale <- getPrimScale k
-                return (pos,scale)
-            continueWith (LVal $ map (vec2VVal . (add3d pos)) [(-1.0 * xs, -1.0 * ys, -1.0 * zs),
-                                                               (1.0 * xs, 1.0 * ys, 1.0 * zs)])
-
+                    Nothing ->  getPrim k >>= return . map vec2VVal . tup2l . primBox
+                    (Just oid) -> getPrim oid >>= return . map vec2VVal . tup2l . primBox) >>= continueWith . LVal
+                where tup2l (x,y) = [x,y]    
+primBox prim = let pos = primPosition prim
+                   (xs,ys,zs) = primScale prim 
+                   (xs',ys',zs') = (xs/2,ys/2,zs/2) in (add3d pos (-xs', -ys', -zs'),add3d pos (xs',ys',zs'))
 
 llSetTimerEvent (ScriptInfo _ _ sn pk _) [FVal interval] =
     -- TODO: this may not accurately reflect buggy behavior in SL
@@ -1381,8 +1381,10 @@ updatePrimStatus _ bit prim (IVal i:rest) = return (prim { primStatus = if i == 
                                                                                   else setBit (primStatus prim) bit }, rest)
 updatePrimStatus fMsg _ _ _ = fail fMsg
 
+-- this should work the same as llSetPos...(TODO)
 updatePrimPosition prim (pos@(VVal _ _ _):rest) = return (prim { primPosition = vVal2Vec pos }, rest)
 updatePrimPosition _ _ = fail "insufficient or incorrect parameters for PRIM_POSITION"
+
 updatePrimRotation prim (rot@(RVal _ _ _ _):rest) = return (prim { primRotation = rVal2Rot rot }, rest)
 updatePrimRotation _ _ = fail "insufficient or incorrect parameters for PRIM_ROTATION"
 updatePrimScale prim (scale@(VVal _ _ _):rest) = return (prim { primScale = vVal2Vec scale }, rest)
@@ -2197,6 +2199,7 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llAddToLandPassList",llAddToLandPassList),
         ("llAdjustSoundVolume",llAdjustSoundVolume),
         ("llAllowInventoryDrop",llAllowInventoryDrop),
+        ("llApplyImpulse",llApplyImpulse),
         ("llAttachToAvatar",llAttachToAvatar),
         ("llAvatarOnSitTarget",llAvatarOnSitTarget),
         ("llBreakAllLinks",llBreakAllLinks),
@@ -2497,7 +2500,6 @@ newWorld slice maxt iq = World {
                randGen = mkStdGen 1,
                wlibrary = [],
                wscripts = [],
-               worldDB = emptyDB,
                worldEventHandler = Nothing,
                worldAvatars = M.empty,
                worldBreakpointManager = emptyBreakpointManager,
@@ -2510,7 +2512,8 @@ newWorld slice maxt iq = World {
                worldPendingHTTPRequests = [],
                worldOpenDataChannels = (M.empty,M.empty),
                worldXMLRequestRegistry = M.empty,
-               worldPhysicsTime = 0
+               worldPhysicsTime = 0,
+               worldCollisions = S.empty
            }
            
 newWorld' slice maxt iq lib scripts avatars = 
@@ -2518,12 +2521,11 @@ newWorld' slice maxt iq lib scripts avatars =
         wscripts = scripts, 
         wlibrary = lib,
         worldAvatars = avatars }
-newWorld'' slice maxt iq lib scripts avatars objs prims activeScripts valueDB regions keyIndex webHandling eventHandler =
+newWorld'' slice maxt iq lib scripts avatars objs prims activeScripts regions keyIndex webHandling eventHandler =
     (newWorld' slice maxt iq lib scripts avatars) {
         wobjects = objs,
         wprims = prims,
         worldScripts = activeScripts,
-        worldDB = valueDB,
         worldRegions = regions,
         worldKeyIndex = keyIndex,
         worldWebHandling = webHandling,
@@ -2538,7 +2540,7 @@ ticksPerSecond = 1000
 putWorldEvent delay we = 
     do weq <- getWQueue
        t <- getTick
-       setWQueue $ putWQ (t + durationToTicks delay) we weq
+       setWQueue $ putWQ (t + max (durationToTicks delay) 1) we weq
 
 checkBp bp sm =
     do  bpm <- getWorldBreakpointManager
@@ -2627,13 +2629,13 @@ processEvent (AddScript (name,script) key active) =
                   scriptKey <- newKey
                   updatePrim (\ p -> return $ addScript p (scriptInventoryItem name scriptKey script)) key
                   scripts <- getWorldScripts
-                  setWorldScripts (M.insert (key,name) (Script (Invalid s) False M.empty Nothing t t [] 0) scripts)
+                  setWorldScripts (M.insert (key,name) ((mkScript (Invalid s)) { scriptActive = False, scriptStartTick = t, scriptLastResetTick = t, scriptEventQueue = []}) scripts)
               Just (Valid code) -> do
                   scriptKey <- newKey
                   updatePrim (\ p -> return $ addScript p (scriptInventoryItem name scriptKey script)) key
                   let sstate = initLSLScript code
                   scripts <- getWorldScripts
-                  setWorldScripts (M.insert (key,name) (Script (Valid sstate) True M.empty Nothing t t [Event "state_entry" [] M.empty] 0) scripts)
+                  setWorldScripts (M.insert (key,name) ((mkScript (Valid sstate)) { scriptStartTick = t, scriptLastResetTick =  t }) scripts)
 processEvent chat@(Chat chan name key msg location range) =
     do listeners <- getListeners 
        locatedListeners <- mapM locateListener (map snd listeners)
@@ -2881,18 +2883,18 @@ activateScript pk sn scriptId Nothing startParam =
        worldScripts <- lift getWorldScripts
        case lookup scriptId wscripts of
            Nothing -> do lift $ logAMessage LogWarn "sim" ("script " ++ scriptId ++ " not found")
-                         lift $ setWorldScripts (M.insert (pk,sn) (Script (Invalid (UnknownSourceContext,"")) False M.empty Nothing 0 0  [] 0) worldScripts)
+                         lift $ setWorldScripts (M.insert (pk,sn) ((mkScript (Invalid (UnknownSourceContext,""))) { scriptActive = False, scriptEventQueue = [] }) worldScripts)
            Just (Invalid s) -> 
-               lift $ setWorldScripts (M.insert (pk,sn) (Script (Invalid s) False M.empty Nothing 0 0 [] 0) worldScripts)
+               lift $ setWorldScripts (M.insert (pk,sn) ((mkScript (Invalid s)) { scriptActive = False, scriptEventQueue = []}) worldScripts)
            Just (Valid code) ->
                lift $ setWorldScripts 
                    (M.insert (pk,sn) 
-                             (Script (Valid $ initLSLScript code) True M.empty Nothing 0 0 [Event "state_entry" [] M.empty] 0)
+                             (mkScript (Valid $ initLSLScript code))
                              worldScripts)
 activateScript pk sn _ (Just image) startParam = do
     worldScripts <- lift getWorldScripts
     lift $ setWorldScripts
-        (M.insert (pk,sn) (Script (Valid image) True M.empty Nothing 0 0 [] startParam) worldScripts)
+        (M.insert (pk,sn) ((mkScript (Valid image)) { scriptStartParameter = startParam }) worldScripts)
         
 matchListener (Chat chan' sender' key' msg' (region,position) range) ((Listener pkey sid chan sender key msg),active,(region',position')) =
     active &&
@@ -2913,7 +2915,7 @@ nextActivity =
     do 
         scripts <- getWorldScripts
         t <- getTick
-        let ns = foldl (calcNxt t) Nothing $ M.elems scripts
+        let ns = foldl (calcNxt $ t + 1) Nothing $ M.elems scripts
         wq <- getWQueue
         let ne = case wq of
                      [] -> Nothing
@@ -2944,9 +2946,9 @@ findAndRunScript scriptKey =
        case M.lookup scriptKey scripts of
           Nothing -> return ()
           Just script -> checkAndRunScript scriptKey script
-checkAndRunScript _ (Script (Invalid _) _ _ _ _ _ _ _) = return ()
-checkAndRunScript _ (Script (Valid img) False _ _ _ _ q _) = return ()
-checkAndRunScript k@(pkey,sname) (Script (Valid img) True _ _ _ _ q _) =
+checkAndRunScript _ (Script { scriptImage = (Invalid _)}) = return ()
+checkAndRunScript _ (Script { scriptActive = False }) = return ()
+checkAndRunScript k@(pkey,sname) (Script {scriptImage = (Valid img), scriptEventQueue = q}) =
     do  pInfo <- getPrimInfo pkey
         suspenseInfo <- getWorldSuspended
         case suspenseInfo of
@@ -2981,31 +2983,147 @@ runScript parent index pkey sname primName img q =
                            
 runPhysics :: Monad m => WorldM m ()
 runPhysics = do
-    t0 <- getWorldPhysicsTime
-    t1 <- getTick
-    os <- getObjects
-    when (t1 > t0) $ do
-        flip mapM_ (M.keys os) $ \ pk -> runErrPrim pk () $ do
-            prim <- getPrim pk
-            when (testBit primPhysicsBit $ primStatus prim) $ do
-                mass <- objectMass pk
-                let force = fst (primForce prim) `rot3d` rotation where rotation = if snd $ primForce prim then primRotation prim else (0,0,0,1)
-                let impulse = ((fst . fst . primImpulse) prim `rot3d` rotation, (snd . primImpulse) prim)
-                        where rotation = if (snd . fst . primImpulse) prim then primRotation prim else (0,0,0,1)
-                let (pos,vel) = kin t0 t1 ticksToDuration 0 mass (primPosition prim) (primVelocity prim) force impulse
-                lift $ setPrimPosition pk $! pos
-                lift $ setPrimVelocity pk $! vel
-                return ()
-    setWorldPhysicsTime $! t1
+        t0 <- getWorldPhysicsTime
+        t1 <- getTick
+        os <- getObjects
+        when (t1 > t0) $ do
+            flip mapM_ (M.keys os) $ \ pk -> runErrPrim pk () $ do
+                prim <- getPrim pk
+                when ((flip testBit) primPhysicsBit $ primStatus prim) $ do
+                    mass <- objectMass pk
+                    let force = fst (primForce prim) `rot3d` rotation where rotation = if snd $ primForce prim then primRotation prim else (0,0,0,1)
+                    let impulse = ((fst . fst . primImpulse) prim `rot3d` rotation, (snd . primImpulse) prim)
+                            where rotation = if (snd . fst . primImpulse) prim then primRotation prim else (0,0,0,1)
+                    let (pos,vel) = kin t0 t1 ticksToDuration 0 mass (primPosition prim) (primVelocity prim) force impulse
+                    lift $ setPrimPosition pk $! pos
+                    lift $ setPrimVelocity pk $! vel
+                    return ()
+        handleCollisions
+        setWorldPhysicsTime $! t1
 
+handleCollisions :: Monad m => WorldM m ()
+handleCollisions = do
+        -- look at all non-phantom prims
+        prims <- getPrims >>= return . M.assocs >>= (return . filter ((==0) . (.&. cStatusPhantom) . primStatus . snd))
+        let voldtct = map fst $ filter (primVolumeDetect . snd) prims
+        let cmp x y = compare (fst x) (fst y)
+        let curCollisions = S.fromList [ (k0,k1) | ((k0,p0),(k1,p1)) <- checkIntersections (primBox . snd) cmp prims, 
+                                                   primParent p0 /= Just k1 &&
+                                                   primParent p1 /= Just k0 &&
+                                                   not (primParent p0 == primParent p1 && isJust (primParent p0))]
+        oldCollisions <- getWorldCollisions
+        let formerCollisions = oldCollisions `S.difference` curCollisions
+        let newCollisions = curCollisions `S.difference` oldCollisions
+        runAndLogIfErr "can't process collision starts" () (
+            toObjCollisions newCollisions "collision_start" >>= mapM_ (send "collision_start"))
+        runAndLogIfErr "can't process collisions" () (do
+            objCollisions <- toObjCollisions curCollisions "collision"
+            -- filter out volume detect objects, except for those objects that are attatched
+            let attachment k = do
+                    parent <- getPrimParent k
+                    case parent of
+                        Nothing -> getPrimAttachment k
+                        Just ok -> getPrimAttachment ok
+            objCollisions' <- (mapM (\ v@(k,_) -> (attachment k >>= return . ((,) v))) objCollisions) 
+                >>= return . (filter (\ ((k,_),mv) -> (k `notElem` voldtct) || isJust mv))
+                >>= return . (map fst)
+            mapM_ (send "collision") objCollisions')
+        runAndLogIfErr "can't process collision ends" () (
+            toObjCollisions formerCollisions "collision_end" >>= mapM_ (send "collision_end"))
+        setWorldCollisions curCollisions
+    where send :: Monad m => String -> (String,[(Int,String)]) -> ErrorT String (WorldM m) ()
+          send hn (pk,oinfo) =  collisionScripts >>= mapM_ (sendScript hn pk oinfo)
+              where collisionScripts = do
+                        scripts <- getPrimScripts pk >>= return . (map invName)
+                        filterM (\ sn -> scriptHasActiveHandler pk sn hn) scripts
+          sendScript :: Monad m => String -> String -> [(Int,String)] -> String -> ErrorT String (WorldM m) ()
+          sendScript hn pk oinfo sn = do
+              scripts <- lift $ getWorldScripts
+              return ()
+              case M.lookup (pk,sn) scripts of
+                  Nothing -> throwError "can't find script"
+                  Just (Script { scriptCollisionFilter = (name,key,accept) })
+                          | null name && (null key || nullKey == key) && accept -> pushit oinfo
+                          | null name && (null key || nullKey == key) && not accept -> return ()
+                          | accept -> filterM (matchesIn name key) oinfo >>= pushit
+                          | otherwise -> filterM (matchesOut name key) oinfo >>= pushit
+              where matchesIn name key (_,k) = if k == key 
+                                                   then return True 
+                                                   else (if null key || key == nullKey 
+                                                             then (getPrimName k >>= return . (name==))
+                                                             else return False)
+                    matchesOut name key (_,k) = if k == key 
+                                                    then return False 
+                                                    else (if null key || key == nullKey
+                                                              then (getPrimName k >>= return . not . (name==))
+                                                              else return True)
+                    pushit oinfo = unless (null oinfo) $ lift (pushEvent ev pk sn)
+                        where ev = Event hn [IVal $ length oinfo] 
+                                      (M.fromList $
+                                          (zipWith (\ i (_,k) -> ("key_" ++ show i, KVal k)) [0..] oinfo) ++
+                                          (zipWith (\ i (n,_) -> ("integer_" ++ show i, IVal n)) [0..] oinfo))
+          toObjCollisions collisionsS hn = do
+                  passed <- passes primColliders
+                  colliders' <- mapM (\ (k,cs) -> (getPrimLinkNum k >>= \ i -> return (k,i,cs))) primColliders
+                  colliders'' <- mapM pk2ok (colliders' ++ passed)
+                  colliders''' <-  mapM (\ (k,i,cs) -> filterM (objectHasVolDetect >=> (return . not)) cs >>= return . ((,,) k i)) colliders''
+                  return $ M.toList (foldl combine M.empty (map dist colliders'''))
+              where collisions = S.toList collisionsS
+                    dist (pk,i,cs) = (pk, zip (repeat i) cs)
+                    combine m (k,lv) = case M.lookup k m of
+                            Nothing -> M.insert k lv m
+                            Just lv' -> M.insert k (lv ++ lv') m
+                    --prims = fromListOfPairs collisions
+                    primColliders = map (\ k -> (k, collectColliders collisions k)) (S.toList $ fromListOfPairs collisions)
+                    passes [] = return []
+                    passes ((pk,cs):pcs) = do
+                        passed <- pass hn pk
+                        if passed
+                            then do
+                                parent <- getPrimParent pk >>= maybe (throwError "can't get parent") return
+                                rest <- passes pcs
+                                num <- getPrimLinkNum pk
+                                return ((parent,num,cs):rest)
+                            else passes pcs
+                    pk2ok (pk,i,cs) = primsToObjects cs >>= return . ((,,) pk i)
+                    primsToObjects ks = mapM getPrimParent ks >>= (\ parents -> (return (nub $ zipWith fromMaybe ks parents)))
+                    pass hn k = do
+                        parent <- getPrimParent k
+                        case parent of
+                            Nothing -> return False
+                            Just pk -> do
+                                passOverride <- getPrimPassTouches k
+                                pass <- (k `primHasActiveHandler` hn) >>= return . not
+                                return (pass || passOverride)
+                    fromListOfPairs [] = S.empty
+                    fromListOfPairs ((x,y):ps) = (S.insert x . S.insert y) (fromListOfPairs ps)
+                    collectColliders intsns pk = [ j | (Just j) <- map (other pk) intsns]
+                    objectHasVolDetect ok = do
+                         attach <- getPrimAttachment ok
+                         if isJust attach
+                             then return False
+                             else do
+                                 objs <- lift getObjects
+                                 case M.lookup ok objs of
+                                     Nothing -> throwError "can't get object"
+                                     Just (LSLObject links) -> do
+                                         foldM (\ b k -> if b then return True 
+                                                              else (getPrimVolumeDetect k)) False  links
+                    other k (x,y) | k == x = Just y
+                                  | k == y = Just x
+                                  | otherwise = Nothing
+    
 simulate :: Monad m => WorldM m ()
 simulate =
     do processEvents
        runScripts
        runPhysics
-       --n <- nextActivity
+       mn <- nextActivity
        t <- getTick
-       setTick (t + 1)
+       setTick (case mn of
+           Nothing -> t + 10
+           Just n -> min (t + 10) n)
+       --setTick (t + 1)
        pauseTime <- getNextPause
        suspendInfo <- getWorldSuspended
        if t + 1 >= pauseTime || isSuspended suspendInfo then return () else simulate
@@ -3266,5 +3384,5 @@ lslEventDescriptorToSimInputDef (name, params, delivery, additionalData, descrip
 logInitialProblems world =
     let log = msglog world
         newLog = [LogMessage 0 LogWarn "init" ("script \"" ++ name ++ "\" in prim " ++ prim ++ " failed to activate because of error: " ++ s) |
-                          ((prim,name),Script (Invalid (_,s)) _ _ _ _ _ _ _) <- M.toList (worldScripts world) ] ++ log
+                          ((prim,name),Script { scriptImage = (Invalid (_,s)) }) <- M.toList (worldScripts world) ] ++ log
     in world { msglog = newLog }

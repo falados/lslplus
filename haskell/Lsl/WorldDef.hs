@@ -42,7 +42,8 @@ module Lsl.WorldDef(Avatar(..),
                     primPhysicsBit,
                     worldFromFullWorldDef,
                     worldElement,
-                    defaultRegions
+                    defaultRegions,
+                    mkScript
                    ) where
 
 import Control.Monad
@@ -59,7 +60,7 @@ import Debug.Trace
 import Lsl.DOMProcessing hiding (find)
 import Lsl.Evaluation
 import Lsl.Exec(ScriptImage,initLSLScript)
-import Lsl.Key(mkKey)
+import Lsl.Key(mkKey,nullKey)
 import Lsl.Structure(Validity(..),State(..))
 import Lsl.Type
 import Lsl.ValueDB
@@ -248,6 +249,7 @@ data Prim = Prim {
                     primPendingEmails :: [Email],
                     primPassTouches :: Bool,
                     primPassCollisions :: Bool,
+                    primVolumeDetect :: Bool,
                     primPayInfo :: (Int,Int,Int,Int,Int),
                     primAttachment :: Maybe Attachment,
                     primRemoteScriptAccessPin :: Int,
@@ -348,6 +350,7 @@ emptyPrim name key =
            primPendingEmails = [],
            primPassTouches = False,
            primPassCollisions = False,
+           primVolumeDetect = False,
            primPayInfo = ( -2, -2, -2, -2, -2),
            primAttachment = Nothing,
            primRemoteScriptAccessPin = 0,
@@ -384,8 +387,18 @@ data Script = Script { scriptImage :: Validity ScriptImage,
                        scriptStartTick :: Int,
                        scriptLastResetTick :: Int,
                        scriptEventQueue :: [Event],
-                       scriptStartParameter :: Int } deriving (Show)
-                       
+                       scriptStartParameter :: Int,
+                       scriptCollisionFilter :: (String,String,Bool) } deriving (Show)
+
+mkScript vimg = Script { scriptImage = vimg,
+                         scriptActive = True,
+                         scriptPermissions = M.empty,
+                         scriptLastPerm = Nothing,
+                         scriptStartTick = 0,
+                         scriptLastResetTick = 0,
+                         scriptEventQueue = [Event "state_entry" [] M.empty],
+                         scriptStartParameter = 0,
+                         scriptCollisionFilter = ("",nullKey,True) }
 worldFromFullWorldDef worldBuilder fwd lib scripts =
     do let primMap = mkPrimMap (fullWorldDefPrims fwd)
        primMap' <- checkObjects primMap (fullWorldDefObjects fwd) -- prove all the prims in all the objects exists
@@ -401,7 +414,6 @@ worldFromFullWorldDef worldBuilder fwd lib scripts =
                              (mkObjectMap (fullWorldDefObjects fwd))
                              primMap'
                              (M.fromList activatedScripts)
-                             emptyDB
                              (M.fromList (fullWorldDefRegions fwd))
                              (fullWorldDefInitialKeyIndex fwd)
                              (fullWorldDefWebHandling fwd)
@@ -441,8 +453,8 @@ activateScript scripts primMap (k@(primKey,invName),(scriptID)) =
         prim <- fctx ("looking up prim " ++ primKey ++ " failed") (M.lookup primKey primMap)
         when (isNothing (findByInvName invName (primInventory prim))) $ fail (invName ++ " doesn't exist in prim " ++ primKey)
         case script of
-            Invalid s -> return (k, Script (Invalid s) False M.empty Nothing 0 0  [] 0)
-            Valid code -> return (k,Script (Valid $ initLSLScript code) True M.empty Nothing 0 0 [Event "state_entry" [] M.empty] 0)
+            Invalid s -> return (k, (mkScript (Invalid s)) { scriptEventQueue = []})
+            Valid code -> return (k,mkScript (Valid $ initLSLScript code))
 
 newKey xref = do
     (m,i) <- lift SM.get
@@ -545,6 +557,7 @@ primElement = ElemAcceptor "prim" $
                             primPendingEmails = [],
                             primPassTouches = False,
                             primPassCollisions = False,
+                            primVolumeDetect = False,
                             primPayInfo = (-2, -2, -2, -2, -2),
                             primAttachment = Nothing,
                             primRemoteScriptAccessPin = 0,
