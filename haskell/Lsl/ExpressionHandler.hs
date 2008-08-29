@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -XFlexibleContexts #-}
 module Lsl.ExpressionHandler(validateExpression,evaluateExpression) where
 
 import Control.Monad.Error

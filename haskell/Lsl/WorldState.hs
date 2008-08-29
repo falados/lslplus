@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -XFlexibleInstances #-}
 module Lsl.WorldState where
 
 import Control.Monad
@@ -15,7 +16,7 @@ import Debug.Trace
 
 --import Lsl.Avatar
 import Lsl.Breakpoint
-import Lsl.Builder
+--import Lsl.Builder
 import Lsl.CodeHelper
 import Lsl.Constants
 import Lsl.Evaluation
@@ -66,7 +67,9 @@ data World m = World {
                     worldOpenDataChannels :: !(Map String (String,String),Map (String,String) String),
                     worldXMLRequestRegistry :: !(Map String XMLRequestSourceType),
                     worldPhysicsTime :: !Int,
-                    worldCollisions :: S.Set (String,String)
+                    worldTargetCheckTime :: !Int,
+                    worldLastPositions :: !(Map String (Bool,(Float,Float,Float))),
+                    worldCollisions :: !(S.Set (String,String))
                 } deriving (Show)
 
 -- a state monad for the World
@@ -136,6 +139,10 @@ getWorldXMLRequestRegistry :: Monad m => WorldM m (Map String XMLRequestSourceTy
 getWorldXMLRequestRegistry = queryWorld worldXMLRequestRegistry
 getWorldPhysicsTime :: Monad m => WorldM m Int
 getWorldPhysicsTime = queryWorld worldPhysicsTime
+getWorldTargetCheckTime :: Monad m => WorldM m Int
+getWorldTargetCheckTime = queryWorld worldTargetCheckTime
+getWorldLastPositions :: Monad m => WorldM m (Map String (Bool,(Float,Float,Float)))
+getWorldLastPositions = queryWorld worldLastPositions
 getWorldCollisions :: Monad m => WorldM m (S.Set (String,String))
 getWorldCollisions = queryWorld worldCollisions
 
@@ -146,6 +153,7 @@ getPrimVal k f = (lift getPrims >>= M.lookup k >>= return . f)
 getPrimName k = getPrimVal k primName
 getPrimPosition k = getPrimVal k primPosition
 getPrimParent k = getPrimVal k primParent
+getPrimParent' k = getPrimVal k primParent >>= \ val -> return $ fromMaybe k val
 getPrimDescription k = getPrimVal k primDescription
 getPrimOwner k = getPrimVal k primOwner
 getPrimGroup k = getPrimVal k primGroup
@@ -166,13 +174,9 @@ getPrimSittingAvatar k = getPrimVal k primSittingAvatar
 getPrimAttachment k = getPrimVal k primAttachment
 getPrimPassTouches k = getPrimVal k primPassTouches
 getPrimPassCollisions k = getPrimVal k primPassCollisions
-getPrimVolumeDetect k = getPrimVal k primVolumeDetect
 getPrimPayInfo k = getPrimVal k primPayInfo
 getPrimPendingEmails k = getPrimVal k primPendingEmails
 getPrimRemoteScriptAccessPin k = getPrimVal k primRemoteScriptAccessPin
-getPrimVelocity k = getPrimVal k primVelocity
-getPrimForce k = getPrimVal k primForce
-getPrimImpulse k = getPrimVal k primImpulse
 
 getPrimInventory k = getPrimVal k primInventory
 
@@ -187,6 +191,11 @@ getPrimAnimations k = getPrimInventory k >>= return . filter isInvAnimationItem
 getPrimTextures k = getPrimInventory k >>= return . filter isInvTextureItem
 getPrimScripts k = getPrimInventory k >>= return . filter isInvScriptItem
 
+getActualPrimScripts k = do
+    scriptNames <- getPrimScripts k >>= return . map (fst . inventoryItemNameKey . inventoryItemIdentification)
+    allScripts <- (lift $ getWorldScripts) >>= return . M.toList
+    return [ s | s@((pk,sn),_) <- allScripts, pk == k && sn `elem` scriptNames ]
+    
 getRootPrim pk =  (getPrimParent pk) >>= return . maybe pk id
  
 getPrimLinkNum pk = do
@@ -201,9 +210,10 @@ getPrimLinkNum pk = do
                 Nothing -> throwError "internal error, can't find prim in link list of parent object"
                 Just i -> return (i + 1)
 -- TODO: temp until introduce region into Prim definition
-getPrimRegion _ = (lift (return (0 :: Int,0 :: Int)))
-primRegion :: a -> (Int,Int)
-primRegion _ = (0,0)
+getPrimRegion _ = (lift (return (0 :: Int, 0 :: Int)))
+getObjectRegion _ = (lift (return (0 :: Int,0 :: Int)))
+objectRegion :: a -> (Int,Int)
+objectRegion _ = (0,0)
 
 runErrFace k i defaultVal = runAndLogIfErr 
     ("face " ++ (show i) ++ " or prim " ++ k ++ " not found") defaultVal
@@ -234,6 +244,8 @@ setWorldOpenDataChannels o = updateWorld (\ w -> w { worldOpenDataChannels = o }
 setWorldEventHandler e = updateWorld (\ w -> w { worldEventHandler = e })
 setWorldXMLRequestRegistry r = updateWorld (\ w -> w { worldXMLRequestRegistry = r })
 setWorldPhysicsTime t = updateWorld (\ w -> w { worldPhysicsTime = t })
+setWorldTargetCheckTime t = updateWorld (\ w -> w { worldTargetCheckTime = t })
+setWorldLastPositions p = updateWorld (\ w -> w { worldLastPositions = p })
 setWorldCollisions s = updateWorld (\ w -> w { worldCollisions = s })
 
 setPrim k p = (getPrims >>= return . (M.insert k p) >>= setPrims)
@@ -261,15 +273,11 @@ setPrimSitTarget k v =  updatePrimVal k (\ p -> p { primSitTarget = v })
 setPrimSittingAvatar k v =  updatePrimVal k (\ p -> p { primSittingAvatar = v } )
 setPrimPassTouches k v  =  updatePrimVal k (\ p -> p { primPassTouches = v } )
 setPrimPassCollisions k v  = updatePrimVal k (\ p -> p { primPassCollisions = v } )
-setPrimVolumeDetect k v  = updatePrimVal k (\ p -> p { primVolumeDetect = v } )
 setPrimPayInfo k v = updatePrimVal k (\ p -> p { primPayInfo = v } )
 setPrimAttachment k v =  updatePrimVal k (\ p -> p { primAttachment = v } )
 setPrimInventory k v =  updatePrimVal k (\ p -> p { primInventory = v } )
 setPrimPendingEmails k v =  updatePrimVal k (\ p -> p { primPendingEmails = v })
 setPrimRemoteScriptAccessPin k v = updatePrimVal k (\ p -> p { primRemoteScriptAccessPin = v })
-setPrimVelocity k v = updatePrimVal k (\ p -> p { primVelocity = v })
-setPrimForce k v = updatePrimVal k (\ p -> p { primForce = v })
-setPrimImpulse k v = updatePrimVal k (\ p -> p { primImpulse = v })
 
 setRegion regionIndex region = getWorldRegions >>= return . (M.insert regionIndex region) >>= setWorldRegions
 
@@ -439,10 +447,9 @@ primHasActiveHandler pk handler =
        images <- lift $ imagesForScripts scripts
        return $ foldl (\ x y -> x || hasActiveHandler y handler) False images
     where imagesForScripts scriptItems = do
-              let scriptIndices = map (((,)pk) . fst . inventoryItemNameKey . inventoryItemIdentification) scriptItems
-              allScripts <- getWorldScripts
-              let scripts = map (flip M.lookup allScripts) scriptIndices
-              return [ image | Just (Script { scriptImage = (Valid image)} ) <- scripts ]
+              scripts <- runErrPrim pk [] $ getActualPrimScripts pk
+              return [ image | (Script { scriptImage = (Valid image)} ) <- map snd scripts ]
+              
 scriptHasActiveHandler pk sn handler =
     do script <- lift getWorldScripts >>= M.lookup (pk,sn)
        Valid image <- return $ scriptImage script

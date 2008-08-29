@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -XFlexibleContexts #-}
 module Lsl.DOMUnitTestDescriptor(testsElement) where
 
 import Control.Monad.Error
@@ -120,10 +121,10 @@ lslVoid =
     let f (Elem _ _ []) = return VoidVal
         f (Elem name _ _) = fail ("unexpected content in " ++ name ++ " tag.")
     in ElemAcceptor "lsl-void" f
-    
+        
 float (Elem name _ [CString _ s _]) =
-       case reads s of
-           [(v::Float,[])] -> return v
+       case (reads s)::[(Float,String)] of
+           [(v,[])] -> return v
            _ -> fail ("invalid float in " ++ name ++ " tag")
 float (Elem name _ _) = fail ("invalid content in " ++ name ++ " tag.")
 

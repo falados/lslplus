@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -XFlexibleContexts #-}
 module Lsl.WorldDef(Avatar(..),
                     Prim(..),
                     PrimFace(..),
@@ -5,6 +6,8 @@ module Lsl.WorldDef(Avatar(..),
                     Flexibility(..),
                     LightInfo(..),
                     LSLObject(..),
+                    ObjectDynamics(..),
+                    PositionTarget(..),
                     PrimType(..),
                     FullWorldDef(..),
                     Region(..),
@@ -14,12 +17,14 @@ module Lsl.WorldDef(Avatar(..),
                     InventoryInfo(..),
                     InventoryItemData(..),
                     Script(..),
+                    ScriptId,
                     Attachment(..),
                     CameraParams(..),
                     Email(..),
                     WebHandling(..),
                     defaultAvatar,
                     defaultCamera,
+                    defaultDynamics,
                     isInvScriptItem,
                     isInvBodyPartItem,
                     isInvGestureItem,
@@ -63,10 +68,11 @@ import Lsl.Exec(ScriptImage,initLSLScript)
 import Lsl.Key(mkKey,nullKey)
 import Lsl.Structure(Validity(..),State(..))
 import Lsl.Type
-import Lsl.ValueDB
 import Lsl.Util(readM,Permutation3(..),rotationsToQuaternion)
 
 type KeyManagerM = ErrorT String (SM.State (M.Map String String,Integer))
+
+type ScriptId = (String,String)
 
 data FullWorldDef = FullWorldDef {
                         fullWorldDefMaxTime :: Int,
@@ -83,8 +89,44 @@ data WebHandling = WebHandlingByFunction
                  | WebHandlingByDoingNothing
                  | WebHandlingByInternet { webHandlingTimeout :: Float } deriving (Show)
                              
-data LSLObject = LSLObject { primKeys :: [String] } deriving (Show)
+data LSLObject = LSLObject { primKeys :: [String], objectDynamics :: !ObjectDynamics } deriving (Show)
 
+data ObjectDynamics = ObjectDynamics {
+                          objectPosition :: (Float,Float,Float),
+                          objectRotation :: (Float,Float,Float,Float),
+                          objectVelocity :: (Float,Float,Float),
+                          objectForce :: ((Float,Float,Float),Bool),
+                          objectBuoyancy :: Float,
+                          objectImpulse :: (((Float,Float,Float),Bool),Int),
+                          objectTorque :: ((Float,Float,Float),Bool),
+                          objectRotationalImpulse :: (((Float,Float,Float),Bool),Int),
+                          objectOmega :: (Float,Float,Float),
+                          objectPositionTarget :: !(Maybe PositionTarget),
+                          objectVolumeDetect :: Bool
+                      } deriving (Show)
+                      
+defaultDynamics = ObjectDynamics { objectPosition = (0,0,0),
+                                   objectRotation = (0,0,0,1),
+                                   objectVelocity = (0,0,0), 
+                                   objectForce = ((0,0,0),False),
+                                   objectBuoyancy = 0,
+                                   objectImpulse = (((0,0,0),False),0),
+                                   objectTorque = ((0,0,0),False),
+                                   objectRotationalImpulse = (((0,0,0),False),0),
+                                   objectOmega = (0,0,0),
+                                   objectPositionTarget = Nothing,
+                                   objectVolumeDetect = False }
+data PositionTarget = Repel { positionTargetTau :: Float, 
+                              positionTargetOverWater :: Bool, 
+                              positionTargetHeight :: Float }
+                    | Hover { positionTargetTau :: Float, 
+                              positionTargetOverWater :: Bool, 
+                              positionTargetHeight :: Float }
+                    | PositionTarget { positionTargetTau :: Float, 
+                                       positionTargetLocation :: (Float,Float,Float), 
+                                       positionTargetSetBy :: ScriptId }
+    deriving (Show)
+    
 data Avatar = Avatar { avatarKey :: String,
                        avatarName :: String,
                        avatarActiveGroup :: Maybe String,
@@ -249,13 +291,9 @@ data Prim = Prim {
                     primPendingEmails :: [Email],
                     primPassTouches :: Bool,
                     primPassCollisions :: Bool,
-                    primVolumeDetect :: Bool,
                     primPayInfo :: (Int,Int,Int,Int,Int),
                     primAttachment :: Maybe Attachment,
-                    primRemoteScriptAccessPin :: Int,
-                    primVelocity :: (Float,Float,Float),
-                    primForce :: ((Float,Float,Float),Bool),
-                    primImpulse :: (((Float,Float,Float),Bool),Int) } deriving (Show)
+                    primRemoteScriptAccessPin :: Int } deriving (Show)
 
 data PrimType = PrimTypeUnknown
               | PrimType {
@@ -350,13 +388,9 @@ emptyPrim name key =
            primPendingEmails = [],
            primPassTouches = False,
            primPassCollisions = False,
-           primVolumeDetect = False,
            primPayInfo = ( -2, -2, -2, -2, -2),
            primAttachment = Nothing,
-           primRemoteScriptAccessPin = 0,
-           primVelocity = (0,0,0),
-           primForce = ((0,0,0),False),
-           primImpulse = (((0,0,0),False),0) }
+           primRemoteScriptAccessPin = 0 }
 
 data Region = Region {
         regionName :: String,
@@ -380,7 +414,7 @@ defaultRegions owner = [
                      regionParcels = [Parcel "parcel_0" "default parcel" (0,256,0,256) owner 0xffffffff [] []] })
     ]
 
-data Script = Script { scriptImage :: Validity ScriptImage,
+data Script = Script { scriptImage :: !(Validity ScriptImage),
                        scriptActive :: Bool,
                        scriptPermissions :: M.Map String Int,
                        scriptLastPerm :: Maybe String,
@@ -388,7 +422,10 @@ data Script = Script { scriptImage :: Validity ScriptImage,
                        scriptLastResetTick :: Int,
                        scriptEventQueue :: [Event],
                        scriptStartParameter :: Int,
-                       scriptCollisionFilter :: (String,String,Bool) } deriving (Show)
+                       scriptCollisionFilter :: !(String,String,Bool),
+                       scriptTargetIndex :: !Int,
+                       scriptPositionTargets :: !(IM.IntMap ((Float,Float,Float), Float)),
+                       scriptRotationTargets :: !(IM.IntMap ((Float,Float,Float,Float), Float)) } deriving (Show)
 
 mkScript vimg = Script { scriptImage = vimg,
                          scriptActive = True,
@@ -398,7 +435,11 @@ mkScript vimg = Script { scriptImage = vimg,
                          scriptLastResetTick = 0,
                          scriptEventQueue = [Event "state_entry" [] M.empty],
                          scriptStartParameter = 0,
-                         scriptCollisionFilter = ("",nullKey,True) }
+                         scriptCollisionFilter = ("",nullKey,True),
+                         scriptTargetIndex = 0,
+                         scriptPositionTargets = IM.empty,
+                         scriptRotationTargets = IM.empty }
+                         
 worldFromFullWorldDef worldBuilder fwd lib scripts =
     do let primMap = mkPrimMap (fullWorldDefPrims fwd)
        primMap' <- checkObjects primMap (fullWorldDefObjects fwd) -- prove all the prims in all the objects exists
@@ -428,7 +469,7 @@ maybe2Either (Just v) = Right v
 
 mkPrimMap prims = M.fromList [(primKey p, p) | p <- prims]
     --let tuples = map (\ p -> (primKey p, p)) prims in M.fromList tuples
-mkObjectMap objects = M.fromList [ (p,LSLObject (p:ps)) | LSLObject (p:ps) <- objects ]
+mkObjectMap objects = M.fromList [ (p, o) | o@(LSLObject { primKeys = (p:_) }) <- objects ]
 mkAvatarLookup avatars = [ (avatarKey a,a) | a <- avatars]
 
 checkObject primMap o = 
@@ -500,10 +541,11 @@ objectsElement = elementList "objects" objectElement
 objectElement :: ElemAcceptor KeyManagerM LSLObject
 objectElement = ElemAcceptor "object" $
     \ (Elem _ _ contents) -> do
-           (primKeys,[]) <- findElement (elementList "primKeys" (simpleElement "string")) (elementsOnly contents)
-           (m,i) <- lift SM.get
+           (position,c) <- findOrDefault (0,0,0) (vecAcceptor "position") (elementsOnly contents)
+           (primKeys,[]) <- findElement (elementList "primKeys" (simpleElement "string")) c
+           --(m,i) <- lift SM.get
            realPrimKeys <- mapM findRealKey primKeys
-           return $ LSLObject realPrimKeys
+           return $ LSLObject realPrimKeys (defaultDynamics { objectPosition = position })
            
 primsElement :: ElemAcceptor KeyManagerM [Prim]
 primsElement = elementList "prims" primElement
@@ -557,13 +599,9 @@ primElement = ElemAcceptor "prim" $
                             primPendingEmails = [],
                             primPassTouches = False,
                             primPassCollisions = False,
-                            primVolumeDetect = False,
                             primPayInfo = (-2, -2, -2, -2, -2),
                             primAttachment = Nothing,
-                            primRemoteScriptAccessPin = 0,
-                            primVelocity = (0,0,0),
-                            primForce = ((0,0,0),False),
-                            primImpulse = (((0,0,0),False),0) }
+                            primRemoteScriptAccessPin = 0 }
 
 acceptInventoryItem e = matchChoice (map (uncurry mkInventoryItemAcceptor) 
     [("notecardItem",acceptNotecardData),

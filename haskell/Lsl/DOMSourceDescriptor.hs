@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -XFlexibleContexts #-}
 module Lsl.DOMSourceDescriptor(sourceFiles,sourceFilesElement) where
 
 import Control.Monad.Error

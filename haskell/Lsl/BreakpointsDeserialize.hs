@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -XFlexibleContexts #-}
 module Lsl.BreakpointsDeserialize(breakpointsElement, module Lsl.Breakpoint) where
 
 import Control.Monad.Error

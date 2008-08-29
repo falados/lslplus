@@ -48,6 +48,7 @@ module Lsl.Util (
     quaternionToMatrix,
     matrixToQuaternion,
     quaternionMultiply,
+    invertQuaternion,
     Permutation3(..),
     quaternionToRotations,
     rotationsToQuaternion,
@@ -271,10 +272,12 @@ fac n = n * fac (n - 1)
 -- list of sorted permutations... simple!
 generatePermutation [] i = []
 generatePermutation l  i = 
-    let (n::Integer) = toInteger (length l) in
+    let n :: Integer
+        n = toInteger (length l) in
         if i < fac n then
             let modulus = fac (n - 1)
-                (ix::Int) = fromInteger $ (i `div` modulus) in
+                ix :: Int
+                ix = fromInteger $ (i `div` modulus) in
             case splitAt ix l of
                 (xs,y:ys) -> y : (generatePermutation (xs ++ ys) (i `mod` modulus))
                 _ -> error ""

@@ -253,7 +253,7 @@ noDupGlobs forceCtx prefix usedNames library [] = return usedNames
 noDupGlobs forceCtx prefix usedNames library ((GV (Ctx ctx (Var name t)) _):gs) = do
         checkName (forceCtx `mplus` Just ctx) globName usedNames
         noDupGlobs forceCtx prefix (globName:usedNames) library gs
-    where (globName::String) = prefix ++ name
+    where globName = prefix ++ name
 noDupGlobs forceCtx prefix usedNames library ((GF (Func (FuncDec (Ctx ctx name) t params) _)):gs) = do
         checkName (forceCtx `mplus` Just ctx) globName usedNames
         noDupGlobs forceCtx prefix (globName:usedNames) library gs
@@ -780,7 +780,7 @@ validStatements :: Bool -> [String] -> [FuncDec] -> [Var] -> LSLType -> [[String
 validStatements scallow snames funcs vars rtype labels locals stmts =
     do let newLabels = map (\ (Label s) -> s) $ filter isLabel (ctxItems stmts)
        (_,r') <- foldM (\ (l,r) (n, s) -> 
-           validStatement' scallow snames funcs vars rtype (newLabels:labels) l r n s) (locals,False) $ zip [1..] stmts
+           validStatement' scallow snames funcs vars rtype (newLabels:labels) l r n s) (locals,False) $ zip ([1..]::[Int]) stmts
        return r'
 
 validHandler snames used funcs vars (Handler (Ctx ctx name) args stmts) = 

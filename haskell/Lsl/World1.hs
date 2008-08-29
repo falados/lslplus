@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -XFlexibleContexts #-}
 module Lsl.World1(module Lsl.World1,module Lsl.WorldState) where
 
 import Control.Monad
@@ -17,7 +18,7 @@ import Debug.Trace
 --import Lsl.Avatar
 import Lsl.Animation
 import Lsl.Breakpoint
-import Lsl.Builder
+--import Lsl.Builder
 import Lsl.CodeHelper
 import Lsl.Constants
 import Lsl.Evaluation
@@ -34,7 +35,7 @@ import Lsl.Structure
 import Lsl.Type
 import Lsl.UnitTestWorld(simFunc)
 import Lsl.Util
-import Lsl.ValueDB
+--import Lsl.ValueDB
 import Lsl.WorldDef
 import Lsl.WorldState
 
@@ -79,8 +80,8 @@ getParcelByPosition regionIndex (x,y,_) =
                       then return (i,p) else findParcel (i + 1) ps
 
 getPrimParcel pk = do
-    regionIndex <- lift $ getPrimRegion pk
-    pos <- getPrimPosition pk
+    regionIndex <- getPrimRegion pk
+    pos <- getPrimParent' pk >>= getObject >>= return . objectPosition . objectDynamics
     (index,parcel) <- getParcelByPosition regionIndex pos
     return (regionIndex,index,parcel)
     
@@ -486,7 +487,7 @@ llUnSit info@(ScriptInfo _ _ _ pk _) [KVal k] =
 llMessageLinked :: Monad m => ScriptInfo -> [LSLValue] -> WorldM m (EvalResult,LSLValue)       
 llMessageLinked info@(ScriptInfo oid pid sid pkey _) [IVal link,IVal val,SVal msg,KVal key] =
     runErrFunc info "llMessageLinked" () (do
-        LSLObject links <- (lift getObjects >>= M.lookup oid) <||> throwError ("object not found!")
+        LSLObject { primKeys = links } <- (getObject oid) <||> throwError ("object not found!")
         when (null links) $ throwError ("object is has no links!")
         let targetLinkIndices = targetLinks (length links) link pid
         let targetLinks = map (links !!) targetLinkIndices
@@ -536,7 +537,10 @@ chat range info@(ScriptInfo oid pid sid pkey event) [IVal chan, SVal message] =
 putChat range k chan message = do
     prims <- getPrims
     case M.lookup k prims of
-        Just prim -> putWorldEvent 0 $ Chat chan (primName prim) k message (primRegion prim, primPosition prim) (range)
+        Just prim -> runErrPrim k () $ do
+            region <- (getPrimRegion k)
+            pos <- getPrimParent' k >>= getObject >>= return . objectPosition . objectDynamics
+            lift $ putWorldEvent 0 $ Chat chan (primName prim) k message (region, pos) (range)
         Nothing -> do
             avatars <- getWorldAvatars
             case M.lookup k avatars of
@@ -569,11 +573,11 @@ llTeleportAgentHome info@(ScriptInfo _ _ _ pk _) [KVal ak] =
             then lift $ logFromScript info ("llTeleportAgentHome: user " ++ ak ++ " teleported home (in theory)")
             else lift $ logFromScript info ("llTeleportAgentHome: not permitted to teleport agents from this parcel")
     ) >> continueWith VoidVal
-llEjectFromLand info@(ScriptInfo _ _ _ pk _) [KVal user] =
+llEjectFromLand info@(ScriptInfo oid _ _ pk _) [KVal user] =
     runErrPrim pk () (do
         owner <- getPrimOwner pk
         regionIndex <- getPrimRegion pk
-        (_,parcel) <- getPrimPosition pk >>= getParcelByPosition regionIndex
+        (_,parcel) <- getObjectPosition oid >>= getParcelByPosition regionIndex
         if parcelOwner parcel == owner 
             then lift $ logFromScript info ("llEjectFromLand: user " ++ user ++ " ejected (in theory)")
             else lift $ logFromScript info ("llEjectFromLand: not permitted to eject from this parcel")
@@ -585,16 +589,17 @@ llBreakLink info@(ScriptInfo oid _ sid pk _) [IVal link] =
             if perm .&. cPermissionChangeLinks /= 0
                 then do
                     objects <- lift getObjects
-                    LSLObject links <- M.lookup oid objects
+                    LSLObject { primKeys = links, objectDynamics = dynamics } <- M.lookup oid objects
                     attachment <- getPrimAttachment oid
                     case attachment of
                         Nothing ->
                             if link < 1 || link > length links then lift $ logFromScript info ("llBreakLink: invalid link id")
                                 else do
+                                    let (dyn1,dyn2) = if link == 1 then (defaultDynamics,dynamics) else (dynamics,defaultDynamics)
                                     let (xs,y:ys) = splitAt (link - 1) links
                                     let (linkSet1,linkSet2) = (xs ++ ys, [y])
-                                    let objects' = if null linkSet1 then objects else M.insert (head linkSet1) (LSLObject linkSet1) objects
-                                    lift $ setObjects (M.insert (head linkSet2) (LSLObject linkSet2) objects')
+                                    let objects' = if null linkSet1 then objects else M.insert (head linkSet1) (LSLObject linkSet1 dyn1) objects
+                                    lift $ setObjects (M.insert (head linkSet2) (LSLObject linkSet2 dyn2) objects')
                                     when (not (null linkSet1)) $ do
                                         lift $ pushChangedEventToObject (head linkSet1) cChangedLink
                                         lift $ setPrimParent (head linkSet1) Nothing
@@ -610,7 +615,7 @@ llBreakAllLinks info@(ScriptInfo oid _ sid pk _) [] =
             if perm .&. cPermissionChangeLinks /= 0
                 then do
                     objects <- lift getObjects
-                    LSLObject links <- M.lookup oid objects
+                    LSLObject links dynamics <- M.lookup oid objects
                     attachment <- getPrimAttachment oid
                     case attachment of
                         Nothing ->
@@ -619,7 +624,8 @@ llBreakAllLinks info@(ScriptInfo oid _ sid pk _) [] =
                                     -- order of parameters to union is vital: union is left biased, so we want the 
                                     -- new objects (in the left argument) to replace the old (in the right) where
                                     -- both exist (the root key of the old object is found in both)
-                                    let objects' = M.union (M.fromList $ map (\ k -> (k, LSLObject [k])) links) objects
+                                    let objects' = M.union 
+                                            (M.fromList $ map (\ k -> (k, LSLObject [k] (if k == oid then dynamics else defaultDynamics))) links) objects
                                     lift $ setObjects objects'
                                     lift $ mapM_ (\ link -> pushChangedEventToObject link cChangedLink >>
                                                             setPrimParent link Nothing) links
@@ -635,10 +641,10 @@ llCreateLink info@(ScriptInfo oid _ sid pk _) [KVal target, IVal iparent] =
         if perm .&. cPermissionChangeLinks /= 0
             then do
                 objects <- lift getObjects
-                LSLObject (link:links) <- M.lookup oid objects
+                LSLObject (link:links) dynamics <- M.lookup oid objects
                 case M.lookup target objects of
                     Nothing -> lift $ logFromScript info "llCreateLink: target not found"
-                    Just (LSLObject (link':links')) -> do
+                    Just (LSLObject (link':links') dynamics') -> do
                         attachment0 <- getPrimAttachment oid
                         attachment1 <- getPrimAttachment target
                         case (attachment0,attachment1) of
@@ -648,10 +654,10 @@ llCreateLink info@(ScriptInfo oid _ sid pk _) [KVal target, IVal iparent] =
                                 owner <- getPrimOwner oid
                                 if mask .&. cPermModify /= 0 && owner == ownerTarget 
                                    then do
-                                        let (newLinkset,deleteKey) = if parent 
-                                                then ((link:link':links') ++ links, link')
-                                                else ((link':link:links) ++ links', link)
-                                        lift $ setObjects (M.insert (head newLinkset) (LSLObject newLinkset) $ M.delete deleteKey objects)
+                                        let (newLinkset,deleteKey,newDynamics) = if parent 
+                                                then ((link:link':links') ++ links, link',dynamics)
+                                                else ((link':link:links) ++ links', link,dynamics')
+                                        lift $ setObjects (M.insert (head newLinkset) (LSLObject newLinkset newDynamics) $ M.delete deleteKey objects)
                                         lift $ pushChangedEventToObject (head newLinkset) cChangedLink
                                     else lift $ logFromScript info "llCreateLink: no modify permission on target"
                             _ -> lift $ logFromScript info ("llCreateLink: can't change links of attached object")
@@ -665,7 +671,7 @@ llDie info@(ScriptInfo oid _ _ pk _) [] =
          case attachment of
              Nothing -> do
                      objects <- lift getObjects
-                     LSLObject (links) <- M.lookup oid objects
+                     LSLObject { primKeys = (links) } <- M.lookup oid objects
                      allScripts <- mapM getPrimScripts links
                      let primsWithScriptNames = zip links (map (map (invName)) allScripts)
                      let skeys = concat $ map ( \ (k,list) -> map ((,)k) list) primsWithScriptNames
@@ -799,66 +805,66 @@ llStopPointAt info _ = logFromScript info "llStopPointAt: deprecated!" >> contin
 llSetPrimURL info _ = logFromScript info "llSetPrimURL: unimplemented!" >> continueWith VoidVal
 llRefreshPrimURL info _ = logFromScript info "llRefreshPrimURL: unimplemted!" >> continueWith VoidVal
 
-llGetRot (ScriptInfo _ _ _ pk _) [] =
-    runErrPrim pk (0,0,0,1) (getPrimRotation pk) >>= continueWith . rot2RVal
+llGetRot info@(ScriptInfo oid _ _ pk _) [] =
+    runErrFunc info "llGetRot" (0,0,0,1) (getGlobalRot pk) >>= continueWith . rot2RVal
 
 llGetLocalRot info@(ScriptInfo oid _ _ pk _) [] =
-    if oid == pk then llGetRot info []
-        else do result <- runErrPrim pk (0,0,0,1) $ do
-                          (x,y,z,s) <- getPrimRotation oid
-                          rot <- getPrimRotation pk
-                          return $ quaternionMultiply rot (-x,-y,-z,s) -- TODO: check this! may be backward in some way
-                continueWith (rot2RVal result)
+    runErrFunc info "llGetLocalRot" (0,0,0,1) (
+        if oid == pk
+            then getObjectRotation oid
+            else getPrimRotation pk
+    ) >>= continueWith . rot2RVal
+-- HERE ^^^^^^^^^^^^^^^^^^^^^^^^
 
 llGetRootRotation info@(ScriptInfo oid _ _ pk _) [] =
-    runErrPrim oid (0,0,0,1) (getPrimRotation oid) >>= continueWith . rot2RVal
+    runErrFunc info "llGetRootRotation" (0,0,0,1) (getObjectRotation oid) >>= continueWith . rot2RVal
     
 --TODO: handle attachments...
 --TODO: confirm order of rotations in both of these
-llSetRot (ScriptInfo oid _ _ pk _) [r@(RVal _ _ _ _)] = 
-    if oid == pk then setPrimRotation pk (rVal2Rot r) >> continueWith VoidVal
-        else let rot = rVal2Rot r in do
-            runErrPrim oid () $ do
-                rootRot <- getPrimRotation oid
-                lift $ setPrimRotation pk (rot `quaternionMultiply` rootRot `quaternionMultiply` rootRot)
-            continueWith VoidVal
+llSetRot info@(ScriptInfo oid _ _ pk _) [r@(RVal _ _ _ _)] = 
+    runErrFunc info "llSetRot" () (
+        if oid == pk then setRootRotation oid rot
+                     else setChildRotation oid pk rot
+    ) >> continueWith VoidVal
+    where rot = rVal2Rot r
 
-llSetLocalRot (ScriptInfo oid _ _ pk _) [r@(RVal _ _ _ _)] =
-    if oid == pk then setPrimRotation pk (rVal2Rot r) >> continueWith VoidVal
-        else let rot = rVal2Rot r in do
-            runErrPrim oid () $ do
-                rootRot <- getPrimRotation oid
-                lift $ setPrimRotation pk (rootRot `quaternionMultiply` rot)
-            continueWith VoidVal
-            
-llSetPos (ScriptInfo oid pid sid pkey event) [val] = 
-    if oid == pkey 
-        then setRootPos pkey val >> continueWith VoidVal
-        else do
-            -- i'm a child prim...
-            rootPos <- getPos oid
-            -- TODO: limit link distance...
-            setPos pkey (liftV2 add3d rootPos val)
-            continueWith VoidVal
-            
--- updates the world coordinates of the root prim and all its child prims
+-- TODO: fix this!!
+setChildRotation rk pk rot = do
+    rootRot <- getPrimRotation rk
+    lift $ setPrimRotation pk (rot `quaternionMultiply` rootRot `quaternionMultiply` rootRot)
+
+setRootRotation rk rot = do
+    obj <- getObject rk
+    lift $ setObject rk (obj { objectDynamics = (objectDynamics obj) { objectRotation = rot }})
+        
+llSetLocalRot info@(ScriptInfo oid _ _ pk _) [r@(RVal _ _ _ _)] =
+    runErrFunc info "llSetRot" () (
+        if oid == pk then setRootRotation oid rot
+                     else lift $ setPrimRotation pk rot
+    ) >> continueWith VoidVal
+    where rot = rVal2Rot r
+    
+llSetPos info@(ScriptInfo oid pid sid pk event) [val] = 
+    runErrFunc info "llSetPos" () (
+        if oid == pk then setRootPos oid v
+                     else setChildPos pk v
+    ) >> continueWith VoidVal
+    where v = vVal2Vec val
+
+setChildPos pk val = lift $ setPrimPosition pk val
+                
+-- updates the world coordinates of object
 -- does NOT consider region boundaries (TODO: fix!)
 setRootPos oid v =
-   runAndLogIfErr "" () $ do 
-      vOld <- lift $ getPos oid
-      let vec0 = vVal2Vec vOld
-      let vec1 = vVal2Vec v
-      let vec = diff3d vec1 vec0
+   do v0 <- getObjectPosition oid
+      let vec = diff3d v v0
       let dist = mag3d vec
       let vec' = if dist <= 10.0 
               then vec
               else scale3d 10.0 $ norm3d vec
-      objects <- lift getObjects
-      (LSLObject keys) <- M.lookup oid objects
-      lift $ mapM_ (flip addPos (vec2VVal vec')) keys
-
-addPos key v = getPos key >>= (setPos key) . (liftV2 add3d v)
-setPos key v = setPrimPosition key (vVal2Vec v)
+      --objects <- lift getObjects
+      obj <- getObject oid
+      lift $ setObject oid (obj { objectDynamics = (objectDynamics obj) { objectPosition = v0 `add3d` vec' } })
 
 llGetOwner info [] = 
     let k = scriptInfoPrimKey info in (runErrPrim k nullKey $ getPrimOwner k) >>= continueWith . KVal
@@ -873,7 +879,7 @@ llSameGroup info@(ScriptInfo _ _ _ pk _) [KVal k] =
 
 llGetLinkKey (ScriptInfo oid _ _ _ _) [IVal link] = do
     result <- runAndLogIfErr ("object " ++ oid ++ " or link " ++ show link ++ "not found") nullKey $ do
-        LSLObject pkeys <- getObject oid
+        LSLObject { primKeys = pkeys } <- getObject oid
         pk <- lookupByIndex (link - 1) pkeys
         return pk
     continueWith (KVal result)
@@ -895,10 +901,10 @@ llOwnerSay info [SVal s] =
        
 llGetGeometricCenter info@(ScriptInfo oid _ _ _ _) [] =
     runErrFunc info "llGetGeometricCenter" (0,0,0) (do
-        LSLObject links <- lift getObjects >>= M.lookup oid
+        LSLObject { primKeys = links } <- getObject oid
         when (null links) $ throwError "error: empty linkset!"
-        rootPos <- getPrimPosition (head links)
-        foldM (\ v k -> getPrim k >>= return . primPosition >>= return . flip diff3d rootPos >>= return . add3d v) (0,0,0) links 
+        rootPos <- getObjectPosition oid
+        foldM (\ v k -> getGlobalPos k >>= return . add3d v) (0,0,0) links 
             >>= return . scale3d (1 / fromIntegral (length links))
     ) >>= continueWith . vec2VVal
 
@@ -906,7 +912,7 @@ llGetMass info@(ScriptInfo oid _ _ _ _) [] =
     runErrFunc info "llGetMass" 1.0 (objectMass oid) >>= continueWith . FVal    
 
 objectMass oid = do
-    LSLObject links <- lift getObjects >>= M.lookup oid
+    LSLObject { primKeys = links } <- getObject oid
     foldM (\ v k -> getPrim k >>= ( \ prim -> return $ v + primMassApprox prim)) 0.0 links
     
 llGetObjectMass info [KVal k] =
@@ -918,29 +924,149 @@ llGetObjectMass info [KVal k] =
     ) >>= continueWith . FVal
     
 llGetVel info@(ScriptInfo oid _ _ _ _) [] =
-    runErrFunc info "llGetVel" (0,0,0) (getPrimVelocity oid) >>= continueWith . vec2VVal
+    runErrFunc info "llGetVel" (0,0,0) (getObject oid >>= return . objectVelocity . objectDynamics) >>= continueWith . vec2VVal
 
 llGetForce info@(ScriptInfo oid _ _ _ _) [] =
-    runErrFunc info "llGetForce" (0,0,0) (getPrimForce oid >>= return . fst) >>= continueWith . vec2VVal
+    runErrFunc info "llGetForce" (0,0,0) (getObject oid >>= return . objectForce . objectDynamics >>= return . fst) >>= continueWith . vec2VVal
         
 llSetForce info@(ScriptInfo oid _ _ _ _) [v@(VVal x y z), IVal local] =
-    runErrFunc info "llSetForce" () (lift $ setPrimForce oid ((x,y,z), local /= 0)) >> continueWith VoidVal
-    
+    runErrFunc info "llSetForce" () (do
+        obj <- getObject oid
+        lift $ setObject oid (obj { objectDynamics = (objectDynamics obj) { objectForce = ((x,y,z), local /= 0) }})
+    ) >> continueWith VoidVal
+
+llSetBuoyancy info@(ScriptInfo { scriptInfoObjectKey = oid }) [FVal buoy] =
+   runErrFunc info "llSetBuoyancy" () (do
+       obj <- getObject oid
+       lift $ setObject oid (obj { objectDynamics = (objectDynamics obj) { objectBuoyancy = buoy }})
+   ) >> continueWith VoidVal 
+   
 llApplyImpulse info@(ScriptInfo oid _ _ _ _) [v@(VVal x y z), IVal local] =
     runErrFunc info "llApplyImpulse" () (do
         t <- lift getTick
-        lift $ setPrimImpulse oid (((x,y,z), local /= 0), t + durationToTicks 1)) >> continueWith VoidVal
+        obj <- getObject oid
+        lift $ setObject oid (obj { objectDynamics = (objectDynamics obj) { objectImpulse = (((x,y,z), local /= 0), t + durationToTicks 1) } })
+    ) >> continueWith VoidVal
         
-llGetPos (ScriptInfo _ _ _ pk _) [] = getPos pk >>= continueWith
-llGetRootPosition (ScriptInfo oid _ _ _ _) [] = getPos oid >>= continueWith
+llGetAccel info@(ScriptInfo oid _ _ _ _) [] =
+    runErrFunc info "llGetAccel" (0,0,0) (do
+            prim <- getPrim oid
+            obj <- getObject oid
+            let dyn = objectDynamics obj
+            let force = fst (objectForce dyn) `rot3d` rotation 
+                    where rotation = if snd $ objectForce dyn then objectRotation dyn else (0,0,0,1)
+            let impulse = ((fst . fst . objectImpulse) dyn `rot3d` rotation, (snd . objectImpulse) dyn)
+                    where rotation = if (snd . fst . objectImpulse) dyn then objectRotation dyn else (0,0,0,1)
+            t <- lift getTick
+            mass <- objectMass oid
+            pos <- getObjectPosition oid
+            return $ calcAccel t 0 mass pos force impulse
+        ) >>= continueWith . vec2VVal
+        
+llSetTorque info@(ScriptInfo { scriptInfoObjectKey = oid }) [VVal x y z, IVal local] =
+    runErrFunc info "llSetTorque" () (do
+        obj <- getObject oid
+        lift $ setObject oid (obj { objectDynamics = (objectDynamics obj) { objectTorque = ((x,y,z),local /= 0) } })
+    ) >> continueWith VoidVal
 
-llGetLocalPos (ScriptInfo oid _ _ pk _) [] | oid == pk = getPos oid >>= continueWith
-                                           | otherwise =
-    (runAndLogIfErr ("parent " ++ oid ++ " or child " ++ pk ++ " not found") 
-                    (0,0,0) 
-                    (liftM2 diff3d (getPrimPosition pk) (getPrimPosition oid))) >>= 
-                    continueWith . vec2VVal
-                    
+llSetForceAndTorque info@(ScriptInfo { scriptInfoObjectKey = oid}) [VVal fx fy fz, VVal tx ty tz, IVal local] =
+    runErrFunc info "llSetForceAndTorque" () (do
+        obj <- getObject oid
+        let loc = local /= 0
+        lift $ setObject oid (obj { objectDynamics = (objectDynamics obj) { 
+                                        objectForce = ((fx,fy,fz),loc), objectTorque = ((tx,ty,tz),loc) } })
+    ) >> continueWith VoidVal
+
+llGetTorque info@(ScriptInfo { scriptInfoObjectKey = oid }) [] =
+    runErrFunc info "llGetTorque" (0,0,0) (getObject oid >>= return . fst . objectTorque . objectDynamics) >>= continueWith . vec2VVal
+
+llGetOmega info@(ScriptInfo { scriptInfoObjectKey = oid }) [] =
+    runErrFunc info "llGetOmega" (0,0,0) (getObject oid >>= return . objectOmega . objectDynamics) >>= continueWith . vec2VVal
+    
+llApplyRotationalImpulse info@(ScriptInfo { scriptInfoObjectKey = oid }) [VVal x y z, IVal local] =
+    runErrFunc info "llSetTorque" () (do
+        obj <- getObject oid
+        t <- lift getTick
+        lift $ setObject oid (obj { 
+            objectDynamics = (objectDynamics obj) { objectRotationalImpulse = (((x,y,z),local /= 0), t + durationToTicks 1) } })
+   ) >> continueWith VoidVal
+   
+llGetPos info@(ScriptInfo _ _ _ pk _) [] = 
+    runErrFunc info "llGetPos" (0,0,0) (getGlobalPos pk) >>= continueWith . vec2VVal 
+llGetRootPosition info@(ScriptInfo oid _ _ _ _) [] =
+    runErrFunc info "llGetRootPosition" (0,0,0) (getObjectPosition oid) >>= continueWith . vec2VVal
+
+getGlobalPos pk = do
+        oid <- getPrimParent' pk
+        root <- getObjectPosition oid
+        rel <- getPrimPosition pk
+        rot <- getObjectRotation oid
+        return (root `add3d` (rot3d rel rot))
+        
+getGlobalRot pk = do
+    oid <- getPrimParent' pk
+    rot0 <- getObjectRotation oid
+    rot <- getPrimRotation pk
+    return (rot `quaternionMultiply` rot0)
+    
+llGetLocalPos info@(ScriptInfo oid _ _ pk _) [] =
+    runErrFunc info "llGetLocalPos" (0,0,0) (getLocalPos pk) >>= continueWith . vec2VVal
+    
+getLocalPos k = getPrimPosition k         
+
+llMoveToTarget info@(ScriptInfo { scriptInfoObjectKey = oid, scriptInfoScriptName = sn, scriptInfoPrimKey = pk }) [VVal x y z, FVal tau] =
+    runErrFunc info "llMoveToTarget" () (do
+        obj <- getObject oid
+        let action = setTarg obj
+        case objectPositionTarget (objectDynamics obj) of
+            Nothing -> action
+            Just (PositionTarget { positionTargetSetBy = scriptId }) 
+                | scriptId == (pk,sn) -> action
+                | otherwise -> lift $ logAMessage LogInfo "llMoveToTarget" ("target already set by another script: " ++ show scriptId)
+            Just _ -> action
+    ) >> continueWith VoidVal                        
+    where setTarg obj = lift $ setObject oid obj'
+              where targ = PositionTarget { positionTargetTau = tau,
+                                            positionTargetLocation = (x,y,z),
+                                            positionTargetSetBy = (pk,sn) }
+                    obj' = obj { objectDynamics = (objectDynamics obj) { objectPositionTarget = Just targ } }
+
+llStopMoveToTarget info@(ScriptInfo { scriptInfoObjectKey = oid, scriptInfoScriptName = sn, scriptInfoPrimKey = pk }) [] =
+    runErrFunc info "llStopMoveToTarget" () (do
+        obj <- getObject oid
+        case objectPositionTarget $ objectDynamics obj of
+            Just (PositionTarget {}) -> lift $ setObject oid (obj { objectDynamics = (objectDynamics obj) { objectPositionTarget = Nothing }})
+            _ -> return ()
+    ) >> continueWith VoidVal
+    
+llGroundRepel info@(ScriptInfo { scriptInfoObjectKey = oid }) [FVal height, IVal water, FVal tau] =
+    runErrFunc info "llGroundRepel" () (do
+        obj <- getObject oid
+        lift $ setObject oid (obj { objectDynamics = (objectDynamics obj) { 
+                                         objectPositionTarget = Just $ Repel {
+                                             positionTargetTau = tau,
+                                             positionTargetOverWater = water /= 0,
+                                             positionTargetHeight = height } } })
+    ) >> continueWith VoidVal
+
+llSetHoverHeight info@(ScriptInfo { scriptInfoObjectKey = oid }) [FVal height, IVal water, FVal tau] =
+    runErrFunc info "llSetHoverHeight" () (do
+        obj <- getObject oid
+        lift $ setObject oid (obj { objectDynamics = (objectDynamics obj) { 
+                                         objectPositionTarget = Just $ Hover {
+                                             positionTargetTau = tau,
+                                             positionTargetOverWater = water /= 0,
+                                             positionTargetHeight = height } } })
+    ) >> continueWith VoidVal
+
+llStopHover info@(ScriptInfo { scriptInfoObjectKey = oid }) [] =
+    runErrFunc info "llStopHover" () (do
+        obj <- getObject oid
+        case objectPositionTarget $ objectDynamics obj of 
+            Just (Hover {}) -> lift $ setObject oid (obj { objectDynamics = (objectDynamics obj) { objectPositionTarget = Nothing }})
+            _ -> lift $ logAMessage LogWarn "llStopHover" "not hovering"
+    ) >> continueWith VoidVal
+    
 llGetAlpha (ScriptInfo _ _ _ pkey _) [IVal side] =
     computeAlpha >>= continueWith
     where computeAlpha = if (side /= -1) 
@@ -970,7 +1096,7 @@ llSetLinkAlpha (ScriptInfo oid pid _ _ _) [IVal link, FVal alpha, IVal face] = d
     continueWith VoidVal
 
 getTargetPrimKeys oid link pid = do
-    LSLObject prims <- runAndLogIfErr ("can't find object " ++ oid) (LSLObject []) $ getObject oid
+    LSLObject { primKeys = prims } <- runAndLogIfErr ("can't find object " ++ oid) (LSLObject [] defaultDynamics) $ getObject oid
     let targetList = targetLinks (length prims) link pid
     mapM (flip lookupByIndex prims) targetList
     
@@ -1083,7 +1209,7 @@ llRotateTexture (ScriptInfo _ _ _ pk _) [FVal rot, IVal faceIndex] =
         
 getPos pkey = runErrPrim pkey
                   (VVal 0.0 0.0 0.0)
-                  (getPrimPosition pkey >>= return . vec2VVal)
+                  (getPrimParent' pkey >>= getObjectPosition >>= return . vec2VVal)
 
 getRegionIndex pkey = return (0,0)
 
@@ -1108,36 +1234,29 @@ llListRandomize _ [LVal list, IVal stride] =
         n = fac (toInteger $ length l1)
         randsNeeded = ceiling $ (logBase 2 (fromInteger n)) / 32
         wrands = replicate randsNeeded wrand
-    in  do (rands::[Int]) <- sequence wrands
+    in  do rands <- sequence wrands
            let permutation = genNum rands n
            let list' = generatePermutation list permutation
            continueWith $ LVal list'
         
 llGetNumberOfPrims (ScriptInfo oid _ _ pkey _) [] = 
     do result <- runAndLogIfErr ("object " ++ oid ++ " not found") (IVal 1) $
-            do objects <- lift getObjects
-               (LSLObject prims) <- M.lookup oid objects
+            do --objects <- lift getObjects
+               (LSLObject { primKeys = prims }) <- getObject oid
                return $ IVal (length prims)
        continueWith result
 
 llGetObjectPrimCount info@(ScriptInfo oid _ _ pkey _) [KVal k] =
-    do result <- runAndLogIfErr ("object " ++ oid ++ " not found") (IVal 0) $ do
-            region <- getPrimRegion oid
-            p <- lift $ evalErrorT $ getPrim k
-            case p of
-                Left _ -> lift (logFromScript info ("object " ++ k ++ " does not exist")) >> return (IVal 0)
-                Right prim -> if region /= primRegion prim 
-                                    then return (IVal 0)
-                                    else case primParent prim of
-                                        Nothing -> primCount k
-                                        Just k' -> primCount k'
-       continueWith result   
+    runErrFunc info "llGetObjectPrimCount" 0 (do
+        region <- getPrimRegion oid
+        p <- getPrim k
+        region' <- getPrimRegion k
+        if region /= region' 
+            then return 0
+            else getPrimParent' k >>= primCount) >>= continueWith . IVal
     where primCount oid = do
-            objects <- lift getObjects
-            case M.lookup oid objects of
-                Nothing -> lift (logAMessage LogWarn "sim" ("object prim " ++ oid ++ "not found"))
-                    >> return (IVal 0)
-                Just (LSLObject l) -> return $ IVal $ length l                               
+            (LSLObject { primKeys = l}) <- getObject oid
+            return $ length l
 
 llGetNumberOfSides (ScriptInfo _ _ _ pkey _) [] =
      (runErrPrim pkey (IVal 1)
@@ -1185,15 +1304,24 @@ llGetBoundingBox info [KVal k] =
             Just avatar -> let pos = avatarPosition avatar in
                 continueWith (LVal $ map (vec2VVal . (add3d pos)) [(-1.0,-1.0,-1.0),(1.0,1.0,1.0)])
             Nothing -> runErrFunc info "llGetBoundingBox" [] (do
-                result <- getPrimParent k
-                case result of
-                    Nothing ->  getPrim k >>= return . map vec2VVal . tup2l . primBox
-                    (Just oid) -> getPrim oid >>= return . map vec2VVal . tup2l . primBox) >>= continueWith . LVal
-                where tup2l (x,y) = [x,y]    
-primBox prim = let pos = primPosition prim
-                   (xs,ys,zs) = primScale prim 
-                   (xs',ys',zs') = (xs/2,ys/2,zs/2) in (add3d pos (-xs', -ys', -zs'),add3d pos (xs',ys',zs'))
+                getPrimParent' k >>= getPrimBox >>= return . map vec2VVal . tup2l) >>= continueWith . LVal
+    where tup2l (x,y) = [x,y]    
+getPrimBox pk = do
+    pos <- getGlobalPos pk
+    scale <- getPrimScale pk
+    let (xs,ys,zs) = scale3d 0.5 scale
+    return (add3d pos (-xs, -ys, -zs),add3d pos (xs,ys,zs))
 
+-- this is extremely approximate....
+objRadius oid = do
+        LSLObject { primKeys = keys } <- getObject oid
+        foldM f 0 keys
+    where f r k = do
+              (x,y,z) <- getPrimPosition k
+              (sx,sy,sz) <- getPrimScale k
+              let (rx,ry,rz) = (sx / 2 + abs x, sy / 2 + abs y, sz / 2 + abs z)
+              return $ maximum [r,rx,ry,rz]
+              
 llSetTimerEvent (ScriptInfo _ _ sn pk _) [FVal interval] =
     -- TODO: this may not accurately reflect buggy behavior in SL
     do removePendingTimerEvent pk sn
@@ -1225,7 +1353,7 @@ llSetPrimitiveParams (ScriptInfo _ _ _ pk _) [LVal l] = (runAndLogIfErr "problem
 
 llSetLinkPrimitiveParams (ScriptInfo oid pid _ _ _) [IVal link,LVal l] = do
     runAndLogIfErr ("problem setting link parameters for object " ++ oid) () $ do
-        LSLObject pks <- getObject oid
+        LSLObject { primKeys = pks } <- getObject oid
         let targetList = targetLinks (length pks) link pid
         pkList <- mapM (flip lookupByIndex pks) targetList
         mapM (flip setPrimParameters l) pkList
@@ -1255,8 +1383,8 @@ getPrimParameters pk params =
     where queryAndDoRest q rest = liftM2 (++) (q pk) (getPrimParameters pk rest)
 
 queryPrimTempOnRez k = getPrimTempOnRez k >>= return . return . IVal . (\ b -> if b then 1 else 0)
-queryPrimRotation k = getPrimRotation k >>= return . return . rot2RVal
-queryPrimPosition k = getPrimPosition k >>= return . return . vec2VVal
+queryPrimRotation k = getGlobalRot k >>= return . return . rot2RVal
+queryPrimPosition k = getGlobalPos k >>= return . return . vec2VVal
 queryPrimScale k = getPrimScale k >>= return . return . vec2VVal
 queryPrimFlexible k = 
     getPrimFlexibility k >>= (\ flex -> case flex of
@@ -1324,113 +1452,130 @@ queryPrimTypeOldSkool k = do
     where xOf (x,y,z) = x
           yOf (x,y,z) = y
 
-setPrimParameters key params = do
-    prim <- getPrim key
-    (prim',_) <- updatePrimParameters (prim,params)
-    lift $ setPrim key prim'
-    return ()
+setPrimParameters pk params = updatePrimParameters pk params >> return ()
     
-updatePrimParameters (prim,[]) = return (prim,[])
-updatePrimParameters (prim,code:rest) = do
+updatePrimParameters pk [] = return []
+updatePrimParameters pk (code:rest) = do
     result <- case code of
-        i | i == llcPrimTempOnRez -> updatePrimTempOnRez prim rest
-          | i == llcPrimMaterial -> updatePrimMaterial prim rest
-          | i == llcPrimPhantom -> updatePrimPhantom prim rest
-          | i == llcPrimPhysics -> updatePrimPhysics prim rest
-          | i == llcPrimPosition -> updatePrimPosition prim rest
-          | i == llcPrimRotation -> updatePrimRotation prim rest
-          | i == llcPrimSize -> updatePrimScale prim rest
-          | i == llcPrimFlexible -> updatePrimFlexible prim rest
-          | i == llcPrimPointLight -> updatePrimLight prim rest
-          | i == llcPrimBumpShiny -> updatePrimBumpShiny prim rest
-          | i == llcPrimColor -> updatePrimColor prim rest
-          | i == llcPrimTexture -> updatePrimTexture prim rest
-          | i == llcPrimTexgen -> updatePrimTexgen prim rest
-          | i == llcPrimFullbright -> updatePrimFullbright prim rest
-          | i == llcPrimType -> updatePrimType prim rest
-          | i == IVal 1 -> updatePrimTypeOldSkool prim rest
+        i | i == llcPrimTempOnRez -> updatePrimTempOnRez pk rest
+          | i == llcPrimMaterial -> updatePrimMaterial pk rest
+          | i == llcPrimPhantom -> updatePrimPhantom pk rest
+          | i == llcPrimPhysics -> updatePrimPhysics pk rest
+          | i == llcPrimPosition -> updatePrimPosition pk rest
+          | i == llcPrimRotation -> updatePrimRotation pk rest
+          | i == llcPrimSize -> updatePrimScale pk rest
+          | i == llcPrimFlexible -> updatePrimFlexible pk rest
+          | i == llcPrimPointLight -> updatePrimLight pk rest
+          | i == llcPrimBumpShiny -> updatePrimBumpShiny pk rest
+          | i == llcPrimColor -> updatePrimColor pk rest
+          | i == llcPrimTexture -> updatePrimTexture pk rest
+          | i == llcPrimTexgen -> updatePrimTexgen pk rest
+          | i == llcPrimFullbright -> updatePrimFullbright pk rest
+          | i == llcPrimType -> updatePrimType pk rest
+          | i == IVal 1 -> updatePrimTypeOldSkool pk rest
           | otherwise -> fail "incorrect parameter"
-    updatePrimParameters result
+    updatePrimParameters pk result
     
-updatePrimType prim (primCode@(IVal i):rest) | primCode == llcPrimTypeSphere = updatePrimTypeSphere prim rest
-                                             | primCode `elem` [llcPrimTypeBox,llcPrimTypeCylinder,llcPrimTypePrism] =
-                                                 updatePrimTypeBoxCylPrism i prim rest
-                                             | primCode `elem` [llcPrimTypeTorus,llcPrimTypeTube,llcPrimTypeRing] =
-                                                 updatePrimTypeRingTorusTube i prim rest
-                                             | primCode == llcPrimTypeSculpt = updatePrimTypeSculpt prim rest
-                                             | otherwise = fail "incorrect parameters for PRIM_TYPE"
-updatePrimType _ _ = fail "insufficient or incorrect parameters for PRIM_TYPE"
+updatePrimType pk vals = getPrim pk >>= flip updatePrimType' vals >>= (\ (prim,rest) -> (lift $ setPrim pk prim) >> return rest)
+updatePrimType' prim (primCode@(IVal i):rest) | primCode == llcPrimTypeSphere = updatePrimTypeSphere prim rest
+                                              | primCode `elem` [llcPrimTypeBox,llcPrimTypeCylinder,llcPrimTypePrism] =
+                                                  updatePrimTypeBoxCylPrism i prim rest
+                                              | primCode `elem` [llcPrimTypeTorus,llcPrimTypeTube,llcPrimTypeRing] =
+                                                  updatePrimTypeRingTorusTube i prim rest
+                                              | primCode == llcPrimTypeSculpt = updatePrimTypeSculpt prim rest
+                                              | otherwise = fail "incorrect parameters for PRIM_TYPE"
+updatePrimType' _ _ = fail "insufficient or incorrect parameters for PRIM_TYPE"
 
-updatePrimTypeOldSkool prim (primCode@(IVal i):rest) | primCode == llcPrimTypeSphere = updatePrimTypeSphereOld prim rest
-                                                     | primCode `elem` [llcPrimTypeBox,llcPrimTypeCylinder,llcPrimTypePrism] =
-                                                         updatePrimTypeBoxCylPrismOld i prim rest
-                                                     | primCode == llcPrimTypeTorus = updatePrimTypeTorusOld prim rest
-                                                     | primCode == llcPrimTypeTube = updatePrimTypeTubeOld prim rest
-                                                     | otherwise = fail "incorrect parameters for deprecated prim type"
-updatePrimTypeOldSkool _ _ = fail "insufficient or incorrect parameters for deprecated prim type"
+updatePrimTypeOldSkool pk vals = getPrim pk >>= flip updatePrimTypeOldSkool' vals >>= (\ (prim,rest) -> (lift $ setPrim pk prim) >> return rest)
+updatePrimTypeOldSkool' prim (primCode@(IVal i):rest) | primCode == llcPrimTypeSphere = updatePrimTypeSphereOld prim rest
+                                                      | primCode `elem` [llcPrimTypeBox,llcPrimTypeCylinder,llcPrimTypePrism] =
+                                                          updatePrimTypeBoxCylPrismOld i prim rest
+                                                      | primCode == llcPrimTypeTorus = updatePrimTypeTorusOld prim rest
+                                                      | primCode == llcPrimTypeTube = updatePrimTypeTubeOld prim rest
+                                                      | otherwise = fail "incorrect parameters for deprecated prim type"
+updatePrimTypeOldSkool' _ _ = fail "insufficient or incorrect parameters for deprecated prim type"
 
-updatePrimTempOnRez prim (IVal tempOnRez:rest) = return (prim { primTempOnRez = if tempOnRez /= 0 then True else False }, rest)
+--updatePrimTempOnRez prim (IVal tempOnRez:rest) = return (prim { primTempOnRez = if tempOnRez /= 0 then True else False }, rest)
+updatePrimTempOnRez pk (IVal tempOnRez:rest) = lift (setPrimTempOnRez pk (tempOnRez /= 0)) >> return rest
 updatePrimTempOnRez _ _ = fail "insufficient or incorrect parameters for PRIM_TEMP_ON_REZ"
-updatePrimMaterial prim (IVal material:rest) = return (prim { primMaterial = material }, rest)
+
+--updatePrimMaterial prim (IVal material:rest) = return (prim { primMaterial = material }, rest)
+updatePrimMaterial pk (IVal material:rest) = lift (setPrimMaterial pk material) >> return rest
 updatePrimMaterial _ _ = fail "insufficient or incorrect parameters for PRIM_MATERIAL"
 
-updatePrimPhantom prim params = updatePrimStatus "insufficient or incorrect parameters for PRIM_PHANTOM" primPhantomBit prim params
-updatePrimPhysics prim params = updatePrimStatus "insufficient or incorrect parameters for PRIM_PHYSICS" primPhysicsBit prim params
+updatePrimPhantom pk params = updatePrimStatus "insufficient or incorrect parameters for PRIM_PHANTOM" primPhantomBit pk params
+updatePrimPhysics pk params = updatePrimStatus "insufficient or incorrect parameters for PRIM_PHYSICS" primPhysicsBit pk params
 
-updatePrimStatus _ bit prim (IVal i:rest) = return (prim { primStatus = if i == 0 then clearBit (primStatus prim) bit
-                                                                                  else setBit (primStatus prim) bit }, rest)
+-- updatePrimStatus _ bit prim (IVal i:rest) = return (prim { primStatus = if i == 0 then clearBit (primStatus prim) bit
+--                                                                                   else setBit (primStatus prim) bit }, rest)
+updatePrimStatus _ bit pk (IVal i:rest) = (getPrimStatus pk) >>= lift . (setPrimStatus pk) . (if i == 0 then flip clearBit bit
+                                                                                                    else flip setBit bit) >> return rest
 updatePrimStatus fMsg _ _ _ = fail fMsg
 
--- this should work the same as llSetPos...(TODO)
-updatePrimPosition prim (pos@(VVal _ _ _):rest) = return (prim { primPosition = vVal2Vec pos }, rest)
+updatePrimPosition pk (pos@(VVal _ _ _):rest) =
+    do  getPrimParent pk >>= \ mok -> case mok of
+                Nothing -> setRootPos pk v
+                Just ok -> setChildPos pk v
+        return rest
+    where v = vVal2Vec pos
 updatePrimPosition _ _ = fail "insufficient or incorrect parameters for PRIM_POSITION"
 
-updatePrimRotation prim (rot@(RVal _ _ _ _):rest) = return (prim { primRotation = rVal2Rot rot }, rest)
+updatePrimRotation pk (rot@(RVal _ _ _ _):rest) =
+    do getPrimParent pk >>= \ mok -> case mok of
+            Nothing -> setRootRotation pk r
+            Just rk -> setChildRotation rk pk r
+       return rest
+    where r = rVal2Rot rot
 updatePrimRotation _ _ = fail "insufficient or incorrect parameters for PRIM_ROTATION"
-updatePrimScale prim (scale@(VVal _ _ _):rest) = return (prim { primScale = vVal2Vec scale }, rest)
+updatePrimScale pk (scale@(VVal _ _ _):rest) = (lift $ setPrimScale pk (vVal2Vec scale)) >> return rest
 updatePrimScale _ _ = fail "insufficient or incorrect parameters for PRIM_SIZE"
 
-updatePrimFlexible prim (IVal flex:IVal soft:FVal gravity:FVal friction:FVal wind:FVal tension:VVal fx fy fz:rest) =
-    return (prim { primFlexibility = if flex == 0 then Nothing else Just (Flexibility soft gravity friction wind tension (fx,fy,fz)) }, rest)
+updatePrimFlexible pk (IVal flex:IVal soft:FVal gravity:FVal friction:FVal wind:FVal tension:VVal fx fy fz:rest) =
+    lift (setPrimFlexibility pk (if flex == 0 then Nothing else Just (Flexibility soft gravity friction wind tension (fx,fy,fz)))) >> return rest
 updatePrimFlexible _ _ = fail "insufficient or incorrect parameters for PRIM_FLEXIBLE"
 
-updatePrimLight prim (IVal light:VVal r g b:FVal intensity:FVal radius:FVal falloff:rest) =
-    return (prim { primLight = if light == 0 then Nothing else Just (LightInfo (r,g,b) intensity radius falloff) }, rest)
+updatePrimLight pk (IVal light:VVal r g b:FVal intensity:FVal radius:FVal falloff:rest) =
+    lift (setPrimLight pk (if light == 0 then Nothing else Just (LightInfo (r,g,b) intensity radius falloff))) >> return rest
 updatePrimLight _ _ = fail "insufficient or incorrect parameters for PRIM_POINT_LIGHT"
-updatePrimBumpShiny prim params =
+
+updatePrimBumpShiny pk params =
     let extract (IVal face:IVal bump:IVal shiny:rest) = return (face, [IVal bump, IVal shiny], rest)
         extract _ = fail ("insufficient or incorrect parameters for PRIM_BUMP_SHINY")
         update [IVal bump, IVal shiny] face = face { faceBumpiness = bump, faceShininess = shiny }
-    in updatePrimFaceParams prim params extract update
-updatePrimColor prim params =
+    in updatePrimFaceParams pk params extract update
+updatePrimColor pk params =
     let extract (IVal face:VVal r g b:FVal alpha:rest) = return (face,[VVal r g b, FVal alpha], rest)
         extract _ = fail ("insufficient or incorrect parameters for PRIM_COLOR")
         update [color, FVal alpha] face = face { faceColor = vVal2Vec color, faceAlpha = alpha }
-    in updatePrimFaceParams prim params extract update
-updatePrimTexture prim params =
+    in updatePrimFaceParams pk params extract update
+updatePrimTexture pk params =
     let extract (IVal face:name@(SVal _):repeats@(VVal _ _ _):offsets@(VVal _ _ _):rotation@(FVal _):rest) = 
             return (face,[name,repeats,offsets,rotation],rest)
         extract _ = fail ("insufficient or incorrect parameters for PRIM_TEXTURE")
         update [SVal name,repeats,offsets,FVal rotation] face = 
             face { faceTextureInfo = TextureInfo name (vVal2Vec repeats) (vVal2Vec offsets) rotation }
-    in updatePrimFaceParams prim params extract update
-updatePrimTexgen prim params =
+    in updatePrimFaceParams pk params extract update
+updatePrimTexgen pk params =
     let extract (IVal face:IVal mode:rest) = return (face,[IVal mode],rest)
         extract _ = fail "insufficient or incorrect parameters for PRIM_TEXGEN"
         update [IVal mode] face = face { faceTextureMode = mode }
-    in updatePrimFaceParams prim params extract update
-updatePrimFullbright prim params =
+    in updatePrimFaceParams pk params extract update
+updatePrimFullbright pk params =
     let extract (IVal face:IVal fullbright:rest) = return (face,[IVal fullbright],rest)
         extract _ = fail "insufficient or incorrect parameters for PRIM_FULLBRIGHT"
         update [IVal fullbright] face = face { faceFullbright = if fullbright == 0 then False else True }
-    in updatePrimFaceParams prim params extract update
-updatePrimFaceParams prim params extract update = do 
+    in updatePrimFaceParams pk params extract update
+    
+updatePrimFaceParams pk params extract update = do 
     (face, faceParams, rest) <- extract params -- this can fail
-    if face == -1
-        then return (prim { primFaces = map (update faceParams) $ primFaces prim }, rest)
-        else let (xs,ys) = splitAt face (primFaces prim) in
-            return (if null ys then prim else prim { primFaces = xs ++ [(update faceParams $ head ys)] ++ (tail ys) }, rest)
-
+    prim <- getPrim pk
+    let prim' = if face == -1
+                   then prim { primFaces = map (update faceParams) $ primFaces prim }
+                   else let (xs,ys) = splitAt face (primFaces prim) in
+                       if null ys then prim else prim { primFaces = xs ++ [(update faceParams $ head ys)] ++ (tail ys) }
+    lift $ setPrim pk prim'
+    return rest
+    
 updatePrimTypeBoxCylPrism ptype prim (IVal holeshape:VVal cx cy cz:FVal hollow:VVal twx twy twz:VVal tx ty tz:VVal sx sy sz:rest) =
     return (prim { primTypeInfo = (primTypeInfo prim) { primTypeCode = ptype, primHoleshape = holeshape, primCut = (cx,cy,cz),
                                                 primHollow = hollow, primTwist = (twx,twy,twz), primTaper = (tx,ty,tz),
@@ -1497,16 +1642,19 @@ llGetObjectDetails _ [KVal k, LVal params] =
                               | otherwise = llcObjectUnknownDetail
            getPrimDetails k params = 
                do  prim <- getPrim k
-                   return $ map (primq prim) params
-               where primq prim i | i == llcObjectName = SVal $ primName prim
-                                  | i == llcObjectDesc = SVal $ primDescription prim
-                                  | i == llcObjectPos = vec2VVal $ primPosition prim
-                                  | i == llcObjectRot = rot2RVal $ primRotation prim
-                                  | i == llcObjectVelocity = VVal 0.0 0.0 0.0 -- TODO: prim velocities
-                                  | i == llcObjectOwner = KVal $ primOwner prim
-                                  | i == llcObjectGroup = KVal nullKey            -- TODO: prim groups
-                                  | i == llcObjectCreator = KVal $ primOwner prim -- TODO: prim creators
-                                  | otherwise = llcObjectUnknownDetail
+                   pos <- getObjectPosition k
+                   rot <- getObjectRotation k
+                   vel <- getObject k >>= return . objectVelocity . objectDynamics
+                   return $ map (primq prim pos rot vel) params
+               where primq prim pos rot vel i | i == llcObjectName = SVal $ primName prim
+                                              | i == llcObjectDesc = SVal $ primDescription prim
+                                              | i == llcObjectPos = vec2VVal $ pos
+                                              | i == llcObjectRot = rot2RVal $ rot
+                                              | i == llcObjectVelocity = vec2VVal $ vel
+                                              | i == llcObjectOwner = KVal $ primOwner prim
+                                              | i == llcObjectGroup = KVal nullKey            -- TODO: prim groups
+                                              | i == llcObjectCreator = KVal $ primOwner prim -- TODO: prim creators
+                                              | otherwise = llcObjectUnknownDetail
 
 --------------------------------------------------------------------------------------------------------------
 llAllowInventoryDrop info@(ScriptInfo _ _ _ k _) [IVal add] =
@@ -1778,7 +1926,7 @@ llGetOwnerKey info@(ScriptInfo _ _ _ pk _) [KVal k] =
 llGetLinkNumber (ScriptInfo oid pid _ pk _) [] =
      if pid /= 0 then continueWith (IVal $ pid + 1) else
          runErrPrim oid 0 (do
-             LSLObject links <- getObject oid
+             LSLObject { primKeys = links } <- getObject oid
              return (if length links == 1 then 0 else 1)
          ) >>= continueWith . IVal
         
@@ -1888,7 +2036,7 @@ llRequestInventoryData info@(ScriptInfo _ _ sn pk _) [SVal name] = do
     
 llGetLinkName (ScriptInfo oid _ _ _ _) [IVal linkNumber] =
     runErrPrim oid nullKey (do
-        LSLObject links <- getObject oid
+        LSLObject { primKeys = links } <- getObject oid
         if length links == 0
            then if linkNumber == 0
                then getPrimName oid
@@ -1987,7 +2135,7 @@ llDetectedPos (ScriptInfo _ _ _ _ mevent) [IVal i] =
         KVal key <- M.lookup ("key_" ++ show i) (eventInfo event)
         case M.lookup key avatars of
             Just av -> return $ avatarPosition av
-            Nothing -> getPrimPosition key
+            Nothing -> getPrimParent' key >>= getObjectPosition
     ) >>= continueWith . vec2VVal
     
 llDetectedRot (ScriptInfo _ _ _ _ mevent) [IVal i] =
@@ -1997,7 +2145,7 @@ llDetectedRot (ScriptInfo _ _ _ _ mevent) [IVal i] =
         KVal key <- M.lookup ("key_" ++ show i) (eventInfo event)
         case M.lookup key avatars of
             Just av -> return $ avatarRotation av
-            Nothing -> getPrimRotation key
+            Nothing -> getPrimParent' key >>= getObjectRotation
     ) >>= continueWith . rot2RVal
     
 llDetectedName (ScriptInfo _ _ _ _ mevent) [IVal i] =
@@ -2062,7 +2210,7 @@ llGetAnimationList info@(ScriptInfo _ _ _ pk _) [KVal ak] =
             Just av | avatarRegion av /= rp -> lift $ logFromScript info ("llGetAnimationList: avatar not in sim") >> return []
                     | otherwise -> do
                         now <- lift getTick
-                        return [ KVal anim | (t,anim) <- avatarActiveAnimations av, isNothing t || fromJust t < now]
+                        return [ KVal anim | (t,anim) <- avatarActiveAnimations av, maybe True (<now) t]
     ) >>= continueWith . LVal
     
 llGetAnimation info@(ScriptInfo _ _ _ pk _) [KVal ak] =
@@ -2092,7 +2240,7 @@ llStartAnimation info@(ScriptInfo _ _ sid pk _) [SVal anim] =
                         lift $ setWorldAvatars (M.insert ak (av { avatarActiveAnimations = anims' }) avatars)
                     Nothing -> lift $ logFromScript info ("llStartAnimation: animation not found - " ++ anim)
                 where updateAnims anims now mduration key =
-                          (expire,key):[(t,k) | (t,k) <- anims, (isNothing t || fromJust t < now) && key /= k]
+                          (expire,key):[(t,k) | (t,k) <- anims, (maybe True (<now) t) && key /= k]
                               where expire = fmap ((now+) . durationToTicks) mduration
     ) >> continueWith VoidVal
 
@@ -2189,6 +2337,70 @@ llMakeSmoke info _ = logFromScript info "llMakeSmoke: deprecated" >> continueWit
 llMakeFire info _ = logFromScript info "llMakeFire: deprecated" >> continueWith VoidVal
 llMakeFountain info _ = logFromScript info "llMakeFountain: deprecated" >> continueWith VoidVal
     
+--------------------------------------------------------------------------------
+
+llVolumeDetect info@(ScriptInfo { scriptInfoObjectKey = oid }) [IVal i] =
+    runErrFunc info "llVolumeDetect" () (do
+        obj <- getObject oid
+        lift $ setObject oid (obj { objectDynamics = (objectDynamics obj) { objectVolumeDetect = i /= 0 }})
+    ) >> continueWith VoidVal
+    
+llCollisionFilter info@(ScriptInfo { scriptInfoPrimKey = pk, scriptInfoScriptName = sn }) [SVal name, KVal k, IVal i] =
+    runErrFunc info "llCollisionFilter" () (do
+        allScripts <- lift getWorldScripts
+        script <- M.lookup (pk,sn) allScripts
+        lift $ setWorldScripts (M.insert (pk,sn) (script { scriptCollisionFilter = (name,k, i /= 0) }) allScripts)
+    ) >> continueWith VoidVal
+
+llTarget info@(ScriptInfo { scriptInfoPrimKey = pk, scriptInfoScriptName = sn}) [VVal x y z, FVal range] =
+    runErrFunc info "llTarget" (-1) (do
+        allScripts <- lift getWorldScripts
+        script <- M.lookup (pk,sn) allScripts
+        let index = scriptTargetIndex script
+        let script' = script {scriptTargetIndex = index + 1,
+                              scriptPositionTargets = IM.insert index ((x,y,z),range) (scriptPositionTargets script)
+                             }
+        lift $ setWorldScripts (M.insert (pk,sn) script' allScripts)
+        return index
+    ) >>= continueWith . IVal
+
+llTargetRemove info@(ScriptInfo { scriptInfoPrimKey = pk, scriptInfoScriptName = sn}) [IVal tnumber] =
+    runErrFunc info "llTargetRemove" () (do
+        allScripts <- lift getWorldScripts
+        script <- M.lookup (pk,sn) allScripts
+        let script' = script { scriptPositionTargets = IM.delete tnumber (scriptPositionTargets script) }
+        lift $ setWorldScripts (M.insert (pk,sn) script' allScripts)
+    ) >> continueWith VoidVal
+
+llRotTarget info@(ScriptInfo { scriptInfoPrimKey = pk, scriptInfoScriptName = sn}) [RVal x y z s, FVal err] = 
+    runErrFunc info "llRotTarget" () (do
+        allScripts <- lift getWorldScripts
+        script <- M.lookup (pk,sn) allScripts
+        let index = scriptTargetIndex script
+        let script' = script { scriptTargetIndex = index + 1,
+                               scriptRotationTargets = IM.insert index ((x,y,z,s),err) (scriptRotationTargets script)
+                             }
+        lift $ setWorldScripts (M.insert (pk,sn) script' allScripts)
+    ) >> continueWith VoidVal
+llRotTargetRemove info@(ScriptInfo { scriptInfoPrimKey = pk, scriptInfoScriptName = sn}) [IVal tnumber] =
+    runErrFunc info "llRotTargetRemove" () (do
+        allScripts <- lift getWorldScripts
+        script <- M.lookup (pk,sn) allScripts
+        let script' = script { scriptRotationTargets = IM.delete tnumber (scriptRotationTargets script) }
+        lift $ setWorldScripts (M.insert (pk,sn) script' allScripts)
+    ) >> continueWith VoidVal
+
+--------------------------------------------------------------------------------
+llGround info [VVal _ _ _] = continueWith (FVal 0) -- the world is flat!
+llGroundContour info [VVal _ _ _] = continueWith (VVal 1 0 0) -- could be any vector
+llGroundNormal info [VVal _ _ _] = continueWith (VVal 0 0 1) -- straight up!
+llGroundSlope info [VVal _ _ _] = continueWith (VVal 0 1 0)
+--------------------------------------------------------------------------------
+llGetSunDirection info [] = do
+    az <- getTick >>= return . (*(pi/7200)) . ticksToDuration
+    let el = 80 * pi 
+    continueWith $ vec2VVal (sin az * cos el, sin el, cos az * cos el)
+--------------------------------------------------------------------------------
 continueWith val = return (EvalIncomplete,val)
 
 -- all the predefined functions for which implementations have been created
@@ -2200,6 +2412,7 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llAdjustSoundVolume",llAdjustSoundVolume),
         ("llAllowInventoryDrop",llAllowInventoryDrop),
         ("llApplyImpulse",llApplyImpulse),
+        ("llApplyRotationalImpulse", llApplyRotationalImpulse),
         ("llAttachToAvatar",llAttachToAvatar),
         ("llAvatarOnSitTarget",llAvatarOnSitTarget),
         ("llBreakAllLinks",llBreakAllLinks),
@@ -2207,6 +2420,7 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llClearCameraParams",llClearCameraParams),
         ("llCloseRemoteDataChannel",llCloseRemoteDataChannel),
         ("llCloud",llCloud),
+        ("llCollisionFilter", llCollisionFilter),
         ("llCollisionSound",llCollisionSound),
         ("llCollisionSprite",llCollisionSprite),
         ("llCreateLink",llCreateLink),
@@ -2226,6 +2440,7 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llEjectFromLand",llEjectFromLand),
         ("llEmail",llEmail),
         ("llFrand",llFrand),
+        ("llGetAccel",llGetAccel),
         ("llGetAgentInfo",llGetAgentInfo),
         ("llGetAgentSize",llGetAgentSize),
         ("llGetAlpha",llGetAlpha),
@@ -2267,6 +2482,7 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llGetObjectName", llGetObjectName),
         ("llGetObjectPermMask", llGetObjectPermMask),
         ("llGetObjectPrimCount", llGetObjectPrimCount),
+        ("llGetOmega",llGetOmega),
         ("llGetOwner", llGetOwner),
         ("llGetOwnerKey",llGetOwnerKey),
         ("llGetParcelFlags", llGetParcelFlags),
@@ -2289,6 +2505,7 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llGetSimulatorHostname", llGetSimulatorHostname),
         ("llGetStartParameter", llGetStartParameter),
         ("llGetStatus",llGetStatus),
+        ("llGetSunDirection",llGetSunDirection),
         ("llGetTexture", llGetTexture),
         ("llGetTextureOffset", llGetTextureOffset),
         ("llGetTextureRot", llGetTextureRot),
@@ -2296,11 +2513,17 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llGetTime",llGetTime),
         ("llGetTimeOfDay",llGetTimeOfDay),
         ("llGetTimestamp",llGetTimestamp),
+        ("llGetTorque",llGetTorque),
         ("llGetUnixTime",llGetUnixTime),
         ("llGetWallclock",llGetWallclock),
         ("llGetVel",llGetVel),
         ("llGiveInventory", llGiveInventory),
         ("llGiveMoney",llGiveMoney),
+        ("llGround", llGround),
+        ("llGroundContour", llGroundContour),
+        ("llGroundNormal", llGroundNormal),
+        ("llGroundRepel",llGroundRepel),
+        ("llGroundSlope",llGroundSlope),
         ("llHTTPRequest",llHTTPRequest),
         ("llInstantMessage",llInstantMessage),
         ("llKey2Name", llKey2Name),
@@ -2316,6 +2539,7 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llMakeFountain",llMakeFountain),
         ("llMakeSmoke",llMakeSmoke),
         ("llMessageLinked", llMessageLinked),
+        ("llMoveToTarget", llMoveToTarget),
         ("llOffsetTexture", llOffsetTexture),
         ("llOpenRemoteDataChannel", llOpenRemoteDataChannel),
         ("llOverMyLand", llOverMyLand),
@@ -2347,6 +2571,8 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llResetTime",llResetTime),
         ("llRezAtRoot",llRezAtRoot),
         ("llRezObject",llRezObject),
+        ("llRotTarget",llRotTarget),
+        ("llRotTargetRemove",llRotTargetRemove),
         ("llRotateTexture", llRotateTexture),
         ("llSameGroup", llSameGroup),
         ("llSay",llSay),
@@ -2356,9 +2582,12 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llSensorRepeat",llSensorRepeat),
         ("llSendRemoteData",llSendRemoteData),
         ("llSetAlpha", llSetAlpha),
+        ("llSetBuoyancy", llSetBuoyancy),
         ("llSetClickAction", llSetClickAction),
         ("llSetColor", llSetColor),
         ("llSetForce", llSetForce),
+        ("llSetForceAndTorque", llSetForceAndTorque),
+        ("llSetHoverHeight", llSetHoverHeight),
         ("llSetLinkAlpha",llSetLinkAlpha),
         ("llSetLinkColor",llSetLinkColor),
         ("llSetLinkPrimitiveParams",llSetLinkPrimitiveParams),
@@ -2381,6 +2610,7 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llSetStatus",llSetStatus),
         ("llSetText",llSetText),
         ("llSetTexture",llSetTexture),
+        ("llSetTorque",llSetTorque),
         ("llSetTouchText",llSetTouchText),
         ("llSetVehicleFlags",llSetVehicleFlags),
         ("llSitTarget",llSitTarget),
@@ -2391,13 +2621,18 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llSoundPreload", llSoundPreload),
         ("llStartAnimation", llStartAnimation),
         ("llStopAnimation", llStopAnimation),
+        ("llStopHover",llStopHover),
+        ("llStopMoveToTarget", llStopMoveToTarget),
         ("llStopPointAt", llStopPointAt),
         ("llStopSound",llStopSound),
         ("llTakeCamera",llTakeCamera),
+        ("llTarget",llTarget),
+        ("llTargetRemove",llTargetRemove),
         ("llTeleportAgentHome",llTeleportAgentHome),
         ("llTriggerSound",llTriggerSound),
         ("llTriggerSoundLimited",llTriggerSoundLimited),
         ("llUnSit",llUnSit),
+        ("llVolumeDetect", llVolumeDetect),
         ("llWhisper",llWhisper),
         ("llWind",llWind),
         ("llWater",llWater)
@@ -2439,7 +2674,7 @@ getPrimInfo pkey =
                        objects <- getObjects
                        case M.lookup p1Key objects of
                            Nothing -> return Nothing
-                           Just (LSLObject plist) ->
+                           Just (LSLObject { primKeys = plist }) ->
                                case elemIndex pkey plist of
                                    Nothing -> return Nothing
                                    Just i -> return $ Just (p1Key, i, primName p)
@@ -2482,6 +2717,10 @@ getObjectNames = getObjects >>= (return . M.keys)
 getListenerIds :: (Monad m) => WorldM m [Int]
 getListenerIds = liftM (map fst) getListeners
 getObject name = lift getObjects >>= M.lookup name
+setObject oid obj = getObjects >>= setObjects . M.insert oid obj
+getObjectDynamics k = getObject k >>= return . objectDynamics
+getObjectPosition k = getObjectDynamics k >>= return . objectPosition
+getObjectRotation k = getObjectDynamics k >>= return . objectRotation
 
 newWorld slice maxt iq = World {
                sliceSize = slice,
@@ -2513,6 +2752,8 @@ newWorld slice maxt iq = World {
                worldOpenDataChannels = (M.empty,M.empty),
                worldXMLRequestRegistry = M.empty,
                worldPhysicsTime = 0,
+               worldTargetCheckTime = 0,
+               worldLastPositions = M.empty,
                worldCollisions = S.empty
            }
            
@@ -2619,7 +2860,7 @@ processEvent (CreatePrim name key) =
        objects <- getObjects
        let prim = emptyPrim name key
        setPrims (M.insert key prim worldPrims)
-       setObjects (M.insert key (LSLObject [key]) objects)
+       setObjects (M.insert key (LSLObject [key] defaultDynamics) objects)
 processEvent (AddScript (name,script) key active) =
        do scripts <- getWScripts
           t <- getTick
@@ -2673,17 +2914,19 @@ processEvent evt@(SensorEvent (pk,sn) name key stype range arc rpt) =
            then lift $ pushEvent (Event "no_sensor" [] M.empty) pk sn
            else lift $ pushEvent (Event "sensor" [(IVal $ length list)] (M.fromList (zipWith (\ i k -> ("key_" ++ show i,KVal k)) [0..] list))) pk sn       
     where senseObjects = do
-              pos <- getPrimPosition pk
-              rot <- getPrimRotation pk
+              pos <- getGlobalPos pk
+              rot <- getGlobalRot pk
               root <- getRootPrim pk
               let fwd = fwdFromRot rot
               prims <- rootPrims root
+              poss <- mapM getGlobalPos (map primKey prims)
+              let pprims = zip poss prims
               statuses <- mapM objectStatus (map primKey prims)
-              return [ primKey p | (p,stat) <- zip prims statuses, withinSensorArea pos fwd range arc (primPosition p), stat .&. stype /= 0]
+              return [ primKey p | ((pos,p),stat) <- zip pprims statuses, withinSensorArea pos fwd range arc pos, stat .&. stype /= 0]
           senseAvatars = 
               if stype .&. cAgent /= 0 then do
-                      pos <- getPrimPosition pk
-                      rot <- getPrimRotation pk
+                      pos <- getGlobalPos pk
+                      rot <- getGlobalRot pk
                       attachKey <- getPrimAttachment pk >>= return . liftM attachmentKey
                       let fwd = fwdFromRot rot
                       avs <- allAvs attachKey
@@ -2696,9 +2939,9 @@ processEvent evt@(SensorEvent (pk,sn) name key stype range arc rpt) =
                   m = mag3d v in m <= range && angleBetween v direction <= arc
           rootPrims exclude = do
               objs <- lift getObjects
-              mapM getPrim [ k | LSLObject (k:_) <- M.elems objs, exclude /= k]
+              mapM getPrim [ k | LSLObject { primKeys = (k:_) } <- M.elems objs, exclude /= k]
           objectStatus root = do
-              LSLObject pks <- lift getObjects >>= M.lookup root
+              LSLObject { primKeys = pks } <- getObject root
               stat <- foldM (\ x k -> determineActivePassiveScripted k >>= return . (x .|.)) 0 pks
               if (stat .&. cActive /= 0 && stat .&. cPassive /= 0) 
                  then return (stat .&. complement cPassive)
@@ -2793,17 +3036,16 @@ processEvent (RezObjectEvent links pos vel rot start pk copy atRoot) =
     runAndLogIfErr "invalid rez object event" () $ do
         when (null links) $ throwError "empty link set!"
         -- reset positions relative to root
-        let rootPos = primPosition $ head links
+        let rootPos = (0,0,0)
         let geomCenter = scale3d ( 1 / fromIntegral (length links)) 
                                  (foldl add3d (0,0,0) (map ((flip diff3d rootPos) . primPosition) links))
         let offset = if atRoot then diff3d pos rootPos else (pos `diff3d` (rootPos `add3d` geomCenter))
-        let resetPosition prim = return $ prim { primPosition = diff3d (primPosition prim) offset }
-        let update = if copy then (\ p -> updateKeys p >>= resetPosition) else resetPosition
+        let update = if copy then (\ p -> updateKeys p) else return
         -- TODO: rotation and velocity
         links' <- mapM update links
         mapM activateScripts links'
         let rootKey = primKey (head links')
-        lift (getObjects >>= return . M.insert rootKey (LSLObject $ map primKey links') >>= setObjects)
+        lift (getObjects >>= return . M.insert rootKey (LSLObject (map primKey links') defaultDynamics { objectPosition = pos }) >>= setObjects)
         lift $ (getPrims >>= (\ m -> return (foldl (\ m l -> M.insert (primKey l) l m) m links')) >>= setPrims)
         lift $ pushEventToObject (Event "on_rez" [IVal start] M.empty) rootKey
         lift $ pushEventToPrim (Event "object_rez" [KVal rootKey] M.empty) pk
@@ -2833,7 +3075,7 @@ processEvent (DetachCompleteEvent oid ak) =
          -- save the script states
          avatars <- lift getWorldAvatars
          avatar <- M.lookup ak avatars
-         LSLObject links <- lift getObjects >>= M.lookup oid
+         LSLObject { primKeys = links } <- getObject oid
          prims <- mapM passivatePrim links
          when (null prims) $ throwError "object has no prims!"
          let root = head prims
@@ -2914,12 +3156,12 @@ nextActivity :: (Monad (StateT (World a) a), Monad a) => StateT (World a) a (May
 nextActivity = 
     do 
         scripts <- getWorldScripts
-        t <- getTick
-        let ns = foldl (calcNxt $ t + 1) Nothing $ M.elems scripts
+        t <- getTick >>= return . (+1)
+        let ns = foldl (calcNxt t) Nothing $ M.elems scripts
         wq <- getWQueue
         let ne = case wq of
                      [] -> Nothing
-                     ((i,_):_) -> Just i
+                     ((i,x):_) -> Just $ max t i
         return $ mmin ne ns
     where calcNxt t n (Script { scriptImage = (Invalid _) }) = n
           calcNxt t n (Script { scriptActive = False }) = n
@@ -2986,37 +3228,90 @@ runPhysics = do
         t0 <- getWorldPhysicsTime
         t1 <- getTick
         os <- getObjects
-        when (t1 > t0) $ do
-            flip mapM_ (M.keys os) $ \ pk -> runErrPrim pk () $ do
+        let tlist = [t0,(t0+10)..t1] ++ if (t1 - t0) `mod` 10 > 0 then [t1] else []
+        let intervals = zip tlist $ tail tlist
+        forM_ intervals $ \ (t0,t1) -> do
+            forM_ (M.toList os) $ \ (pk,obj) -> runErrPrim pk () $ do
                 prim <- getPrim pk
+                obj <- getObject pk
                 when ((flip testBit) primPhysicsBit $ primStatus prim) $ do
                     mass <- objectMass pk
-                    let force = fst (primForce prim) `rot3d` rotation where rotation = if snd $ primForce prim then primRotation prim else (0,0,0,1)
-                    let impulse = ((fst . fst . primImpulse) prim `rot3d` rotation, (snd . primImpulse) prim)
-                            where rotation = if (snd . fst . primImpulse) prim then primRotation prim else (0,0,0,1)
-                    let (pos,vel) = kin t0 t1 ticksToDuration 0 mass (primPosition prim) (primVelocity prim) force impulse
-                    lift $ setPrimPosition pk $! pos
-                    lift $ setPrimVelocity pk $! vel
+                    let dyn = objectDynamics obj
+                    let pos0@(x0,y0,z0) = objectPosition dyn
+                    let vel0@(_,_,vz0) = objectVelocity dyn
+                    let force = (fst (objectForce dyn) `rot3d` rotation) `add3d` (0,0,mass * (objectBuoyancy dyn) * (-gravC))
+                            where rotation = if snd $ objectForce dyn then objectRotation dyn else (0,0,0,1)
+                                
+                    let impulse = ((fst . fst . objectImpulse) dyn `rot3d` rotation, (snd . objectImpulse) dyn)
+                            where rotation = if (snd . fst . objectImpulse) dyn then objectRotation dyn else (0,0,0,1)
+                    let impulseFNow = if snd impulse >= t1 then fst impulse else (0,0,0)
+                    let heightDampF tau z = (0,0, dampZForce tau z z0 mass vz0 fz0)
+                            where (_,_,fz0) = force `add3d` impulseFNow
+                    let dampF = case objectPositionTarget (objectDynamics obj) of
+                                     Nothing -> (0,0,0)
+                                     Just (PositionTarget { positionTargetTau = tau, positionTargetLocation = l }) ->
+                                         dampForce tau l pos0 mass vel0 (force `add3d` impulseFNow)
+                                     Just (Repel { positionTargetTau = tau, positionTargetHeight = z }) ->
+                                             if z0 <= 0.5 * z then heightDampF tau z else (0,0,0)
+                                     Just (Hover { positionTargetTau = tau, positionTargetHeight = z}) -> heightDampF tau z
+                    let (pos,vel) = kin t0 t1 ticksToDuration 0 mass pos0 vel0 (force `add3d` dampF) impulse
+                    -- TODO: local vs global rotations in torque
+                    -- TODO: rotational impulses
+                    radius <- objRadius pk
+                    let (rot,omega) = rotDyn t0 t1 ticksToDuration radius mass (objectRotation dyn) (objectOmega dyn) (fst $ objectTorque dyn)
+                    lift $ setObject pk $! (obj { objectDynamics = (objectDynamics obj) 
+                                                      { objectVelocity = vel, 
+                                                        objectPosition = pos,
+                                                        objectRotation = rot,
+                                                        objectOmega = omega }})
                     return ()
         handleCollisions
+        handleMovers
+        handleTargets
         setWorldPhysicsTime $! t1
 
+handleMovers :: Monad m => WorldM m ()
+handleMovers = runAndLogIfErr "problem determining which objects moved" () $
+    do lastPositions <- lift $ getWorldLastPositions
+       let lastKeys = S.fromList $ M.keys lastPositions
+       curPositions <- lift getObjects >>= return . M.keys >>= mapM (\ k -> getObjectPosition k >>= return . ((,)k))
+       let curKeys = S.fromList $ map fst curPositions
+       let newKeys = curKeys `S.difference` lastKeys
+       let keysFromBefore = curKeys `S.difference` newKeys
+       m <- return . M.fromList =<< mapM ( \ (k,pos) -> if k `S.member` keysFromBefore
+                                                        then do (moving,lpos) <- M.lookup k lastPositions
+                                                                let moving' = lpos /= pos
+                                                                when (moving' && not moving) $ 
+                                                                    lift $ pushEventToPrim (Event "moving_start" [] M.empty) k
+                                                                when (moving && not moving') $ 
+                                                                    lift $ pushEventToPrim (Event "moving_end" [] M.empty) k
+                                                                return (k,(moving', pos))
+                                                        else return (k,(False,pos))) curPositions
+       lift $ setWorldLastPositions m
+
 handleCollisions :: Monad m => WorldM m ()
-handleCollisions = do
+handleCollisions = runAndLogIfErr "can't process collisions" () $ do
         -- look at all non-phantom prims
-        prims <- getPrims >>= return . M.assocs >>= (return . filter ((==0) . (.&. cStatusPhantom) . primStatus . snd))
-        let voldtct = map fst $ filter (primVolumeDetect . snd) prims
+        prims <- lift getPrims >>= return . M.assocs >>= (return . filter ((==0) . (.&. cStatusPhantom) . primStatus . snd))
+        let pks = map fst prims
+        primBoxes <- mapM (\ (k,p) -> getPrimBox k >>= return . ((,) k ) . ((,)p) ) prims
+        --let voldtct = map fst $ filter (primVolumeDetect . snd) prims
+        voldtct <- flip filterM prims (\ (_,prim) ->
+            let f k = (getObject k >>= return . objectVolumeDetect . objectDynamics) in
+                case primParent prim of
+                    Nothing -> f (primKey prim)
+                    Just k -> f k
+            ) >>= return . map fst
         let cmp x y = compare (fst x) (fst y)
-        let curCollisions = S.fromList [ (k0,k1) | ((k0,p0),(k1,p1)) <- checkIntersections (primBox . snd) cmp prims, 
+        let curCollisions = S.fromList [ (k0,k1) | ((k0,(p0,_)),(k1,(p1,_))) <- checkIntersections (snd . snd) cmp primBoxes, 
                                                    primParent p0 /= Just k1 &&
                                                    primParent p1 /= Just k0 &&
                                                    not (primParent p0 == primParent p1 && isJust (primParent p0))]
-        oldCollisions <- getWorldCollisions
+        oldCollisions <- lift getWorldCollisions
         let formerCollisions = oldCollisions `S.difference` curCollisions
         let newCollisions = curCollisions `S.difference` oldCollisions
-        runAndLogIfErr "can't process collision starts" () (
-            toObjCollisions newCollisions "collision_start" >>= mapM_ (send "collision_start"))
-        runAndLogIfErr "can't process collisions" () (do
+        toObjCollisions newCollisions "collision_start" >>= mapM_ (send "collision_start")
+        (do
             objCollisions <- toObjCollisions curCollisions "collision"
             -- filter out volume detect objects, except for those objects that are attatched
             let attachment k = do
@@ -3028,9 +3323,8 @@ handleCollisions = do
                 >>= return . (filter (\ ((k,_),mv) -> (k `notElem` voldtct) || isJust mv))
                 >>= return . (map fst)
             mapM_ (send "collision") objCollisions')
-        runAndLogIfErr "can't process collision ends" () (
-            toObjCollisions formerCollisions "collision_end" >>= mapM_ (send "collision_end"))
-        setWorldCollisions curCollisions
+        toObjCollisions formerCollisions "collision_end" >>= mapM_ (send "collision_end")
+        lift $ setWorldCollisions curCollisions
     where send :: Monad m => String -> (String,[(Int,String)]) -> ErrorT String (WorldM m) ()
           send hn (pk,oinfo) =  collisionScripts >>= mapM_ (sendScript hn pk oinfo)
               where collisionScripts = do
@@ -3102,17 +3396,36 @@ handleCollisions = do
                          attach <- getPrimAttachment ok
                          if isJust attach
                              then return False
-                             else do
-                                 objs <- lift getObjects
-                                 case M.lookup ok objs of
-                                     Nothing -> throwError "can't get object"
-                                     Just (LSLObject links) -> do
-                                         foldM (\ b k -> if b then return True 
-                                                              else (getPrimVolumeDetect k)) False  links
+                             else getObject ok >>= return . objectVolumeDetect . objectDynamics
                     other k (x,y) | k == x = Just y
                                   | k == y = Just x
                                   | otherwise = Nothing
-    
+
+handleTargets :: Monad m => WorldM m ()
+handleTargets = do
+    t <- getTick
+    t0 <- getWorldTargetCheckTime
+    when (t - t0 > durationToTicks 0.1) $ do
+        getObjects >>= return . M.keys >>= mapM_ (\ k -> do
+            runErrPrim k () $ do
+                pos <- getGlobalPos k
+                scripts <- getActualPrimScripts k
+                forM_ scripts (\ ((_,sn),script) -> do
+                        forM_ (IM.toList $ scriptPositionTargets script) $ (\ (i,(target,range)) -> do
+                            case (scriptImage script) of
+                                (Invalid _) -> return ()
+                                (Valid image) ->
+                                    if hasActiveHandler image "at_target" && inRange
+                                        then lift $ pushEvent (Event "at_target" [IVal i, vec2VVal target, vec2VVal pos] M.empty) k sn
+                                        else if hasActiveHandler image "not_at_target" && not inRange
+                                                 then lift $ pushEvent (Event "not_at_target" [] M.empty) k sn
+                                                 else return ()
+                                    where inRange = (dist3d2 target pos <= range^2)
+                            )
+                    )                        
+                    
+            )
+
 simulate :: Monad m => WorldM m ()
 simulate =
     do processEvents
@@ -3120,13 +3433,14 @@ simulate =
        runPhysics
        mn <- nextActivity
        t <- getTick
-       setTick (case mn of
-           Nothing -> t + 10
-           Just n -> min (t + 10) n)
+       let t' = case mn of
+                    Nothing -> t + 10
+                    Just n -> min (t + 10) n
+       setTick t'
        --setTick (t + 1)
        pauseTime <- getNextPause
        suspendInfo <- getWorldSuspended
-       if t + 1 >= pauseTime || isSuspended suspendInfo then return () else simulate
+       if t' >= pauseTime || isSuspended suspendInfo then return () else simulate
     where isSuspended Nothing = False
           isSuspended _ = True
 
@@ -3297,17 +3611,17 @@ userTouchEventDef =
             let f _ [KVal pk, KVal ak, FVal duration] = runAndLogIfErr "can't find prim? " () $ do
                         -- should we pass touches?
                         prim <- getPrim pk
-                        linkNum <- (if isNothing (primParent prim) then return 0
-                                    else do
-                                       LSLObject links <- lift getObjects >>= M.lookup (fromJust $ primParent prim)
-                                       Just i <- return $ elemIndex pk links
-                                       return (i + 1)) <||>
-                                    (do lift $ logAMessage LogWarn "sim" ("can't figure out link number of prim: " ++ pk)
-                                        return 0)
+                        linkNum <- (case primParent prim of
+                                        Nothing -> return 0
+                                        Just parent -> do
+                                            LSLObject { primKeys = links } <- getObject parent
+                                            Just i <- return $ elemIndex pk links
+                                            return (i + 1)) <||>
+                                               (do lift $ logAMessage LogWarn "sim" ("can't figure out link number of prim: " ++ pk)
+                                                   return 0)
                         needstouches <- liftM or $ mapM (primHasActiveHandler pk) ["touch","touch_start","touch_end"]
                         let touchList = (if needstouches then [pk] else []) ++
-                                        (if isJust (primParent prim) && (primPassTouches prim || not needstouches) 
-                                             then [fromJust $ primParent prim] else [])
+                                        (if (primPassTouches prim || not needstouches) then maybe [] return (primParent prim) else [])
                         lift $ mapM_ (doTouch linkNum) touchList
                     where doTouch linkNum k = do
                             putWorldEvent 0 (mkTouchStartEvent k "1" ak linkNum)

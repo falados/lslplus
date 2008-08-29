@@ -13,5 +13,5 @@ Executable LslPlus
                   pureMD5 >= 0.1.2, bytestring > 0.9
   Main-Is:        LslPlus.hs
   Hs-Source-Dirs: .
-  Ghc-Options:    -fglasgow-exts
+  Ghc-Options:    -v3
   
