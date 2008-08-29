@@ -46,6 +46,31 @@
     <objectNode>
       <nodeName>Object</nodeName>
       <childrenArray>
+        <objectPropertiesNode>
+          <nodeName>object-properties</nodeName>
+          <childrenArray>
+            <gridPositionNode>
+              <nodeName>pos</nodeName>
+              <childrenArray>
+                <gridCoordinateNode>
+                  <nodeName>x</nodeName>
+                  <value class="float">128.0</value>
+                  <childrenArray/>
+                </gridCoordinateNode>
+                <gridCoordinateNode>
+                  <nodeName>y</nodeName>
+                  <value class="float">128.0</value>
+                  <childrenArray/>
+                </gridCoordinateNode>
+                <gridCoordinateNode>
+                  <nodeName>z</nodeName>
+                  <value class="float">0.0</value>
+                  <childrenArray/>
+                </gridCoordinateNode>
+              </childrenArray>
+            </gridPositionNode>
+          </childrenArray>
+        </objectPropertiesNode>
         <primNode>
           <nodeName>Object</nodeName>
           <childrenArray>

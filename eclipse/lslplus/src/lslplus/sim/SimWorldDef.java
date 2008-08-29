@@ -114,9 +114,10 @@ public class SimWorldDef {
     
     public static class SimObject {
         private String[] primKeys;
-        
-        public SimObject(String[] primKeys) {
+        private LVector position;
+        public SimObject(String[] primKeys, LVector position) {
             this.primKeys = primKeys;
+            this.position = position;
         }    
     }
     
@@ -250,11 +251,11 @@ public class SimWorldDef {
         
         SimWorldDef.Prim[] prims = new SimWorldDef.Prim[] {
                 new SimWorldDef.Prim("defaultPrim", primKey, new ScriptInfo[] { new ScriptInfo(name,name) }, null,
-                        "an object", "Default Avatar", new LVector(128,128,0), new LVector(0,0,0))
+                        "an object", "Default Avatar", new LVector(0,0,0), new LVector(0,0,0))
         };
         
         SimWorldDef.SimObject[] objects = new SimWorldDef.SimObject[] {
-                new SimWorldDef.SimObject(new String[] { primKey })
+                new SimWorldDef.SimObject(new String[] { primKey },new LVector(0,0,0))
         };
         
         SimWorldDef.Avatar[] avatars = new SimWorldDef.Avatar[] {

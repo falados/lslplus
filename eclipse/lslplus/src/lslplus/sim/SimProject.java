@@ -41,6 +41,7 @@ import com.thoughtworks.xstream.io.xml.DomDriver;
 // TODO: add validation, so we can mark project is invalid, e.g. if referenced scripts don't exist.
 public class SimProject {
     private static final String PRIM_PROPERTIES = "prim-properties"; //$NON-NLS-1$
+    private static final String OBJECT_PROPERTIES = "object-properties";
     static final NodeFactory[] EMPTY_FACTORY_LIST = { };
     private static final String DEFAULT_AVATAR_ID = "Default Avatar";
     private static HashMap ID_TO_DISPLAY = new HashMap();
@@ -191,6 +192,7 @@ public class SimProject {
         private static final NodeFactory[] LEGAL_CHILD_NODES = { primNodeFactory };
         public ObjectNode(Node parent, String name) {
             super(parent, name, null);
+            addChild(new ObjectPropertiesNode(this));
         }
         
         public NodeFactory[] legalChildNodes() {
@@ -224,27 +226,40 @@ public class SimProject {
         }
         
         protected void childUpdated(Node child, Object oldValue) {
-            if (child instanceof GridCoordinateNode) {
-                Node prim = child.findAncestorOfType(PrimNode.class);
-                if (!isFirstChildOfType(prim, PrimNode.class)) return;
-                // this was a coordinate of the root prim...
-                
-                final GridCoordinateNode coord = (GridCoordinateNode) child;
-                final float vDelt = ((Float)coord.getValue()).floatValue() - 
-                                    ((Float)oldValue).floatValue();
-                this.accept(new NodeVisitor() {
-                    public void visit(Node n) {
-                        if (n instanceof GridCoordinateNode && n != coord) {
-                            if (n.getName().equals(coord.getName())) {
-                                float val = ((Float)n.getValue()).floatValue();
-                                n.setValue(new Float(GridCoordinateNode.clipCoordinate(val + vDelt)));
-                            }
-                        }
-                    }
-                });
-            }
+//            if (child instanceof GridCoordinateNode) {
+//                Node prim = child.findAncestorOfType(PrimNode.class);
+//                if (!isFirstChildOfType(prim, PrimNode.class)) return;
+//                // this was a coordinate of the root prim...
+//                
+//                final GridCoordinateNode coord = (GridCoordinateNode) child;
+//                final float vDelt = ((Float)coord.getValue()).floatValue() - 
+//                                    ((Float)oldValue).floatValue();
+//                this.accept(new NodeVisitor() {
+//                    public void visit(Node n) {
+//                        if (n instanceof GridCoordinateNode && n != coord) {
+//                            if (n.getName().equals(coord.getName())) {
+//                                float val = ((Float)n.getValue()).floatValue();
+//                                n.setValue(new Float(GridCoordinateNode.clipCoordinate(val + vDelt)));
+//                            }
+//                        }
+//                    }
+//                });
+//            }
         }
         
+        
+        protected void onChildRemoved(Node n) {
+            if (n instanceof PrimNode) {
+                List prims = findChildrenByType(PrimNode.class);
+                if (n == prims.get(0)) {
+                    if (prims.size() > 1) {
+                        PrimNode secondPrim = (PrimNode) prims.get(1);
+                        secondPrim.zeroPosition();
+                    }
+                }
+            }
+        }
+
         public boolean isNameChangeable() {
             return true;
         }
@@ -262,6 +277,21 @@ public class SimProject {
             }
         }
 
+        public SimObject getSimObject(List allPrims) { 
+            List primNodes = findChildrenByType(PrimNode.class);
+            String[] primKeys = new String[primNodes.size()];
+            int j = 0;
+            for (Iterator i1 = primNodes.iterator(); i1.hasNext(); ) {
+                PrimNode pn = (PrimNode)i1.next();
+                Prim p = (Prim)pn.getDerivedValue();
+                allPrims.add(p);
+                primKeys[j++] = p.getKey();
+            }
+            ObjectPropertiesNode props = (ObjectPropertiesNode) findChildByName(OBJECT_PROPERTIES);
+            Map m = props.getData();
+            LVector position = (LVector) m.get("position");
+            return new SimObject(primKeys, position);
+        }
     }
     
     public static class PrimNode extends Node implements HasDerivedValue {
@@ -279,6 +309,16 @@ public class SimProject {
             addChild(new PrimPropertiesNode(this,owner));
         }
         
+        public void zeroPosition() {
+            PrimPropertiesNode props = (PrimPropertiesNode) findChildByName(SimProject.PRIM_PROPERTIES);
+            
+            GridPositionNode node = (GridPositionNode) props.findChildByName("pos");
+            GridCoordinateNode x = (GridCoordinateNode) node.findChildByName("x");
+            x.setValue(new Integer(0));
+            GridCoordinateNode y = (GridCoordinateNode) node.findChildByName("y");
+            y.setValue(new Integer(0));
+        }
+
         public void setOwner(String owner) {
             PrimPropertiesNode props = (PrimPropertiesNode) findChildByName(SimProject.PRIM_PROPERTIES);
             
@@ -408,9 +448,9 @@ public class SimProject {
             addChild(new StringNode(this,"description",""));
         }
 
-        public void setProperty(String string, String owner) {
+        public void setProperty(String string, String val) {
             Node n = findChildByName(string);
-            if (n != null) n.updateValue(owner);
+            if (n != null) n.updateValue(val);
         }
 
         public String getProperty(String string) {
@@ -436,6 +476,22 @@ public class SimProject {
         }
     }
 
+    public static class ObjectPropertiesNode extends FixedFormatNode {
+
+        public ObjectPropertiesNode(Node parent) {
+            super(parent, OBJECT_PROPERTIES, null);
+            addChild(new GridPositionNode(this,"pos"));
+        }
+
+        public Map getData() {
+            HashMap map = new HashMap();
+            GridPositionNode node = (GridPositionNode) findChildByName("pos"); //$NON-NLS-1$
+            map.put("pos", node.getVector()); //$NON-NLS-1$
+            return map;
+        }
+        
+    }
+    
     public static class AvatarPropertiesNode extends FixedFormatNode {
         public AvatarPropertiesNode(Node parent) {
             super(parent, "avatar-properties", null); //$NON-NLS-1$
@@ -744,8 +800,10 @@ public class SimProject {
     public static class GridPositionNode extends Node implements HasDerivedValue {
         public GridPositionNode(Node parent, String nodeName) {
             super(parent, nodeName, null);
-            addChild(new GridCoordinateNode(this, "x", 128));
-            addChild(new GridCoordinateNode(this, "y", 128));
+            
+            boolean prim = parent instanceof PrimPropertiesNode;
+            addChild(new GridCoordinateNode(this, "x", prim? 0:128));
+            addChild(new GridCoordinateNode(this, "y", prim? 0:128));
             addChild(new GridCoordinateNode(this, "z", 0));
         }
 
@@ -925,7 +983,14 @@ public class SimProject {
             return getValue().toString();
         }
 
+        
         public boolean isValueChangeable() {
+            /* very hacky... */
+            if (getParent() != null && getParent().getParent() != null &&
+                getParent().getParent() instanceof PrimPropertiesNode) {
+                PrimNode prim = (PrimNode) getParent().getParent().getParent();
+                return !prim.getParent().isFirstChildOfType(prim, PrimNode.class);
+            }
             return true;
         }
 
@@ -1069,7 +1134,7 @@ public class SimProject {
                 GridPositionNode.class, PrimPropertiesNode.class, AvatarPropertiesNode.class,
                 AvatarReferenceNode.class, GestureNode.class, ClothingNode.class,
                 BodyPartNode.class, SoundNode.class, AnimationNode.class, TextureNode.class,
-                LandmarkNode.class, EventHandlerNode.class
+                LandmarkNode.class, EventHandlerNode.class, ObjectPropertiesNode.class
         };
         
         xstream.omitField(Node.class, "parent"); //$NON-NLS-1$
@@ -1129,16 +1194,7 @@ public class SimProject {
         index = 0;
         for (Iterator i = simObjectNodes.iterator(); i.hasNext();) {
             ObjectNode on = (ObjectNode)i.next();
-            List primNodes = on.findChildrenByType(PrimNode.class);
-            String[] primKeys = new String[primNodes.size()];
-            int j = 0;
-            for (Iterator i1 = primNodes.iterator(); i1.hasNext(); ) {
-                PrimNode pn = (PrimNode)i1.next();
-                Prim p = (Prim)pn.getDerivedValue();
-                allPrims.add(p);
-                primKeys[j++] = p.getKey();
-            }
-            simObjects[index++] = new SimObject(primKeys);
+            simObjects[index++] = on.getSimObject(allPrims);
         }
         
         Prim[] primArray = (Prim[]) allPrims.toArray(new Prim[allPrims.size()]);

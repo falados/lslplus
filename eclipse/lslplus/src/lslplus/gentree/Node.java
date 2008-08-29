@@ -145,6 +145,7 @@ public abstract class Node {
     
     public void removeChild(Node n) {
         if (getChildren().contains(n)) n.onRemove();
+        onChildRemoved(n);
         if (getChildren().remove(n)) fireStructureChanged();
     }
     
@@ -159,6 +160,14 @@ public abstract class Node {
     }
     
     protected void onRemove() {
+        
+    }
+    
+    /**
+     * Called when a child is about to be removed but BEFORE the removal occurs.
+     * @param n
+     */
+    protected void onChildRemoved(Node n) {
         
     }
     
