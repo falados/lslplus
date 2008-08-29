@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -XFlexibleContexts #-}
 module Lsl.SystemTester where
 
 import Control.Exception
