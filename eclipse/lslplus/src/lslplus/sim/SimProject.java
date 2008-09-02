@@ -50,6 +50,7 @@ public class SimProject {
         ID_TO_DISPLAY.put("pos", "Position"); //$NON-NLS-1$
         ID_TO_DISPLAY.put("prim-properties", "Prim properties"); //$NON-NLS-1$
         ID_TO_DISPLAY.put("avatar-properties", "Avatar properties"); //$NON-NLS-1$
+        ID_TO_DISPLAY.put(OBJECT_PROPERTIES, "Object properties");
     }
     
     public static interface HasDerivedValue {
