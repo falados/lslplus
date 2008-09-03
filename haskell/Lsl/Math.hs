@@ -3,6 +3,7 @@ module Lsl.Math(
     dist3d,
     mag3d2,
     mag3d,
+    dot3d,
     norm3d,
     diff3d,
     add3d,
@@ -16,10 +17,17 @@ module Lsl.Math(
     invertQuaternion,
     quaternionToRotations,
     rotationsToQuaternion,
-    cross) where
+    cross,
+    rotationBetween,
+    angleBetween,
+    axisAngleToRotation,
+    axisAngleFromRotation) where
 
+import Debug.Trace
 dist3d2 (x1,y1,z1) (x2,y2,z2) = ((x2-x1)^2 + (y2-y1)^2 + (z2-z1)^2)
 dist3d v0 v1 = sqrt $ dist3d2 v0 v1
+
+dot3d (x1,y1,z1) (x2,y2,z2) = x1 * x2 + y1 * y2 + z1 * z2
 
 mag3d2 (x,y,z) = (x^2 + y^2 + z^2)
 mag3d v = sqrt $ mag3d2 v
@@ -94,3 +102,34 @@ quaternionToRotations rotOrder lh quat=
     in (theta1,theta2,theta3)
     
 cross (x1,y1,z1) (x2,y2,z2) = ((y1 * z2 - z1 * y2),(z1 * x2 - x1 * z2),(x1 * y2 - y1 * x2))
+
+rotationBetween v0 v1 =
+    let (v0',v1') = (norm3d v0,norm3d v1)
+        axis = v0' `cross` v1'
+        angle = acos (v0' `dot3d` v1') 
+    in axisAngleToRotation axis angle
+
+angleBetween (aX,aY,aZ,aS) (bX,bY,bZ,bS) =
+   2 * acos ((aX * bX + aY * bY + aZ * bZ + aS * bS) / sqrt ((aX^2 + aY^2 + aZ^2 + aS^2) * (bX^2 + bY^2 + bZ^2 + bS^2)))
+   
+axisAngleToRotation (x,y,z) angle =
+    let w = cos (angle/2.0)
+        sinVal = sin (angle/2.0)
+        x' = x * sinVal
+        y' = y * sinVal
+        z' = z * sinVal
+    in (x',y',z',w)
+
+scaleRotation scale rot = let (axis,angle) = axisAngleFromRotation rot in axisAngleToRotation axis (angle * scale)
+       
+axisAngleFromRotation (x,y,z,s) = 
+    let s' = max (-1) (min 1 s)
+        angle = 2 * acos s'
+        sinVal = sin (angle/2)
+        x' = x / sinVal
+        y' = y / sinVal
+        z' = z / sinVal
+    in if sinVal == 0 then ((1,0,0),0) else ((x',y',z'),angle)
+     
+toRad3 (x,y,z) = (x*pi/180,y*pi/180,z*pi/180)
+toDeg3 (x,y,z) = (x*180/pi,y*180/pi,z*180/pi)

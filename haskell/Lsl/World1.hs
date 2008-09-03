@@ -984,7 +984,7 @@ llGetOmega info@(ScriptInfo { scriptInfoObjectKey = oid }) [] =
     runErrFunc info "llGetOmega" (0,0,0) (getObject oid >>= return . objectOmega . objectDynamics) >>= continueWith . vec2VVal
     
 llApplyRotationalImpulse info@(ScriptInfo { scriptInfoObjectKey = oid }) [VVal x y z, IVal local] =
-    runErrFunc info "llSetTorque" () (do
+    runErrFunc info "llApplyRotationalImpulse" () (do
         obj <- getObject oid
         t <- lift getTick
         lift $ setObject oid (obj { 
@@ -1009,6 +1009,31 @@ getGlobalRot pk = do
     rot <- getPrimRotation pk
     return (rot `quaternionMultiply` rot0)
     
+llRotLookAt info@(ScriptInfo oid _ _ _ _) [RVal x y z s, FVal strength, FVal tau] =
+    runErrFunc info "llRotLookAt" () (rotLookAt oid (x,y,z,s) strength tau) >> continueWith VoidVal
+
+llLookAt info@(ScriptInfo oid _ _ _ _) [VVal x y z, FVal strength, FVal tau] =
+    runErrFunc info "llLookAt" () (do
+        pos <- getObjectPosition oid
+        rot <- getGlobalRot oid
+        let v = diff3d (x,y,z) pos
+        let rot1 = rot `quaternionMultiply` (rotationBetween (rot3d (0,0,1) rot) v)
+        rotLookAt oid rot1 strength tau) >> continueWith VoidVal
+        
+rotLookAt oid (x,y,z,s) strength tau = do
+    obj <- getObject oid
+    lift $ setObject oid $ obj { objectDynamics = (objectDynamics obj) { objectRotationTarget = 
+                                                                            Just (RotationTarget {
+                                                                                     rotationTarget = (x,y,z,s),
+                                                                                     rotationTargetStrength = strength,
+                                                                                     rotationTargetTau = tau } ) }}
+
+llStopLookAt info@(ScriptInfo oid _ _ _ _) [] =
+    runErrFunc info "llStopLookAt" () (do
+       obj <- getObject oid
+       lift $ setObject oid $ obj { objectDynamics = (objectDynamics obj) { objectRotationTarget = Nothing }}
+    ) >> continueWith VoidVal
+                                                                                     
 llGetLocalPos info@(ScriptInfo oid _ _ pk _) [] =
     runErrFunc info "llGetLocalPos" (0,0,0) (getLocalPos pk) >>= continueWith . vec2VVal
     
@@ -1305,7 +1330,8 @@ llGetBoundingBox info [KVal k] =
                 continueWith (LVal $ map (vec2VVal . (add3d pos)) [(-1.0,-1.0,-1.0),(1.0,1.0,1.0)])
             Nothing -> runErrFunc info "llGetBoundingBox" [] (do
                 getPrimParent' k >>= getPrimBox >>= return . map vec2VVal . tup2l) >>= continueWith . LVal
-    where tup2l (x,y) = [x,y]    
+    where tup2l (x,y) = [x,y]
+    
 getPrimBox pk = do
     pos <- getGlobalPos pk
     scale <- getPrimScale pk
@@ -2382,6 +2408,7 @@ llRotTarget info@(ScriptInfo { scriptInfoPrimKey = pk, scriptInfoScriptName = sn
                              }
         lift $ setWorldScripts (M.insert (pk,sn) script' allScripts)
     ) >> continueWith VoidVal
+    
 llRotTargetRemove info@(ScriptInfo { scriptInfoPrimKey = pk, scriptInfoScriptName = sn}) [IVal tnumber] =
     runErrFunc info "llRotTargetRemove" () (do
         allScripts <- lift getWorldScripts
@@ -2531,6 +2558,7 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llListen", llListen),
         ("llListenControl",llListenControl),
         ("llListenRemove",llListenRemove),
+        ("llLookAt", llLookAt),
         ("llLoopSound",llLoopSound),
         ("llLoopSoundSlave",llLoopSoundSlave),
         ("llLoopSoundMaster", llLoopSoundMaster),
@@ -2571,6 +2599,7 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llResetTime",llResetTime),
         ("llRezAtRoot",llRezAtRoot),
         ("llRezObject",llRezObject),
+        ("llRotLookAt",llRotLookAt),
         ("llRotTarget",llRotTarget),
         ("llRotTargetRemove",llRotTargetRemove),
         ("llRotateTexture", llRotateTexture),
@@ -2622,6 +2651,7 @@ defaultPredefs = map (\(x,y) -> defaultPredef x y)
         ("llStartAnimation", llStartAnimation),
         ("llStopAnimation", llStopAnimation),
         ("llStopHover",llStopHover),
+        ("llStopLookAt",llStopLookAt),
         ("llStopMoveToTarget", llStopMoveToTarget),
         ("llStopPointAt", llStopPointAt),
         ("llStopSound",llStopSound),
@@ -2754,7 +2784,8 @@ newWorld slice maxt iq = World {
                worldPhysicsTime = 0,
                worldTargetCheckTime = 0,
                worldLastPositions = M.empty,
-               worldCollisions = S.empty
+               worldCollisions = S.empty,
+               worldLandCollisions = S.empty
            }
            
 newWorld' slice maxt iq lib scripts avatars = 
@@ -3241,13 +3272,12 @@ runPhysics = do
                     let vel0@(_,_,vz0) = objectVelocity dyn
                     let force = (fst (objectForce dyn) `rot3d` rotation) `add3d` (0,0,mass * (objectBuoyancy dyn) * (-gravC))
                             where rotation = if snd $ objectForce dyn then objectRotation dyn else (0,0,0,1)
-                                
                     let impulse = ((fst . fst . objectImpulse) dyn `rot3d` rotation, (snd . objectImpulse) dyn)
                             where rotation = if (snd . fst . objectImpulse) dyn then objectRotation dyn else (0,0,0,1)
                     let impulseFNow = if snd impulse >= t1 then fst impulse else (0,0,0)
                     let heightDampF tau z = (0,0, dampZForce tau z z0 mass vz0 fz0)
                             where (_,_,fz0) = force `add3d` impulseFNow
-                    let dampF = case objectPositionTarget (objectDynamics obj) of
+                    let dampF = case objectPositionTarget dyn of
                                      Nothing -> (0,0,0)
                                      Just (PositionTarget { positionTargetTau = tau, positionTargetLocation = l }) ->
                                          dampForce tau l pos0 mass vel0 (force `add3d` impulseFNow)
@@ -3258,7 +3288,17 @@ runPhysics = do
                     -- TODO: local vs global rotations in torque
                     -- TODO: rotational impulses
                     radius <- objRadius pk
-                    let (rot,omega) = rotDyn t0 t1 ticksToDuration radius mass (objectRotation dyn) (objectOmega dyn) (fst $ objectTorque dyn)
+                    let torque = totalTorque t0 t1 ticksToDuration
+                                     [(fst $ objectTorque dyn,t1),(fst $ fst $ objectRotationalImpulse dyn, snd $ objectRotationalImpulse dyn)]
+                    let dampingTorque = case objectRotationTarget dyn of
+                                            Nothing -> (0,0,0)
+                                            Just rt@(RotationTarget {rotationTargetTau = tau, 
+                                                                     rotationTargetStrength = strength,
+                                                                     rotationTarget = target}) ->
+                                                dampTorque tau strength target
+                                                           (objectRotation dyn) mass radius (objectOmega dyn) torque
+                    let (rot,omega) = rotDyn (ticksToDuration (t1 - t0)) radius mass (objectRotation dyn) (objectOmega dyn)
+                                             (torque `add3d` dampingTorque)
                     lift $ setObject pk $! (obj { objectDynamics = (objectDynamics obj) 
                                                       { objectVelocity = vel, 
                                                         objectPosition = pos,
@@ -3289,10 +3329,9 @@ handleMovers = runAndLogIfErr "problem determining which objects moved" () $
                                                         else return (k,(False,pos))) curPositions
        lift $ setWorldLastPositions m
 
-handleCollisions :: Monad m => WorldM m ()
-handleCollisions = runAndLogIfErr "can't process collisions" () $ do
+handleObjectCollisions prims = do
         -- look at all non-phantom prims
-        prims <- lift getPrims >>= return . M.assocs >>= (return . filter ((==0) . (.&. cStatusPhantom) . primStatus . snd))
+        -- prims <- getNonPhantomPrims --lift getPrims >>= return . M.assocs >>= (return . filter ((==0) . (.&. cStatusPhantom) . primStatus . snd))
         let pks = map fst prims
         primBoxes <- mapM (\ (k,p) -> getPrimBox k >>= return . ((,) k ) . ((,)p) ) prims
         --let voldtct = map fst $ filter (primVolumeDetect . snd) prims
@@ -3401,6 +3440,37 @@ handleCollisions = runAndLogIfErr "can't process collisions" () $ do
                                   | k == y = Just x
                                   | otherwise = Nothing
 
+handleLandCollisions prims = do
+        primBoxes <- mapM (\ (k,p) -> getPrimBox k >>= return . ((,) k )) prims
+        let curCollisions = S.fromList [ k | (k,((_,_,z),_)) <- primBoxes, z <= 0]
+        oldCollisions <- lift getWorldLandCollisions
+        let formerCollisions = oldCollisions `S.difference` curCollisions
+        let newCollisions = curCollisions `S.difference` oldCollisions
+        mapM_ (send "land_collision_end") $ S.toList formerCollisions
+        mapM_ (send "land_collision") $ S.toList curCollisions
+        mapM_ (send "land_collision_start") $ S.toList newCollisions
+        lift $ setWorldLandCollisions curCollisions
+    where send hn pk = do
+                  pass <- getPrimPassCollisions pk
+                  pos <- getGlobalPos pk >>= ( \ (x,y,_) -> return (x,y,0))
+                  liveScripts <- getActualPrimScripts pk >>= 
+                      (\ ss -> return [ s | s@(_,Script { scriptImage = Valid _, scriptActive = True }) <- ss])
+                  when (not $ null liveScripts) $ send' pos pk
+                  when (null liveScripts || pass) $ getPrimParent' pk >>= send' pos
+              where send' pos k = do
+                        scripts <- getPrimScripts pk >>= return . (map invName) >>=
+                                   filterM (\ sn -> scriptHasActiveHandler pk sn hn)
+                        forM_ scripts $ (lift . pushEventToPrim (Event hn [vec2VVal pos] M.empty))
+                     
+handleCollisions :: (Monad m) => WorldM m ()
+handleCollisions = runAndLogIfErr "can't handle collisions" () $ do
+    prims <- getNonPhantomPrims
+    handleObjectCollisions prims
+    handleLandCollisions prims
+    
+getNonPhantomPrims :: (Monad m) => ErrorT String (WorldM m) [(String,Prim)]
+getNonPhantomPrims = lift getPrims >>= return . M.assocs >>= (return . filter ((==0) . (.&. cStatusPhantom) . primStatus . snd))
+   
 handleTargets :: Monad m => WorldM m ()
 handleTargets = do
     t <- getTick
@@ -3409,6 +3479,7 @@ handleTargets = do
         getObjects >>= return . M.keys >>= mapM_ (\ k -> do
             runErrPrim k () $ do
                 pos <- getGlobalPos k
+                rot <- getGlobalRot k
                 scripts <- getActualPrimScripts k
                 forM_ scripts (\ ((_,sn),script) -> do
                         forM_ (IM.toList $ scriptPositionTargets script) $ (\ (i,(target,range)) -> do
@@ -3421,6 +3492,17 @@ handleTargets = do
                                                  then lift $ pushEvent (Event "not_at_target" [] M.empty) k sn
                                                  else return ()
                                     where inRange = (dist3d2 target pos <= range^2)
+                            )
+                        forM_ (IM.toList $ scriptRotationTargets script) $ (\ (i,(target,range)) -> do
+                            case (scriptImage script) of
+                                (Invalid _) -> return ()
+                                (Valid image) ->
+                                    if hasActiveHandler image "at_rot_target" && inRange
+                                        then lift $ pushEvent (Event "at_rot_target" [IVal i, rot2RVal target, rot2RVal rot] M.empty) k sn
+                                        else if hasActiveHandler image "not_at_rot_target" && not inRange
+                                                 then lift $ pushEvent (Event "not_at_rot_target" [] M.empty) k sn
+                                                 else return ()
+                                    where inRange = (angleBetween target rot <= range)
                             )
                     )                        
                     

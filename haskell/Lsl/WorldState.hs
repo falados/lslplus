@@ -69,7 +69,8 @@ data World m = World {
                     worldPhysicsTime :: !Int,
                     worldTargetCheckTime :: !Int,
                     worldLastPositions :: !(Map String (Bool,(Float,Float,Float))),
-                    worldCollisions :: !(S.Set (String,String))
+                    worldCollisions :: !(S.Set (String,String)),
+                    worldLandCollisions :: !(S.Set String)
                 } deriving (Show)
 
 -- a state monad for the World
@@ -145,6 +146,8 @@ getWorldLastPositions :: Monad m => WorldM m (Map String (Bool,(Float,Float,Floa
 getWorldLastPositions = queryWorld worldLastPositions
 getWorldCollisions :: Monad m => WorldM m (S.Set (String,String))
 getWorldCollisions = queryWorld worldCollisions
+getWorldLandCollisions :: Monad m => WorldM m (S.Set (String))
+getWorldLandCollisions = queryWorld worldLandCollisions
 
 getRegion index = (lift getWorldRegions >>= M.lookup index)
 
@@ -247,6 +250,7 @@ setWorldPhysicsTime t = updateWorld (\ w -> w { worldPhysicsTime = t })
 setWorldTargetCheckTime t = updateWorld (\ w -> w { worldTargetCheckTime = t })
 setWorldLastPositions p = updateWorld (\ w -> w { worldLastPositions = p })
 setWorldCollisions s = updateWorld (\ w -> w { worldCollisions = s })
+setWorldLandCollisions s = updateWorld (\ w -> w { worldLandCollisions = s })
 
 setPrim k p = (getPrims >>= return . (M.insert k p) >>= setPrims)
 updatePrimVal k f = runErrPrim k () $ (lift getPrims >>= M.lookup k >>= return . f >>= lift . (setPrim k))

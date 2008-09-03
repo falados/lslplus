@@ -354,13 +354,7 @@ llRot2Axis _ [RVal x y z w] =
             else VVal (x/sinVal) (y/sinVal) (z/sinVal) in
         continueWith $ v
 
-llAxisAngle2Rot _ [VVal x y z, FVal r] =
-    let w = cos (r/2.0)
-        sinVal = sin (r/2.0)
-        x' = x * sinVal
-        y' = y * sinVal
-        z' = z * sinVal
-    in continueWith $ RVal x' y' z' w
+llAxisAngle2Rot _ [vval@(VVal x y z), FVal r] = return (axisAngleToRotation (vVal2Vec vval) r) >>= continueWith . rot2RVal 
 
 llAxes2Rot _ [VVal xf yf zf, VVal xl yl zl, VVal xu yu zu] =
     let (x,y,z,s) = matrixToQuaternion ((xf,xl,xu),(yf,yl,yu),(zf,zl,zu)) in
@@ -384,10 +378,7 @@ llEuler2Rot _ [VVal x y z] =
     let (x',y',z',s) = rotationsToQuaternion P123 (x,y,z)
     in continueWith $ RVal x' y' z' s
 
-llRotBetween n [VVal x1 y1 z1,VVal x2 y2 z2] =
-    let (x,y,z) = (x1,y1,z1) `cross` (x2,y2,z2)
-        angle = acos (x1*x2 + y1*y2 + z1*z2) 
-    in llAxisAngle2Rot n [VVal x y z,FVal angle]
+llRotBetween n [v0@(VVal x1 y1 z1),v1@(VVal x2 y2 z2)] = return (rotationBetween (vVal2Vec v0) (vVal2Vec v1)) >>= continueWith . rot2RVal
 
 llAngleBetween _ [RVal aX aY aZ aS,RVal bX bY bZ bS] =
     continueWith $ FVal $ 2 * acos ((aX * bX + aY * bY + aZ * bZ + aS * bS)

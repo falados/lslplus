@@ -54,7 +54,10 @@ module Lsl.Util (
     rotationsToQuaternion,
     cross,
     generatePermutation,
-    fac) where
+    fac,
+    axisAngleToRotation,
+    rotationBetween,
+    angleBetween) where
 
 import Control.Monad
 import Control.Monad.State hiding (modify)

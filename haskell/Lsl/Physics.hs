@@ -2,18 +2,21 @@ module Lsl.Physics(
                    bbIntersect,
                    kin,
                    rotDyn,
+                   totalTorque,
                    calcAccel,
                    dampZForce,
                    dampForce,
+                   dampTorque,
                    primMassApprox,
                    checkIntersections,
-                   momentOfIntertia,
+                   momentOfInertia,
                    gravC
                    )where
 
 import Lsl.Math
 import Lsl.WorldDef
 import Lsl.Constants
+import Debug.Trace
 
 rangeOverlap (mn0,mx0) (mn1,mx1) = mn0 >= mn1 && mn0 <= mx1 || mx0 >= mn1 && mx0 <= mx1 || mn0 <= mn1 && mx0 >= mx1
 bbIntersect ((mnX0,mnY0,mnZ0),(mxX0,mxY0,mxZ0)) ((mnX1,mnY1,mnZ1),(mxX1,mxY1,mxZ1)) =
@@ -67,15 +70,32 @@ calcAccel t zoffs m p f (i,ti) =
         (x, y, if belowGround zoffs p then 0 else z)
   
 -- i have no enthusiasm to work out if this is right... :(      
-rotDyn t0 t1 t2d radius mass rot0 omega0@(ox0,oy0,oz0) torque@(tx,ty,tz) = 
-    let inertia = momentOfIntertia mass radius
-        dt = t2d $ t1 - t0
-        (ax,ay,az) = (tx/inertia,ty/inertia,tz/inertia)
-        lim theta = let rev = theta / (2 * pi)
-                        (_,frac) = properFraction rev in rev * 2 * pi
-        rot = rotationsToQuaternion P123 (lim $ ox0 * dt + dt^2 * 0.5 * ax,lim $ oy0 * dt + dt^2 * 0.5 * ay,lim $ oz0 * dt + dt^2 * 0.5 * az)
-        omega@(ox,oy,oz) = (dt * ax + ox0, dt * ay + oy0, dt * az + oz0)
-    in (rot0 `quaternionMultiply` rot, omega)
+-- rotDyn t0 t1 t2d radius mass rot0 omega0@(ox0,oy0,oz0) torques = 
+--     let inertia = momentOfIntertia mass radius
+--         dt = t2d $ t1 - t0
+--         accels = map ( \ ((tx,ty,tz),tf) -> ((tx/inertia,ty/inertia,tz/inertia), max 0 (min (t2d (tf - t0)) dt))) torques
+--         lim theta = let rev = theta / (2 * pi)
+--                         (_,frac) = properFraction rev in rev * 2 * pi
+--         lim3 (x,y,z) = (lim x, lim y, lim z)
+--         limscale scale v = lim3 $ scale3d scale v
+--         rot = foldl ( \ r r1 -> r `quaternionMultiply` r1) rot0 $
+--                 ((rotationsToQuaternion P123 $ limscale dt omega0) :
+--                 (map (\ (a,d) -> rotationsToQuaternion P123 (limscale (d^2 * 0.5) a)) accels))
+--         omega = foldl (\ o (a,d) -> lim3 $ o `add3d` (scale3d d a)) omega0 accels
+--     in (rot, omega)
+    
+rotDyn dt radius mass rot0 omega0 torque =
+    let inertia = momentOfInertia mass radius
+        angularAcceleration = scale3d (1/inertia) torque
+        domega = scale3d dt angularAcceleration
+        drotV = (scale3d dt omega0) `add3d` (scale3d (dt^2/2) angularAcceleration)
+        drot = let mag = mag3d drotV in if mag == 0 then (0,0,0,1) else axisAngleToRotation  (norm3d drotV) mag
+    in (rot0 `quaternionMultiply` drot, omega0 `add3d` domega)
+
+totalTorque t0 t1 t2d torques =
+    let dt = t2d $ t1 - t0
+        torques' = map (\ (torque,tf) -> scale3d ((max 0 (min (t2d (tf - t0)) dt)) / dt) torque) torques
+    in foldl add3d (0,0,0) torques'
     
 checkIntersections toBB cmp objects = concat (go objects)
     where go [] = []
@@ -89,8 +109,17 @@ dampForce tau pt p0 m v0 f =
     where p = pt `diff3d` p0
 
 -- I of sphere
-momentOfIntertia mass r = (2/5) * mass * r^2
+momentOfInertia mass r = (2/5) * mass * r^2
 
+-- ignoring strength for now...
+dampTorque tau strength rt r0 mass radius omega0 torque0 =
+    let inertia = momentOfInertia mass radius
+        r1 = let mag = mag3d omega0 in
+                 if mag == 0 then r0 else r0 `quaternionMultiply` (axisAngleToRotation (norm3d omega0) (mag*tau))
+        rotNeeded = ((invertQuaternion r1) `quaternionMultiply` rt)
+        (axis,angle) = axisAngleFromRotation rotNeeded
+        -- angle = tau^2 * ((1/inertia*2) * (torque + torque0))
+    in scale3d (angle * 2 * inertia / (tau^2)) axis `diff3d` torque0
 -- testing...
 iterativeDampingZ m z v zt tau dt = let f = dampZForce tau zt z m v 0
                                         z' = z + v * dt

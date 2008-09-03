@@ -8,6 +8,7 @@ module Lsl.WorldDef(Avatar(..),
                     LSLObject(..),
                     ObjectDynamics(..),
                     PositionTarget(..),
+                    RotationTarget(..),
                     PrimType(..),
                     FullWorldDef(..),
                     Region(..),
@@ -102,6 +103,7 @@ data ObjectDynamics = ObjectDynamics {
                           objectRotationalImpulse :: (((Float,Float,Float),Bool),Int),
                           objectOmega :: (Float,Float,Float),
                           objectPositionTarget :: !(Maybe PositionTarget),
+                          objectRotationTarget :: !(Maybe RotationTarget),
                           objectVolumeDetect :: Bool
                       } deriving (Show)
                       
@@ -115,6 +117,7 @@ defaultDynamics = ObjectDynamics { objectPosition = (0,0,0),
                                    objectRotationalImpulse = (((0,0,0),False),0),
                                    objectOmega = (0,0,0),
                                    objectPositionTarget = Nothing,
+                                   objectRotationTarget = Nothing,
                                    objectVolumeDetect = False }
 data PositionTarget = Repel { positionTargetTau :: Float, 
                               positionTargetOverWater :: Bool, 
@@ -127,6 +130,10 @@ data PositionTarget = Repel { positionTargetTau :: Float,
                                        positionTargetSetBy :: ScriptId }
     deriving (Show)
     
+data RotationTarget = RotationTarget { rotationTarget :: (Float,Float,Float,Float),
+                                       rotationTargetStrength :: Float,
+                                       rotationTargetTau :: Float } deriving (Show)
+                                       
 data Avatar = Avatar { avatarKey :: String,
                        avatarName :: String,
                        avatarActiveGroup :: Maybe String,
