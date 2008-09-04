@@ -461,7 +461,7 @@ public class SimProject {
         public Map getData() {
             HashMap map = new HashMap();
             GridPositionNode node = (GridPositionNode) findChildByName("pos"); //$NON-NLS-1$
-            map.put("pos", node.getVector()); //$NON-NLS-1$
+            map.put("position", node.getVector()); //$NON-NLS-1$
             
             AvatarReferenceNode owner = (AvatarReferenceNode) findChildByName("owner"); //$NON-NLS-1$
             map.put("owner", owner.getValueString()); //$NON-NLS-1$
@@ -487,7 +487,7 @@ public class SimProject {
         public Map getData() {
             HashMap map = new HashMap();
             GridPositionNode node = (GridPositionNode) findChildByName("pos"); //$NON-NLS-1$
-            map.put("pos", node.getVector()); //$NON-NLS-1$
+            map.put("position", node.getVector()); //$NON-NLS-1$
             return map;
         }
         
