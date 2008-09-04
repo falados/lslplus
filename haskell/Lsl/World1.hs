@@ -2964,10 +2964,14 @@ processEvent evt@(SensorEvent (pk,sn) name key stype range arc rpt) =
                       return [ avatarKey av | av <- avs, withinSensorArea pos fwd range arc (avatarPosition av)]
                   else return []
           fwdFromRot rot = let ((x,_,_),(y,_,_),(z,_,_)) = quaternionToMatrix rot in (x,y,z)
-          angleBetween (x0,y0,z0) (x1,y1,z1) = acos (x0*x1 + y0*y1 + z0*z1)
+          angleBetweenV (x0,y0,z0) (x1,y1,z1) = acos (x0*x1 + y0*y1 + z0*z1)
           withinSensorArea origin direction range arc pos =
               let v = diff3d pos origin
-                  m = mag3d v in m <= range && angleBetween v direction <= arc
+                  m = mag3d v 
+                  v' = norm3d v
+              in if m == 0 
+                     then True
+                     else m <= range && (angleBetweenV v' direction) <= arc
           rootPrims exclude = do
               objs <- lift getObjects
               mapM getPrim [ k | LSLObject { primKeys = (k:_) } <- M.elems objs, exclude /= k]
@@ -3458,9 +3462,9 @@ handleLandCollisions prims = do
                   when (not $ null liveScripts) $ send' pos pk
                   when (null liveScripts || pass) $ getPrimParent' pk >>= send' pos
               where send' pos k = do
-                        scripts <- getPrimScripts pk >>= return . (map invName) >>=
-                                   filterM (\ sn -> scriptHasActiveHandler pk sn hn)
-                        forM_ scripts $ (lift . pushEventToPrim (Event hn [vec2VVal pos] M.empty))
+                        scripts <- getPrimScripts k >>= return . (map invName) >>=
+                                   filterM (\ sn -> scriptHasActiveHandler k sn hn)
+                        forM_ scripts $ (lift . pushEvent (Event hn [vec2VVal pos] M.empty) k)
                      
 handleCollisions :: (Monad m) => WorldM m ()
 handleCollisions = runAndLogIfErr "can't handle collisions" () $ do

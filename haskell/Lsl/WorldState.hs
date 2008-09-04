@@ -456,8 +456,9 @@ primHasActiveHandler pk handler =
               
 scriptHasActiveHandler pk sn handler =
     do script <- lift getWorldScripts >>= M.lookup (pk,sn)
-       Valid image <- return $ scriptImage script
-       return $ hasActiveHandler image handler
+       case scriptImage script of
+           Valid image -> return $ hasActiveHandler image handler
+           _ -> return False
              
 lookupDataChannel scriptAddr = lift getWorldOpenDataChannels >>= M.lookup scriptAddr . snd
 lookupScriptFromChan chan = lift getWorldOpenDataChannels >>= M.lookup chan . fst
