@@ -393,14 +393,14 @@ data Listener = Listener {
     deriving (Show)
     
 data PredefFunc m = PredefFunc { predefFuncName :: String, 
-                               predefAllowedKey :: Maybe String,
-                               predefAllowedSID :: Maybe String,
-                               predefExpectedArgs :: [Maybe LSLValue],
-                               predef :: ScriptInfo -> [LSLValue] -> WorldM m (EvalResult,LSLValue) }
-    deriving (Show)
+                                   predefFuncResultType :: LSLType, 
+                                   predef :: ScriptInfo -> [LSLValue] -> ErrorT String (WorldM m) (EvalResult,LSLValue) }
+     deriving (Show)
 
 instance Monad m => Show (ScriptInfo -> [LSLValue] -> WorldM m (EvalResult,LSLValue)) where
     showsPrec _ _ = showString "(function :: ScriptInfo -> [LSLValue] -> WorldM m (EvalResult,LSLValue))"
+instance Monad m => Show (ScriptInfo -> [LSLValue] -> ErrorT String (WorldM m) (EvalResult,LSLValue)) where
+    showsPrec _ _ = showString "(function :: ScriptInfo -> [LSLValue] -> ErrorT String (WorldM m) (EvalResult,LSLValue))"
 
 evalErrorT :: ErrorT String m v -> m (Either String v)
 evalErrorT = runErrorT
@@ -452,13 +452,11 @@ primHasActiveHandler pk handler =
        return $ foldl (\ x y -> x || hasActiveHandler y handler) False images
     where imagesForScripts scriptItems = do
               scripts <- runErrPrim pk [] $ getActualPrimScripts pk
-              return [ image | (Script { scriptImage = (Valid image)} ) <- map snd scripts ]
+              return [ image | (Script { scriptImage = image } ) <- map snd scripts ]
               
 scriptHasActiveHandler pk sn handler =
     do script <- lift getWorldScripts >>= M.lookup (pk,sn)
-       case scriptImage script of
-           Valid image -> return $ hasActiveHandler image handler
-           _ -> return False
+       return $ hasActiveHandler (scriptImage script) handler
              
 lookupDataChannel scriptAddr = lift getWorldOpenDataChannels >>= M.lookup scriptAddr . snd
 lookupScriptFromChan chan = lift getWorldOpenDataChannels >>= M.lookup chan . fst

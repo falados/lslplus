@@ -54,6 +54,8 @@ module Lsl.WorldDef(Avatar(..),
 
 import Control.Monad
 import Control.Monad.Error
+import Control.Monad.Writer
+
 import qualified Control.Monad.State as SM
 import Data.Int
 import Data.List
@@ -421,7 +423,7 @@ defaultRegions owner = [
                      regionParcels = [Parcel "parcel_0" "default parcel" (0,256,0,256) owner 0xffffffff [] []] })
     ]
 
-data Script = Script { scriptImage :: !(Validity ScriptImage),
+data Script = Script { scriptImage :: !ScriptImage,
                        scriptActive :: Bool,
                        scriptPermissions :: M.Map String Int,
                        scriptLastPerm :: Maybe String,
@@ -434,19 +436,18 @@ data Script = Script { scriptImage :: !(Validity ScriptImage),
                        scriptPositionTargets :: !(IM.IntMap ((Float,Float,Float), Float)),
                        scriptRotationTargets :: !(IM.IntMap ((Float,Float,Float,Float), Float)) } deriving (Show)
 
-mkScript vimg = Script { scriptImage = vimg,
-                         scriptActive = True,
-                         scriptPermissions = M.empty,
-                         scriptLastPerm = Nothing,
-                         scriptStartTick = 0,
-                         scriptLastResetTick = 0,
-                         scriptEventQueue = [Event "state_entry" [] M.empty],
-                         scriptStartParameter = 0,
-                         scriptCollisionFilter = ("",nullKey,True),
-                         scriptTargetIndex = 0,
-                         scriptPositionTargets = IM.empty,
-                         scriptRotationTargets = IM.empty }
-                         
+mkScript img = Script { scriptImage = img,
+                        scriptActive = True,
+                        scriptPermissions = M.empty,
+                        scriptLastPerm = Nothing,
+                        scriptStartTick = 0,
+                        scriptLastResetTick = 0,
+                        scriptEventQueue = [Event "state_entry" [] M.empty],
+                        scriptStartParameter = 0,
+                        scriptCollisionFilter = ("",nullKey,True),
+                        scriptTargetIndex = 0,
+                        scriptPositionTargets = IM.empty,
+                        scriptRotationTargets = IM.empty }
 worldFromFullWorldDef worldBuilder fwd lib scripts =
     do let primMap = mkPrimMap (fullWorldDefPrims fwd)
        primMap' <- checkObjects primMap (fullWorldDefObjects fwd) -- prove all the prims in all the objects exists
@@ -454,7 +455,7 @@ worldFromFullWorldDef worldBuilder fwd lib scripts =
                concat (map (\ prim -> map 
                    (\ item -> ((primKey prim, fst $ inventoryItemNameKey $ inventoryItemIdentification item),
                                invScriptLibId $ inventoryItemData item)) (filter isInvScriptItem $ primInventory prim)) (M.elems primMap'))
-       activatedScripts <- activateScripts activeScripts scripts primMap'
+       (activatedScripts,log) <- runWriterT (activateScripts activeScripts scripts primMap')
        return $ worldBuilder (fullWorldDefSliceSize fwd)
                              (fullWorldDefMaxTime fwd)
                              [] lib scripts 
@@ -465,10 +466,11 @@ worldFromFullWorldDef worldBuilder fwd lib scripts =
                              (M.fromList (fullWorldDefRegions fwd))
                              (fullWorldDefInitialKeyIndex fwd)
                              (fullWorldDefWebHandling fwd)
-                             (fullWorldDefEventHandler fwd)
+                             (fullWorldDefEventHandler fwd) 
+                             log
 
 fctx :: MonadError String m => String -> Either String a -> m a
-fctx s (Left s') = fail s
+fctx s (Left s') = throwError s
 fctx _ (Right v) = return v
 
 maybe2Either Nothing = Left "failed"
@@ -491,18 +493,19 @@ checkObject primMap o =
 
 checkObjects primMap os = foldM checkObject primMap os
 
-activateScripts scriptIdInfo compiledScripts primMap = mapM (activateScript compiledScripts primMap) scriptIdInfo
+activateScripts scriptIdInfo compiledScripts primMap = 
+    mapM (activateScript compiledScripts primMap) scriptIdInfo >>= (\ ms -> return [ s | Just s <- ms ])
 
 activateScript scripts primMap (k@(primKey,invName),(scriptID)) =
-    do  --script <- fctx ("looking up script " ++ scriptID ++ " failed") $ maybe2Either $ lookup scriptID scripts
-        let script = case lookup scriptID scripts of
+    do  let script = case lookup scriptID scripts of
              Nothing -> fail "script not found"
              Just v -> v
-        prim <- fctx ("looking up prim " ++ primKey ++ " failed") (M.lookup primKey primMap)
+        prim <- (lift . fctx ("looking up prim " ++ primKey ++ " failed")) (M.lookup primKey primMap)
         when (isNothing (findByInvName invName (primInventory prim))) $ fail (invName ++ " doesn't exist in prim " ++ primKey)
         case script of
-            Invalid s -> return (k, (mkScript (Invalid s)) { scriptEventQueue = []})
-            Valid code -> return (k,mkScript (Valid $ initLSLScript code))
+            Invalid (_,s) -> tell [("script \"" ++ invName ++ "\" in prim " ++ primKey ++ " failed to activate because of error: " ++ s)] 
+                             >> return Nothing
+            Valid code -> return $ Just (k,mkScript $ initLSLScript code)
 
 newKey xref = do
     (m,i) <- lift SM.get
