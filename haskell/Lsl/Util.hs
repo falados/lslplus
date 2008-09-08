@@ -59,10 +59,9 @@ module Lsl.Util (
     rotationBetween,
     angleBetween) where
 
-import Control.Monad
 import Control.Monad.State hiding (modify)
 import Data.List
-import Debug.Trace
+-- import Debug.Trace
 
 import Lsl.Math
 
@@ -72,29 +71,24 @@ import Network.URI
 -- utilities
 
 tuplify [] = []
-tuplify (a:[]) = []
+tuplify (_:[]) = []
 tuplify (a:b:rest) = (a,b) : tuplify rest
 
 readM s = case reads s of
              [] -> fail ("unable to parse " ++ s)
              ((v,_):_) -> return v
 
-whenM :: Monad m => m Bool -> m () -> m ()
-whenM p action = do
-    val <- p
-    when val action
-
 ctx s (Left s') = fail (s ++ ": " ++ s' )
-ctx s (Right v) = return v
+ctx _ (Right v) = return v
 
 swap (x,y) = (y,x)
 
 -- extract an element from a list based on a predicate to apply to each element, and return
 -- a tuple containing the element (or Nothing) and the other elements of the list.
 extractOne :: (a -> Bool) -> [a] -> (Maybe a, [a])
-extractOne pred list =
+extractOne predicate list =
    let f [] others = (Nothing, others)
-       f (x:xs) others = if pred x then (Just x, others ++ xs) else f xs (x:others)
+       f (x:xs) others = if predicate x then (Just x, others ++ xs) else f xs (x:others)
    in
        f list []
 
@@ -114,13 +108,13 @@ findM p l =
        
 -- filter a list while mapping
 filtMap :: (a -> Maybe b) -> [a] -> [b]
-filtMap f [] = []
+filtMap _ [] = []
 filtMap f (x:xs) = case f x of
    Nothing -> filtMap f xs
    Just y  -> y : filtMap f xs
 
 filtMapM :: (Monad m) => (a -> m (Maybe b)) -> [a] -> m [b]
-filtMapM f [] = return []
+filtMapM _ [] = return []
 filtMapM f (x:xs) =
     do  r <- f x
         case r of
@@ -151,7 +145,7 @@ hasCycle minLength x list =
 -- and a list of elements which do not.
 filter2 :: (a -> Bool) -> [a] -> ([a],[a])
 filter2 f l =
-  let filt f [] r = r
+  let filt _ [] r = r
       filt f (x:xs) (ys, ns) = if (f x) then filt f xs (x:ys, ns) else filt f xs (ys, x:ns) in
           filt f l ([],[])
 
@@ -189,7 +183,7 @@ lookupByIndex i l = lookupM i $ zip [0..] l
 removeLookup :: Eq a => a -> [(a,b)] -> [(a,b)]
 removeLookup k l = let (xs,ys) = break ((k==).fst) l in
     case ys of
-       (z:zs) -> xs ++ zs
+       (_:zs) -> xs ++ zs
        _ -> l
        
 -- interleave the elements of two lists
@@ -250,17 +244,6 @@ processLinesS state term f =
            processLinesS newState term f
     where escape = escapeURIString isUnescapedInURI
 
-processLinesST :: a -> String -> (String -> StateT a IO String) -> IO ()
-processLinesST state term f =
-    do s <- getLine
-       when (term /= s) $ do
-           (s',state') <- runStateT (f $ unescape s) state
-           putStr (escape s')
-           putStr "\n"
-           processLinesST state' term f
-    where escape = escapeURIString isUnescapedInURI
-
-
 -- TODO: fix this definition!
 fac :: Integer -> Integer
 fac 0 = 1
@@ -273,7 +256,7 @@ fac n = n * fac (n - 1)
 -- and then treated each permutation as a base N number, (e.g. 012, or 12 base 3), and
 -- then sorted the permutation, the number of the permutation equals its index in the 
 -- list of sorted permutations... simple!
-generatePermutation [] i = []
+generatePermutation [] _ = []
 generatePermutation l  i = 
     let n :: Integer
         n = toInteger (length l) in

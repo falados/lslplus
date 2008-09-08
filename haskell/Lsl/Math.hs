@@ -23,7 +23,7 @@ module Lsl.Math(
     axisAngleToRotation,
     axisAngleFromRotation) where
 
-import Debug.Trace
+-- import Debug.Trace
 dist3d2 (x1,y1,z1) (x2,y2,z2) = ((x2-x1)^2 + (y2-y1)^2 + (z2-z1)^2)
 dist3d v0 v1 = sqrt $ dist3d2 v0 v1
 
@@ -47,11 +47,10 @@ quaternionToMatrix (x,y,z,s) =
      
 -- reversing the conversion:
 matrixToQuaternion ((r00,r01,r02),(r10,r11,r12),(r20,r21,r22)) =
-    let sign x = if (x < 0) then -1 else 1 in
-        (sign (r21 - r12) * (sqrt (max 0 (1 + r00 - r11 - r22 ))) / 2,
-         sign (r02 - r20) * (sqrt (max 0 (1 - r00 + r11 - r22))) / 2,
-         sign (r10 - r01) * (sqrt (max 0 (1 - r00 - r11 + r22 ))) / 2,
-         (sqrt (max 0  (1 + r00 + r11 + r22))) / 2)
+    (sign (r21 - r12) * (sqrt (max 0 (1 + r00 - r11 - r22 ))) / 2,
+     sign (r02 - r20) * (sqrt (max 0 (1 - r00 + r11 - r22))) / 2,
+     sign (r10 - r01) * (sqrt (max 0 (1 - r00 - r11 + r22 ))) / 2,
+     (sqrt (max 0  (1 + r00 + r11 + r22))) / 2)
 
 quaternionMultiply (x1,y1,z1,s1) (x2,y2,z2,s2) =
     ((s1 * x2 + x1 * s2 + y1 * z2 - z1 * y2),
@@ -120,8 +119,6 @@ axisAngleToRotation (x,y,z) angle =
         z' = z * sinVal
     in (x',y',z',w)
 
-scaleRotation scale rot = let (axis,angle) = axisAngleFromRotation rot in axisAngleToRotation axis (angle * scale)
-       
 axisAngleFromRotation (x,y,z,s) = 
     let s' = max (-1) (min 1 s)
         angle = 2 * acos s'
@@ -130,6 +127,3 @@ axisAngleFromRotation (x,y,z,s) =
         y' = y / sinVal
         z' = z / sinVal
     in if sinVal == 0 then ((1,0,0),0) else ((x',y',z'),angle)
-     
-toRad3 (x,y,z) = (x*pi/180,y*pi/180,z*pi/180)
-toDeg3 (x,y,z) = (x*180/pi,y*180/pi,z*180/pi)

@@ -23,7 +23,6 @@ module Lsl.DOMProcessing(ElemAcceptor(..),
                          module Text.XML.HaXml,
                          module Text.XML.HaXml.Posn) where
 
-import Control.Monad
 import Control.Monad.Error
 import Data.List
 import Lsl.Util
