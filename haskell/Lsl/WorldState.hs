@@ -10,13 +10,13 @@ import Data.Bits
 import Data.Int
 import Data.Map(Map)
 import Data.Maybe
+import qualified Data.IntMap as IM
 import qualified Data.Map as M
 import qualified Data.Set as S
 import Debug.Trace
 
---import Lsl.Avatar
+import qualified Lsl.AvEvents as AvEvent
 import Lsl.Breakpoint
---import Lsl.Builder
 import Lsl.CodeHelper
 import Lsl.Constants
 import Lsl.Evaluation
@@ -42,7 +42,7 @@ data World m = World {
                     maxTick :: !Int,
                     nextPause :: !Int,
                     wqueue :: !WorldEventQueue,
-                    wlisteners :: ![(Int,(Listener,Bool))],
+                    wlisteners :: !(IM.IntMap (Listener,Bool)), -- ![(Int,(Listener,Bool))],
                     nextListenerId :: !Int,
                     wobjects :: !(Map String LSLObject),
                     wprims :: !(Map String Prim),
@@ -50,7 +50,7 @@ data World m = World {
                     inventory :: ![(String,LSLObject)],
                     tick :: !Int,
                     msglog :: ![LogMessage],
-                    predefs :: ![PredefFunc m],
+                    predefs :: !(Map String (PredefFunc m)),
                     randGen :: !StdGen,
                     wlibrary :: ![(String,Validity LModule)],
                     wscripts :: ![(String,Validity CompiledLSLScript)],
@@ -70,7 +70,9 @@ data World m = World {
                     worldTargetCheckTime :: !Int,
                     worldLastPositions :: !(Map String (Bool,(Float,Float,Float))),
                     worldCollisions :: !(S.Set (String,String)),
-                    worldLandCollisions :: !(S.Set String)
+                    worldLandCollisions :: !(S.Set String),
+                    worldTouches :: !(Map String [Touch]),
+                    worldTouchCheckTime :: !Int
                 } deriving (Show)
 
 -- a state monad for the World
@@ -84,7 +86,7 @@ updateWorld u = worldM (\w -> ((), u w))
 
 getSliceSize :: Monad m => WorldM m Int
 getSliceSize = queryWorld sliceSize
-getListeners :: Monad m => WorldM m [(Int,(Listener,Bool))]
+getListeners :: Monad m => WorldM m (IM.IntMap (Listener,Bool))
 getListeners = queryWorld wlisteners
 getMaxTick :: Monad m => WorldM m Int
 getMaxTick = queryWorld maxTick
@@ -106,7 +108,7 @@ getMsgLog :: Monad m => WorldM m [LogMessage]
 getMsgLog = queryWorld msglog
 getWQueue :: Monad m => WorldM m WorldEventQueue
 getWQueue = queryWorld wqueue
-getPredefFuncs :: Monad m => WorldM m [PredefFunc m]
+getPredefFuncs :: Monad m => WorldM m (Map String (PredefFunc m))
 getPredefFuncs = queryWorld predefs
 getRandGen :: Monad m => WorldM m StdGen
 getRandGen = queryWorld randGen
@@ -148,15 +150,28 @@ getWorldCollisions :: Monad m => WorldM m (S.Set (String,String))
 getWorldCollisions = queryWorld worldCollisions
 getWorldLandCollisions :: Monad m => WorldM m (S.Set (String))
 getWorldLandCollisions = queryWorld worldLandCollisions
+getWorldTouches :: Monad m => WorldM m (Map String [Touch])
+getWorldTouches = queryWorld worldTouches
+getWorldTouchCheckTime :: Monad m => WorldM m Int
+getWorldTouchCheckTime = queryWorld worldTouchCheckTime
 
+getWorldAvatar k = lift getWorldAvatars >>= (\ m -> case M.lookup k m of
+    Nothing -> throwError ("no such avatar/agent: " ++ k)
+    Just av -> return av)
+    
 getRegion index = (lift getWorldRegions >>= M.lookup index)
 
-getPrim k = (lift getPrims >>= M.lookup k)
-getPrimVal k f = (lift getPrims >>= M.lookup k >>= return . f)
+getPrim k = (lift getPrims >>= (\ m -> case M.lookup k m of
+    Nothing -> throwError ("no such prim: " ++ k)
+    Just prim -> return prim))
+    
+--getPrimVal k f = (lift getPrims >>= M.lookup k >>= return . f)
+getPrimVal k f = getPrim k >>= return . f
 getPrimName k = getPrimVal k primName
 getPrimPosition k = getPrimVal k primPosition
 getPrimParent k = getPrimVal k primParent
-getPrimParent' k = getPrimVal k primParent >>= \ val -> return $ fromMaybe k val
+getRootPrim k = getPrimVal k primParent >>= \ val -> return $ fromMaybe k val
+isRootPrim k = getPrimVal k primParent >>= return . isNothing
 getPrimDescription k = getPrimVal k primDescription
 getPrimOwner k = getPrimVal k primOwner
 getPrimGroup k = getPrimVal k primGroup
@@ -199,8 +214,6 @@ getActualPrimScripts k = do
     allScripts <- (lift $ getWorldScripts) >>= return . M.toList
     return [ s | s@((pk,sn),_) <- allScripts, pk == k && sn `elem` scriptNames ]
     
-getRootPrim pk =  (getPrimParent pk) >>= return . maybe pk id
- 
 getPrimLinkNum pk = do
     mp <- getPrimParent pk
     case mp of
@@ -251,11 +264,17 @@ setWorldTargetCheckTime t = updateWorld (\ w -> w { worldTargetCheckTime = t })
 setWorldLastPositions p = updateWorld (\ w -> w { worldLastPositions = p })
 setWorldCollisions s = updateWorld (\ w -> w { worldCollisions = s })
 setWorldLandCollisions s = updateWorld (\ w -> w { worldLandCollisions = s })
+setWorldTouches ts = updateWorld (\ w -> w { worldTouches = ts })
+setWorldTouchCheckTime t = updateWorld (\ w -> w { worldTouchCheckTime = t })
+
+setWorldAvatar k av = getWorldAvatars >>= return . M.insert k av >>= setWorldAvatars
 
 setPrim k p = (getPrims >>= return . (M.insert k p) >>= setPrims)
+
 updatePrimVal k f = runErrPrim k () $ (lift getPrims >>= M.lookup k >>= return . f >>= lift . (setPrim k))
 
 runErrPrim k defaultVal = runAndLogIfErr ("prim " ++ k ++ " not found") defaultVal
+
 setPrimPosition k v = updatePrimVal k (\ p -> p { primPosition = v } )
 setPrimRotation k v =  updatePrimVal k (\ p -> p { primRotation = v } )
 setPrimScale k v =  updatePrimVal k (\ p -> p { primScale = v } )
@@ -349,6 +368,8 @@ data WorldEventType = CreatePrim { wePrimName :: String, wePrimKey :: String }
                                          resetScriptScriptName :: String }
                     | DetachCompleteEvent { detachObject :: String, detachAvatar :: String }
                     | GiveAvatarInventoryEvent { giveAvatarInventoryKey :: String, giveAvatarInventoryItem :: InventoryItem }
+                    | AvatarOutputEvent { avatarOutputEventKey :: String, avatarOutputEventVal :: AvEvent.AvatarOutputEvent }
+                    | AvatarInputEvent { avatarInputEventKey :: String, avatarInputEventVal :: AvEvent.AvatarInputEvent }
     deriving (Show)
 
 data XMLRequestSourceType = XMLRequestInternal { xmlRequestTag :: String }
@@ -360,7 +381,11 @@ data DeferredScriptEventTarget = DeferredScriptEventScriptTarget (String,String)
                                | DeferredScriptEventObjectTarget String -- pushes to all scripts in all prims in object
     deriving (Show)
     
-isSensorEvent (SensorEvent _ _ _ _ _ _ _) = True
+
+data Touch = Touch { touchAvatarKey :: String , touchPrimKey :: String, touchStartTick :: Int, touchEndTick :: Int  }
+    deriving (Show)
+    
+isSensorEvent (SensorEvent {}) = True
 isSensorEvent _ = False
     
 type WorldEvent = (Int,WorldEventType) -- time, event

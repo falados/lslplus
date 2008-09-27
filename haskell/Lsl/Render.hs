@@ -1,5 +1,6 @@
 module Lsl.Render(renderLSLScript,renderCompiledScript) where
 
+import Data.List(foldl')
 import Lsl.Structure
 import Lsl.Util
 
@@ -12,7 +13,7 @@ renderCompiledScript stamp (globals,funcs,states) =
    renderString "// LSL script generated: " . renderString stamp . renderString "\n" .
    renderGlobals globals . renderFuncs funcs . renderStates states
 
-renderSequence r = (foldl (.) blank) . (map r)
+renderSequence r = (foldl' (.) blank) . (map r)
 
 renderGlobals = renderSequence renderGlobal
 
@@ -25,7 +26,7 @@ renderCtxSimple (Ctx _ expr) = renderSimple expr
 renderSimple (Neg expr) = renderChar '-' . renderCtxExpr expr
 renderSimple (ListExpr l) =
     renderChar '[' .
-        (foldl (.) id $ separateWith (renderChar ',') $ map renderCtxSimple l) .
+        (foldl' (.) id $ separateWith (renderChar ',') $ map renderCtxSimple l) .
         renderChar ']'
 renderSimple (VecExpr x y z) = renderChar '<' . renderCtxSimple x .
                                renderChar ',' . renderCtxSimple y .

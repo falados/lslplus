@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -XFlexibleContexts #-}
 module Lsl.WorldDef(Avatar(..),
+                    AvatarControlListener(..),
                     Prim(..),
                     PrimFace(..),
                     TextureInfo(..),
@@ -64,7 +65,6 @@ import qualified Data.IntMap as IM
 import Data.Maybe
 import Debug.Trace
 
--- import Lsl.Avatar
 import Lsl.DOMProcessing hiding (find)
 import Lsl.Evaluation
 import Lsl.Exec(ScriptImage,initLSLScript)
@@ -149,7 +149,12 @@ data Avatar = Avatar { avatarKey :: String,
                        avatarCameraRotation :: (Float,Float,Float,Float),
                        avatarCameraControlParams :: CameraParams,
                        avatarActiveAnimations :: [(Maybe Int,String)],
-                       avatarAttachments :: IM.IntMap String } deriving (Show)
+                       avatarAttachments :: IM.IntMap String,
+                       avatarEventHandler :: !(Maybe (String,[(String,LSLValue)])),
+                       avatarControls :: !Int,
+                       avatarControlListener :: !(Maybe AvatarControlListener) } deriving (Show)
+
+data AvatarControlListener = AvatarControlListener { avatarControlListenerMask :: !Int, avatarControlListenerScript :: !(String,String) } deriving (Show)
 
 data CameraParams = CameraParams { cameraActive :: Bool,
                                    cameraBehindednessAngle :: Float,
@@ -194,7 +199,10 @@ defaultAvatar key =
              avatarCameraRotation = (0,0,0,1),
              avatarCameraControlParams = defaultCamera,
              avatarActiveAnimations = [],
-             avatarAttachments = IM.empty }
+             avatarAttachments = IM.empty,
+             avatarEventHandler = Nothing,
+             avatarControls = 0,
+             avatarControlListener = Nothing }
                        
 -- these are bit INDEXES not MASKS (0 == least significant bit)
 primPhantomBit :: Int
@@ -448,6 +456,7 @@ mkScript img = Script { scriptImage = img,
                         scriptTargetIndex = 0,
                         scriptPositionTargets = IM.empty,
                         scriptRotationTargets = IM.empty }
+                        
 worldFromFullWorldDef worldBuilder fwd lib scripts =
     do let primMap = mkPrimMap (fullWorldDefPrims fwd)
        primMap' <- checkObjects primMap (fullWorldDefObjects fwd) -- prove all the prims in all the objects exists
@@ -779,8 +788,13 @@ avatarElement = ElemAcceptor "avatar" $
             realKey <- newKey (Just name)
             (x,c3) <- findValue "xPos" c2
             (y,c4) <- findValue "yPos" c3
-            (z,_) <- findValue "zPos" c4
-            return $ (defaultAvatar realKey) { avatarName = name, avatarPosition = (x,y,z), avatarCameraPosition = (x,y,z) }
+            (z,c5) <- findValue "zPos" c4
+            (handlerName,_) <- findOptionalElement (simpleElement "avatarEventHandler") c5
+            let initialHandler = fmap (flip (,) []) handlerName
+            return $ (defaultAvatar realKey) { avatarName = name, 
+                                               avatarPosition = (x,y,z),
+                                               avatarCameraPosition = (x,y,z),
+                                               avatarEventHandler = initialHandler }
 
 vecAcceptor s = ElemAcceptor s $
     \ (Elem _ _ contents) -> do

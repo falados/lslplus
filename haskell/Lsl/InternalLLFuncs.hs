@@ -563,7 +563,7 @@ llBase64ToInteger _ [SVal s] =
          charToBits c = case elemIndex c base64chars of
              Nothing -> 0
              Just i -> i
-     in continueWith $ IVal $ foldl (.|.) 0 $ zipWith (shiftL) (map charToBits (take 6 s')) [26,20..]
+     in continueWith $ IVal $ foldl' (.|.) 0 $ zipWith (shiftL) (map charToBits (take 6 s')) [26,20..]
    
 slPrintable :: String
 slPrintable = map toEnum (10:[32..127])

@@ -528,7 +528,8 @@ params = sepBy param comma
 -- IMPORT (meta-lsl directive) parsing
 
 gimport = do reserved "$import" <?> "$import keyword"
-             ids <- ctxify $ sepBy identifier dot
+             ids <- (ctxify $ (char '$' >> identifier >>= return . (:[]) . ("$"++)))
+                 <|>(ctxify $ sepBy identifier dot)
              let id = fmap (concat . separateWith ".") ids
              let binding = do id0 <- identifier
                               reservedOp "="
