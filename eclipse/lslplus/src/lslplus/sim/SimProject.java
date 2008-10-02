@@ -512,8 +512,21 @@ public class SimProject {
         public AvatarNode(Node parent, String nodeName) {
             super(parent, nodeName, null);
             addChild(new AvatarPropertiesNode(this));
+            addEventHandlerChild();
          }
 
+        private void addEventHandlerChild() {
+            addChild(new EventHandlerNode(this,"event-handler", null)); //$NON-NLS-1$
+        }
+
+        protected void onFix() {
+            // 0.7.0
+            Node n = findChildByName("event-handler"); //$NON-NLS-1$
+            if (n == null) {
+                addEventHandlerChild();
+            }
+        }
+        
         public void onRemove() {
             findRoot().accept(new NodeVisitor() {
                 public void visit(Node n) {
@@ -578,7 +591,9 @@ public class SimProject {
             AvatarPropertiesNode pn = (AvatarPropertiesNode) findChildByName("avatar-properties"); //$NON-NLS-1$
             Map props = pn.getData();
             LVector position = (LVector) props.get("pos"); //$NON-NLS-1$
-            return new SimWorldDef.Avatar(getName(),position.getX(), position.getY(), position.getZ());
+            EventHandlerNode n = (EventHandlerNode) findChildByName("event-handler"); //$NON-NLS-1$
+            return new SimWorldDef.Avatar(getName(),position.getX(), position.getY(), position.getZ(),
+                    (String)n.getValue());
         }
         
     }
@@ -795,7 +810,6 @@ public class SimProject {
             if ("(none)".equals(s)) setValue(null);
             else setValue(s);
         }
-        
     }
     
     public static class GridPositionNode extends Node implements HasDerivedValue {
@@ -1163,6 +1177,7 @@ public class SimProject {
         WorldNode n = (WorldNode) xstream.fromXML(contents);
         n.setResource(file);
         n.propagateParent();
+        n.fix();
         return n;
     }
     

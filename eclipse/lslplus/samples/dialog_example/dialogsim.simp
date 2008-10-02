@@ -10,7 +10,6 @@
     </anyNaturalNode>
     <eventHandlerNode>
       <nodeName>event-handler</nodeName>
-      <value class="string">@PREFIX@eventhandler.lslm</value>
       <childrenArray/>
     </eventHandlerNode>
     <defaultAvatarNode>
@@ -41,6 +40,11 @@
             </gridPositionNode>
           </childrenArray>
         </avatarPropertiesNode>
+	    <eventHandlerNode>
+	      <nodeName>event-handler</nodeName>
+	      <value class="string">@PREFIX@eventhandler.lslm</value>
+	      <childrenArray/>
+	    </eventHandlerNode>
       </childrenArray>
     </defaultAvatarNode>
     <objectNode>

@@ -262,6 +262,18 @@ public abstract class Node {
         }
     }
     
+    public final void fix() {
+        if (this.listeners == null) this.listeners = new HashSet();
+        onFix();
+        for (Iterator i = getChildren().iterator(); i.hasNext();) {
+            Node n = (Node) i.next();
+            n.fix();
+        }
+    }
+    
+    protected void onFix() {
+    }
+    
     public void syncChildren() {
         List children = getChildren();
         childrenArray = (Node[]) children.toArray(new Node[children.size()]);

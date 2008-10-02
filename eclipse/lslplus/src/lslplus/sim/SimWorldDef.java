@@ -153,12 +153,14 @@ public class SimWorldDef {
         private float xPos;
         private float yPos;
         private float zPos;
+        private String avatarEventHandler;
         
-        public Avatar(String name, float x, float y, float z) {
+        public Avatar(String name, float x, float y, float z, String avatarEventHandler) {
             this.name = name;
             this.xPos = x;
             this.yPos = y;
             this.zPos = z;
+            this.avatarEventHandler = avatarEventHandler;
         }
     }
     
@@ -259,7 +261,7 @@ public class SimWorldDef {
         };
         
         SimWorldDef.Avatar[] avatars = new SimWorldDef.Avatar[] {
-                new SimWorldDef.Avatar("Default Avatar", 128, 128, 0)
+                new SimWorldDef.Avatar("Default Avatar", 128, 128, 0, null)
         };
         
         SimWorldDef def = new SimWorldDef(10000000,1000,objects,prims,avatars, null);

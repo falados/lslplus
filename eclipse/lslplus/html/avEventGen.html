@@ -1,0 +1,48 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+
+<html>
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+	<title>Avatar Event Generator Module</title>
+	<link rel="stylesheet" type="text/css" href="book.css"/>
+</head>
+
+<body>
+<h1>Avatar Event Generator Module</h1>
+
+<p>The Avatar Event Generator Module is useful within an <a href="avEventHandler.html">
+Avatar Event Handler</a> (and only within an avatar event handler) for producing simulated
+events that an avatar might produce (e.g. touch events, control event, payment events).</p>
+
+<p>The module has the following interface:</p>
+<table>
+<tr>
+<th>Function</th><th>Description</th>
+</tr>
+<tr>
+<td>string <em>mkTouch</em>(string primKey, float duration)</td>
+<td>Create an event string representing the avatar touching a particular prim for a duration (in seconds).</td>
+</tr>
+<tr>
+<td>string <em>mkWhisper</em>(integer channel, string message)</td>
+<td>Create an even representing the avatar whispering on a particular channel.</td>
+</tr>
+<tr>
+<td>string <em>mkSay</em>(integer channel, string message)</td>
+<td>Create an even representing the avatar speaking on a particular channel.</td>
+</tr>
+<tr>
+<td>string <em>mkShout</em>(integer channel, string message)</td>
+<td>Create an even representing the avatar shouting on a particular channel.</td>
+</tr>
+<tr>
+<td>string <em>mkPay</em>(string primKey, integer amount)</td>
+<td>Create an even representing the avatar paying an amount to a particular prim.</td>
+</tr>
+<tr>
+<td>string <em>mkControl</em>(integer newControlBits)</td>
+<td>Create an even representing the avatar/agent's control bits changing.</td>
+</tr>
+</table>
+</body>
+
