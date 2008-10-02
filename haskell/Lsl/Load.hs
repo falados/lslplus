@@ -6,6 +6,7 @@ import Control.Exception
 import Control.Monad
 import Control.Monad.Error
 import Data.List
+import Lsl.BuiltInModules(avEventGen)
 import Lsl.Structure(validLSLScript,validLibrary,SourceContext(..), Validity(..))
 import Lsl.Parse(parseModule', parseScript')
 import System
@@ -28,7 +29,7 @@ parseFiles p files =
 loadModules files =
     do parseResults <- parseFiles parseModule' files
        let (bad,ok) = splitResults parseResults
-       let augLib = validLibrary ok
+       let augLib = validLibrary (avEventGen:ok)
        return (augLib ++ (map (\ (n,err) -> (n,Invalid err)) bad))
        --return (validated ++ (map (\ (n,err) -> (n,Invalid err)) bad))
 

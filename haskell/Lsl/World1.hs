@@ -43,7 +43,7 @@ import Lsl.Parse
 import Lsl.Physics
 import Lsl.Structure
 import Lsl.Type
-import Lsl.UnitTestWorld(simFunc)
+import Lsl.UnitTestWorld(simFunc,hasFunc)
 import Lsl.Util
 --import Lsl.ValueDB
 import Lsl.WorldDef
@@ -2184,7 +2184,8 @@ llDialog info@(ScriptInfo _ _ _ pk _) [KVal ak, SVal message, LVal buttons, IVal
         when (any ((24 <) . length) buttons') $ doErr "Button Labels cannot have more that 24 characters"
         when (any null buttons') $ doErr "all buttons must have label strings"
         (lift getWorldAvatars >>= M.lookup ak) <||> throwError ("no such agent/avatar - " ++ ak)
-        lift $ putWorldEvent 0 (DialogEvent ak message buttons' channel pk)
+        lift $ putWorldEvent 0 (DialogEvent ak message buttons' channel pk) -- deprecated!
+        lift $ putWorldEvent 0 (AvatarInputEvent ak (AvatarDialog message buttons' channel pk))
         continueWith VoidVal
     where doErr msg = (lift $ putChat (Just 20) pk cDebugChannel ("llDialog: " ++ msg)) >> throwError msg
 -------------------------------------------------------------------------------    
@@ -2267,6 +2268,28 @@ llGetSunDirection info [] = lift $ do
     az <- getTick >>= return . (*(pi/7200)) . ticksToDuration
     let el = 80 * pi 
     continueWith $ vec2VVal (sin az * cos el, sin el, cos az * cos el)
+    
+--------------------------------------------------------------------------------
+llLoadURL info [KVal ak, SVal msg, SVal url] = do
+    getWorldAvatar ak
+    lift $ putWorldEvent 0 (AvatarInputEvent ak (AvatarLoadURL msg url))
+    continueWith VoidVal
+    
+llMapDestination info [SVal simName, (VVal x y z), (VVal _ _ _)] = do
+        case mevent of
+           Nothing -> do
+               attachment <- getPrimAttachment oid
+               case attachment of
+                   Nothing -> lift $ logFromScript info ("prim neither attached nor touched, so call to llMapDestination is not valid")
+                   Just (Attachment { attachmentKey = ak }) -> putIt ak
+           Just (Event "touch" _ m) ->
+               case M.lookup "key_0" m of
+                   Just (SVal ak) -> putIt ak
+                   _ -> throwError "invalid touch event!"
+        continueWith VoidVal
+    where oid = scriptInfoObjectKey info
+          mevent = scriptInfoCurrentEvent info
+          putIt ak = lift $ putWorldEvent 0 (AvatarInputEvent ak (AvatarMapDestination simName (x,y,z)))
 --------------------------------------------------------------------------------
 continueWith val = return (EvalIncomplete,val)
 
@@ -2396,6 +2419,7 @@ defaultPredefs = M.fromList $ map (\(x,y) -> (x, defaultPredef x y)) [
         ("llListen", llListen),
         ("llListenControl",llListenControl),
         ("llListenRemove",llListenRemove),
+        ("llLoadURL",llLoadURL),
         ("llLookAt", llLookAt),
         ("llLoopSound",llLoopSound),
         ("llLoopSoundSlave",llLoopSoundSlave),
@@ -2404,6 +2428,7 @@ defaultPredefs = M.fromList $ map (\(x,y) -> (x, defaultPredef x y)) [
         ("llMakeFire",llMakeFire),
         ("llMakeFountain",llMakeFountain),
         ("llMakeSmoke",llMakeSmoke),
+        ("llMapDestination", llMapDestination),
         ("llMessageLinked", llMessageLinked),
         ("llMoveToTarget", llMoveToTarget),
         ("llOffsetTexture", llOffsetTexture),
@@ -2846,23 +2871,30 @@ processEvent (XMLReplyEvent key channel messageId sdata idata) = do
                 lift $ (getWorldOutputQueue >>= return . (event:) >>= setWorldOutputQueue)
 processEvent (DialogEvent agent message buttons channel source) =
     runAndLogIfErr "invalid dialog event" () $ do
-        (moduleName, state) <- lift getWorldEventHandler >>= maybe (throwError "no handler defined") return
-        lib <- lift getWLibrary
-        avName <- (lift getWorldAvatars >>= M.lookup agent >>= return . avatarName) <||> throwError "problem finding avatar"
-        objName <- getPrimName source <||> throwError "problem finding object"
-        case simFunc lib (moduleName, "dialog") state [SVal avName, SVal message, LVal (map SVal buttons), IVal channel, SVal objName] of
-            Left s -> throwError s
-            Right (SVal msg, results) | not (null msg) -> do
-                lift $ setWorldEventHandler (Just (moduleName, results))
-                throwError msg
-                                      | otherwise ->
-                let (IVal selection) = maybe (IVal (-1)) id (lookup "outDialogButtonSelected" results)
-                    events = maybe (LVal []) id (lookup "outEvents" results)
-                in do
-                    when (selection >= 0 && selection < length buttons) $ 
-                        lift $ putChat (Just 20.0) agent channel (buttons !! selection)
-                    lift $ processEventsList events
-                    lift $ setWorldEventHandler (Just (moduleName, results))
+        lift getWorldEventHandler >>= (\ mhandler -> case mhandler of
+            Nothing -> return ()
+            Just (moduleName,state) -> do
+                lib <- lift getWLibrary
+                avName <- (lift getWorldAvatars >>= M.lookup agent >>= return . avatarName) <||> throwError "problem finding avatar"
+                objName <- getPrimName source <||> throwError "problem finding object"
+                case hasFunc lib (moduleName,"dialog") of
+                    Left s -> throwError s
+                    Right False -> return ()
+                    Right True -> 
+                        case simFunc lib (moduleName, "dialog") state 
+                               [SVal avName, SVal message, LVal (map SVal buttons), IVal channel, SVal objName] of
+                            Left s -> throwError s
+                            Right (SVal msg, results) | not (null msg) -> do
+                                lift $ setWorldEventHandler (Just (moduleName, results))
+                                throwError msg
+                                                      | otherwise ->
+                                let (IVal selection) = maybe (IVal (-1)) id (lookup "outDialogButtonSelected" results)
+                                    events = maybe (LVal []) id (lookup "outEvents" results)
+                                in do
+                                    when (selection >= 0 && selection < length buttons) $ 
+                                        lift $ putChat (Just 20.0) agent channel (buttons !! selection)
+                                    lift $ processEventsList events
+                                    lift $ setWorldEventHandler (Just (moduleName, results)))
 processEvent (RezObjectEvent links pos vel rot start pk copy atRoot) =
     runAndLogIfErr "invalid rez object event" () $ do
         when (null links) $ throwError "empty link set!"
@@ -2979,14 +3011,22 @@ processAvatarInputEvent k inputEvent = runAndLogIfErr "problem processing event 
         flip (maybe (return ())) (avatarEventHandler av) $ (\ (moduleName,state) -> do
             lib <- lift getWLibrary
             case callAvatarEventProcessor k moduleName inputEvent lib state of
-                Left s -> throwError s
-                Right (LVal events,result) -> do
+                Nothing -> return ()
+                Just (Left s) -> throwError s
+                Just (Right (LVal events,result)) -> do
                     mapM_ (putAvatarOutputEvent k) events
                     lift $ setWorldAvatar k (av { avatarEventHandler = Just (moduleName,result) }))
 
-avEventProcCallInfo (AvatarOwnerSay key msg) = ("objectSaidToOwner",[SVal key, SVal msg])
-avEventProcCallInfo (AvatarHearsChat name key msg) = ("heardChat",[SVal name, SVal key, SVal msg])
-callAvatarEventProcessor k moduleName avEvent lib state = simFunc lib (moduleName, funcName) state args
+avEventProcCallInfo (AvatarOwnerSay key msg) = ("onOwnerSay",[SVal key, SVal msg])
+avEventProcCallInfo (AvatarHearsChat name key msg) = ("onChat",[SVal name, SVal key, SVal msg])
+avEventProcCallInfo (AvatarDialog msg buttons chan source) = ("onDialog",[SVal msg, LVal $ map SVal buttons, IVal chan, SVal source])
+avEventProcCallInfo (AvatarLoadURL msg url) = ("onLoadURL",[SVal msg, SVal url])
+avEventProcCallInfo (AvatarMapDestination simName position) = ("onMapDestination",[SVal simName, vec2VVal position])
+callAvatarEventProcessor k moduleName avEvent lib state = 
+    case hasFunc lib (moduleName,funcName) of
+        Left s -> Just (Left s)
+        Right True -> Just $ simFunc lib (moduleName, funcName) state args
+        Right False -> Nothing
     where (funcName,args) = avEventProcCallInfo avEvent
     
 putAvatarOutputEvent k (SVal s) =

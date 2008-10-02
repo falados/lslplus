@@ -12,4 +12,8 @@ data AvatarOutputEvent =
 data AvatarInputEvent =
       AvatarOwnerSay { avatarOwnerSayPrimKey :: String, avatarOwnerSayMsg :: String }
     | AvatarHearsChat { avatarHearsChatFromName :: String, avatarHearsChatFromKey :: String, avatarHearsChatMsg :: String }
+    | AvatarDialog { avatarDialogMessage :: String, avatarDialogButtons :: [String], 
+                          avatarDialogChannel :: Int, avatarDialogSourceObject :: String }
+    | AvatarLoadURL { avatarLoadURLMessage :: String, avatarLoadURLAddress :: String }
+    | AvatarMapDestination { avatarMapDestination :: String, avatarMapDestinationPosition :: (Float,Float,Float) }
     deriving (Read,Show)

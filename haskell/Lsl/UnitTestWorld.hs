@@ -1,6 +1,7 @@
 module Lsl.UnitTestWorld(
     simStep,
     simFunc,
+    hasFunc,
     SimpleWorld,
     TestEvent(..),
     ExecutionInfo(..),
@@ -12,6 +13,7 @@ import Control.Monad.State
 import Control.Monad.Error
 import Data.List
 import Data.Bits
+import Data.Maybe(isJust)
 import Debug.Trace
 import Lsl.Breakpoint
 import Lsl.CodeHelper
@@ -177,6 +179,17 @@ breakpointsFromCommand (ExecStep bps) = bps
 breakpointsFromCommand (ExecStepOver bps) = bps
 breakpointsFromCommand (ExecStepOut bps) = bps
 
+hasFunc :: [(String,Validity LModule)] -> (String,String) -> Either String Bool
+hasFunc lib (moduleName,functionName) =
+        case converted of
+           Left s -> Left ("no such module: " ++ moduleName)
+           Right (Left s) -> Left ("no such module: " ++ moduleName)
+           Right (Right ((_,funcs,_),path)) -> Right $ isJust (findFunc functionName funcs)
+    where converted = evalState (runErrorT (convertEntryPoint ep)) world
+          ep = ModuleFunc moduleName functionName
+          world = SimpleWorld { maxTick = 10000, tick = 0, msgLog = [], wScripts = [], wLibrary = lib, 
+                                expectations = FuncCallExpectations Nice [], breakpointManager = emptyBreakpointManager }
+                                
 simFunc :: [(String,Validity LModule)] -> (String,String) -> [(String,LSLValue)] -> [LSLValue] -> Either String (LSLValue,[(String,LSLValue)])
 simFunc lib (moduleName,functionName) globs args =
    let world = SimpleWorld { maxTick = 10000, tick = 0, msgLog = [], wScripts = [], wLibrary = lib, 
