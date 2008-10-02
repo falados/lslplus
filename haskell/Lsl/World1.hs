@@ -2885,16 +2885,21 @@ processEvent (DialogEvent agent message buttons channel source) =
                                [SVal avName, SVal message, LVal (map SVal buttons), IVal channel, SVal objName] of
                             Left s -> throwError s
                             Right (SVal msg, results) | not (null msg) -> do
+                                warn
                                 lift $ setWorldEventHandler (Just (moduleName, results))
                                 throwError msg
                                                       | otherwise ->
                                 let (IVal selection) = maybe (IVal (-1)) id (lookup "outDialogButtonSelected" results)
                                     events = maybe (LVal []) id (lookup "outEvents" results)
                                 in do
+                                    warn
                                     when (selection >= 0 && selection < length buttons) $ 
                                         lift $ putChat (Just 20.0) agent channel (buttons !! selection)
                                     lift $ processEventsList events
                                     lift $ setWorldEventHandler (Just (moduleName, results)))
+                            where warn = lift $ logAMessage LogWarn "sim" 
+                                    "the 'dialog' entry point for the world event handler is deprecated, use the avatar event handler instead"
+
 processEvent (RezObjectEvent links pos vel rot start pk copy atRoot) =
     runAndLogIfErr "invalid rez object event" () $ do
         when (null links) $ throwError "empty link set!"
