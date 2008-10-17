@@ -2,7 +2,7 @@
 module Lsl.WorldState where
 
 import Control.Monad
-import Control.Monad.State hiding (State,get)
+import Control.Monad.State hiding (State)
 import Control.Monad.Identity
 import Control.Monad.Error
 import Data.List
@@ -77,7 +77,7 @@ data World m = World {
 
 -- a state monad for the World
 type WorldM m = StateT (World m) m
-
+    
 worldM f = StateT (\ s -> return (f s))
 
 -- extracting/updating the world state -----------------------------------------------------                   
@@ -159,7 +159,7 @@ getWorldAvatar k = lift getWorldAvatars >>= (\ m -> case M.lookup k m of
     Nothing -> throwError ("no such avatar/agent: " ++ k)
     Just av -> return av)
     
-getRegion index = (lift getWorldRegions >>= M.lookup index)
+getRegion index = (lift getWorldRegions >>= mlookup index)
 
 getPrim k = (lift getPrims >>= (\ m -> case M.lookup k m of
     Nothing -> throwError ("no such prim: " ++ k)
@@ -218,10 +218,10 @@ getPrimLinkNum pk = do
     mp <- getPrimParent pk
     case mp of
         Nothing -> do  -- this is the root prim
-            links <- lift getObjects >>= M.lookup pk >>= return . primKeys
+            links <- lift getObjects >>= mlookup pk >>= return . primKeys
             return (if null links then 0 else 1)
         Just ok -> do
-            links <- lift getObjects >>= M.lookup ok >>= return . primKeys
+            links <- lift getObjects >>= mlookup ok >>= return . primKeys
             case elemIndex pk links of
                 Nothing -> throwError "internal error, can't find prim in link list of parent object"
                 Just i -> return (i + 1)
@@ -271,7 +271,7 @@ setWorldAvatar k av = getWorldAvatars >>= return . M.insert k av >>= setWorldAva
 
 setPrim k p = (getPrims >>= return . (M.insert k p) >>= setPrims)
 
-updatePrimVal k f = runErrPrim k () $ (lift getPrims >>= M.lookup k >>= return . f >>= lift . (setPrim k))
+updatePrimVal k f = runErrPrim k () $ (lift getPrims >>= mlookup k >>= return . f >>= lift . (setPrim k))
 
 runErrPrim k defaultVal = runAndLogIfErr ("prim " ++ k ++ " not found") defaultVal
 
@@ -480,11 +480,11 @@ primHasActiveHandler pk handler =
               return [ image | (Script { scriptImage = image } ) <- map snd scripts ]
               
 scriptHasActiveHandler pk sn handler =
-    do script <- lift getWorldScripts >>= M.lookup (pk,sn)
+    do script <- lift getWorldScripts >>= mlookup (pk,sn)
        return $ hasActiveHandler (scriptImage script) handler
              
-lookupDataChannel scriptAddr = lift getWorldOpenDataChannels >>= M.lookup scriptAddr . snd
-lookupScriptFromChan chan = lift getWorldOpenDataChannels >>= M.lookup chan . fst
+lookupDataChannel scriptAddr = lift getWorldOpenDataChannels >>= mlookup scriptAddr . snd
+lookupScriptFromChan chan = lift getWorldOpenDataChannels >>= mlookup chan . fst
 
 insertScriptChannelPair script chan = lift $ do
     (c2s,s2c) <- getWorldOpenDataChannels

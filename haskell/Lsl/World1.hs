@@ -156,7 +156,7 @@ llSensorRemove info@(ScriptInfo _ _ sn pk _) [] =
 
 llRequestAgentData info@(ScriptInfo _ _ sn pk _) [KVal ak, IVal d] =
     do key <- lift newKey
-       av <- (lift getWorldAvatars >>= M.lookup ak) <||> (throwError ("no such avatar" ++ ak))
+       av <- (lift getWorldAvatars >>= mlookup ak) <||> (throwError ("no such avatar" ++ ak))
        dataVal <- case d of
                          d | d == cDataBorn -> return "1981-01-01"
                            | d == cDataOnline -> return "1"
@@ -350,14 +350,14 @@ llResetScript info@(ScriptInfo _ _ sn pk _) [] =
        
 llResetOtherScript info@(ScriptInfo _ _ sn pk _) [SVal sn'] =
     do  when (sn == sn') $ throwError ("trying to reset the current script - must use llResetScript for this")
-        lift getWorldScripts >>= M.lookup (pk,sn) >>= return . scriptActive >>= flip when (throwError "can't reset a stopped script") . not
+        lift getWorldScripts >>= mlookup (pk,sn) >>= return . scriptActive >>= flip when (throwError "can't reset a stopped script") . not
         resetScript pk sn'
         continueWith VoidVal
     
 resetScript pk sn = do
          lift $ logAMessage LogDebug "sim" "resetting a script"
          scripts <- lift getWorldScripts
-         script <- M.lookup (pk,sn) scripts
+         script <- mlookup (pk,sn) scripts
          t <- lift getTick
          let img = scriptImage script
          let doReset execState =
@@ -377,7 +377,7 @@ resetScript pk sn = do
                      _ -> throwError ("can't reset script that is crashed or suspended")   
                      
 llGetScriptState info@(ScriptInfo _ _ _ pk _) [SVal sn] =
-    do  script <- (lift getWorldScripts >>= M.lookup (pk,sn)) <||> throwError "no such script/invalid script"
+    do  script <- (lift getWorldScripts >>= mlookup (pk,sn)) <||> throwError "no such script/invalid script"
         (continueWith . IVal) $ if not $ scriptActive script then 0
                 else case executionState (scriptImage script) of
                             Halted -> 0
@@ -388,7 +388,7 @@ llGetScriptState info@(ScriptInfo _ _ _ pk _) [SVal sn] =
 llSetScriptState info@(ScriptInfo _ _ sn pk _) [SVal sn', IVal state] =
     do  when (sn == sn') $ throwError ("can't change your own state")
         scripts <- lift getWorldScripts
-        script <- M.lookup (pk,sn') scripts <||> throwError "no such script (could be invalid script)"
+        script <- mlookup (pk,sn') scripts <||> throwError "no such script (could be invalid script)"
         if state == 0 
             then
                 if (scriptActive script) 
@@ -412,7 +412,7 @@ llSetPayPrice info@(ScriptInfo _ _ sn pk _) [IVal price, LVal l] =
         continueWith VoidVal
     
 llGetStartParameter info@(ScriptInfo _ _ sn pk _) [] =
-    (lift getWorldScripts >>= M.lookup (pk,sn) >>= continueWith . IVal . scriptStartParameter)
+    (lift getWorldScripts >>= mlookup (pk,sn) >>= continueWith . IVal . scriptStartParameter)
 ------------------------------------------------------------------------------
 llCloud info [v@(VVal x y z)] =
     do lift $ logFromScript info "llCloud: returning default density"
@@ -470,7 +470,7 @@ llSleep info@(ScriptInfo oid pid sid pkey event) [FVal f] =
 llInstantMessage info@(ScriptInfo _ _ _ pk _) [KVal ak, SVal message] =
     do tick <- lift getTick
        name <- getPrimName pk
-       av <- (lift getWorldAvatars >>= M.lookup ak) <||> throwError ("no such user: " ++ ak)
+       av <- (lift getWorldAvatars >>= mlookup ak) <||> throwError ("no such user: " ++ ak)
        let avname = avatarName av
        lift $ logAMessage LogInfo "sim" ("IM to " ++ avname ++ " from " ++ name ++ ": " ++ message)
        return (YieldTil (tick + durationToTicks 2),VoidVal)
@@ -538,7 +538,7 @@ llBreakLink info@(ScriptInfo oid _ sid pk _) [IVal link] =
         if perm .&. cPermissionChangeLinks /= 0
             then do
                 objects <- lift getObjects
-                LSLObject { primKeys = links, objectDynamics = dynamics } <- M.lookup oid objects
+                LSLObject { primKeys = links, objectDynamics = dynamics } <- mlookup oid objects
                 attachment <- getPrimAttachment oid
                 case attachment of
                     Nothing ->
@@ -563,7 +563,7 @@ llBreakAllLinks info@(ScriptInfo oid _ sid pk _) [] =
         if perm .&. cPermissionChangeLinks /= 0
             then do
                 objects <- lift getObjects
-                LSLObject links dynamics <- M.lookup oid objects
+                LSLObject links dynamics <- mlookup oid objects
                 attachment <- getPrimAttachment oid
                 case attachment of
                     Nothing ->
@@ -588,7 +588,7 @@ llCreateLink info@(ScriptInfo oid _ sid pk _) [KVal target, IVal iparent] =
         if perm .&. cPermissionChangeLinks /= 0
             then do
                 objects <- lift getObjects
-                LSLObject (link:links) dynamics <- M.lookup oid objects
+                LSLObject (link:links) dynamics <- mlookup oid objects
                 case M.lookup target objects of
                     Nothing -> lift $ logFromScript info "llCreateLink: target not found"
                     Just (LSLObject (link':links') dynamics') -> do
@@ -617,7 +617,7 @@ llDie info@(ScriptInfo oid _ _ pk _) [] =
          case attachment of
              Nothing -> do
                      objects <- lift getObjects
-                     LSLObject { primKeys = (links) } <- M.lookup oid objects
+                     LSLObject { primKeys = (links) } <- mlookup oid objects
                      allScripts <- mapM getPrimScripts links
                      let primsWithScriptNames = zip links (map (map (invName)) allScripts)
                      let skeys = concat $ map ( \ (k,list) -> map ((,)k) list) primsWithScriptNames
@@ -632,7 +632,7 @@ llDie info@(ScriptInfo oid _ _ pk _) [] =
         
 llAttachToAvatar info@(ScriptInfo oid _ sid pk _) [IVal attachPoint] =
     if attachPoint `elem` validAttachmentPoints then
-        do  script <- (lift getWorldScripts >>= M.lookup (pk,sid))
+        do  script <- (lift getWorldScripts >>= mlookup (pk,sid))
             attachment <- getPrimAttachment oid
             case attachment of
                 Just _ -> lift $ logFromScript info "llAttachToAvatar: already attached"
@@ -640,7 +640,7 @@ llAttachToAvatar info@(ScriptInfo oid _ sid pk _) [IVal attachPoint] =
                     case scriptLastPerm script of
                         Nothing -> throwError "no permission to attach"
                         Just k -> do
-                            perm <- M.lookup k (scriptPermissions script)
+                            perm <- mlookup k (scriptPermissions script)
                             when (perm .&. cPermissionAttach == 0) $ throwError "no permission to attach"
                             owner <- getPrimOwner pk
                             if (k /= owner)
@@ -663,14 +663,14 @@ llAttachToAvatar info@(ScriptInfo oid _ sid pk _) [IVal attachPoint] =
 
 llDetachFromAvatar info@(ScriptInfo oid _ sid pk _) [] =
     do  when (oid /= pk) $ throwError "can't detach from within child prim"
-        script <- (lift getWorldScripts >>= M.lookup (pk,sid)) <||> throwError "can't find current script!"
+        script <- (lift getWorldScripts >>= mlookup (pk,sid)) <||> throwError "can't find current script!"
         attachment <- getPrimAttachment oid
         when (isNothing attachment) $ throwError "not attached!"
         Just (Attachment k attachPoint) <- return attachment
-        perm <- (M.lookup k $ scriptPermissions script) <||> throwError "no permission to detach"
+        perm <- (mlookup k $ scriptPermissions script) <||> throwError "no permission to detach"
         when (perm .&. cPermissionAttach == 0) $ throwError "no permission to attach"
         avatars <- lift getWorldAvatars
-        avatar <- M.lookup k avatars <||> throwError "can't find avatar!"
+        avatar <- mlookup k avatars <||> throwError "can't find avatar!"
         let attachments = avatarAttachments avatar
         lift $ setWorldAvatars (M.insert k (avatar { avatarAttachments = IM.delete attachPoint attachments }) avatars)
         lift $ setPrimAttachment oid Nothing
@@ -682,26 +682,26 @@ llGetAttached info@(ScriptInfo oid _ _ _ _) [] =
     getPrimAttachment oid >>= return . maybe 0 attachmentPoint >>= continueWith . IVal
 
 llGiveMoney info@(ScriptInfo _ _ sn pk _) [KVal ak, IVal amount] =
-    do  script <- (lift getWorldScripts >>= M.lookup (pk,sn)) <||> (throwError "can't find script!")
+    do  script <- (lift getWorldScripts >>= mlookup (pk,sn)) <||> (throwError "can't find script!")
         permKey <- maybe (throwError "no permission") (return . id) (scriptLastPerm script)
-        perm <- M.lookup permKey (scriptPermissions script)
+        perm <- mlookup permKey (scriptPermissions script)
         when (perm .&. cPermissionAttach == 0) $ throwError "no permission"
         lift $ logFromScript info ("llGiveMoney: pretending to give " ++ show amount ++ " to avatar with key " ++ ak)
         continueWith (IVal 0)
     
 llGetPermissionsKey (ScriptInfo _ _ sid pk _) [] =
-    lift getWorldScripts >>= M.lookup (pk,sid) >>= continueWith . KVal . fromMaybe nullKey . scriptLastPerm
+    lift getWorldScripts >>= mlookup (pk,sid) >>= continueWith . KVal . fromMaybe nullKey . scriptLastPerm
     
 llGetPermissions (ScriptInfo _ _ sid pk _) [] = getPermissions pk sid >>= continueWith . IVal
 
 getPermissions pk s = do
-    script <- (lift getWorldScripts >>= M.lookup (pk,s))
+    script <- (lift getWorldScripts >>= mlookup (pk,s))
     case scriptLastPerm script of
         Nothing -> return 0
-        Just k -> M.lookup k (scriptPermissions script)
+        Just k -> mlookup k (scriptPermissions script)
 
 getPermittedAvKey info@(ScriptInfo _ _ s pk _) fname perm = do
-    script <- (lift getWorldScripts >>= M.lookup (pk,s))
+    script <- (lift getWorldScripts >>= mlookup (pk,s))
     case scriptLastPerm script of
         Nothing -> lift $ logFromScript info (fname ++ ": not permitted") >> return Nothing
         Just k -> case M.lookup k (scriptPermissions script) of
@@ -722,18 +722,18 @@ llClearCameraParams info@(ScriptInfo _ _ sid pk _) [] =
             Nothing -> return ()
             Just k -> do
                 avatars <- lift getWorldAvatars
-                av <- M.lookup k avatars
+                av <- mlookup k avatars
                 lift $ setWorldAvatars (M.insert k (av { avatarCameraControlParams = defaultCamera }) avatars)
         continueWith VoidVal
     
 llGetCameraPos info@(ScriptInfo _ _ sid pk _) [] =
     do  avKey <- getPermittedAvKey info "llGetCameraPos" cPermissionTrackCamera
-        maybe (return (0,0,0)) (\ k -> lift getWorldAvatars >>= M.lookup k >>= return . avatarCameraPosition) avKey >>=
+        maybe (return (0,0,0)) (\ k -> lift getWorldAvatars >>= mlookup k >>= return . avatarCameraPosition) avKey >>=
             continueWith . vec2VVal
 
 llGetCameraRot info@(ScriptInfo _ _ sid pk _) [] =
     do  avKey <- getPermittedAvKey info "llGetCameraRot" cPermissionTrackCamera
-        maybe (return (0,0,0,1)) (\ k -> lift getWorldAvatars >>= M.lookup k >>= return . avatarCameraRotation) avKey
+        maybe (return (0,0,0,1)) (\ k -> lift getWorldAvatars >>= mlookup k >>= return . avatarCameraRotation) avKey
             >>= continueWith . rot2RVal
  
 llTakeCamera info _ = lift $ logFromScript info "llTakeCamera: deprecated!" >> continueWith VoidVal
@@ -800,7 +800,7 @@ llSameGroup info@(ScriptInfo _ _ _ pk _) [KVal k] =
     do  group <- avGroup <||> getPrimGroup k <||> throwError ("no such object or avatar: " ++ k)
         myGroup <- getPrimGroup pk <||> throwError ("can't find " ++ pk)
         continueWith (IVal (if group == myGroup then 1 else 0))
-    where avGroup = lift getWorldAvatars >>= M.lookup k >>= return . avatarActiveGroup
+    where avGroup = lift getWorldAvatars >>= mlookup k >>= return . avatarActiveGroup
 
 llGetLinkKey (ScriptInfo oid _ _ _ _) [IVal link] = do
     do  LSLObject { primKeys = pkeys } <- getObject oid
@@ -1544,7 +1544,7 @@ llGetObjectDetails _ [KVal k, LVal params] =
      do  (getAvatarDetails k params <||> getPrimDetails k params) >>= continueWith . LVal
      where getAvatarDetails k params = 
                do  avs <- lift getWorldAvatars
-                   av <- M.lookup k avs
+                   av <- mlookup k avs
                    return $ map (avq av) params
                where avq av i | i == llcObjectName = SVal $ avatarName av
                               | i == llcObjectDesc = SVal ""
@@ -1623,7 +1623,7 @@ addToLandACLList aclType aclFromParcel aclIntoParcel info@(ScriptInfo _ _ _ pk _
         whenParcelPermitted info pk $ \ regionIndex parcelIndex parcel -> do
             lift $ runAndLogIfErr ("attempt to change " ++ aclType ++ " unknown avatar " ++ ak) parcel $ do
                 avs <- lift getWorldAvatars
-                _ <- M.lookup ak avs
+                _ <- mlookup ak avs
                 when (duration < 0.0) $ lift $ logFromScript info (aclType ++ " change attempted with invalid duration: " ++ show duration)
                 t <- lift getTick
                 let acl = (ak, if duration == 0 then Nothing else Just $ t + durationToTicks duration)
@@ -1637,7 +1637,7 @@ addToLandACLList aclType aclFromParcel aclIntoParcel info@(ScriptInfo _ _ _ pk _
 removeFromLandACLList aclFromParcel aclIntoParcel info@(ScriptInfo _ _ _ pk _) ak = do
     whenParcelPermitted info pk $ \ regionIndex parcelIndex parcel -> do
         avs <- lift getWorldAvatars
-        M.lookup ak avs `catchError` (\ _ -> throwError ("unkown avatar " ++ ak))
+        mlookup ak avs `catchError` (\ _ -> throwError ("unkown avatar " ++ ak))
         let acl = aclFromParcel parcel
         return $ aclIntoParcel parcel [ ac | ac@(k,_) <- acl, k /= ak ]
 
@@ -1857,13 +1857,13 @@ llGetRegionTimeDilation _ _ = continueWith $ FVal 1.0
 
 llGetTime (ScriptInfo _ _ sid pk _) [] = 
      do  t <- lift getTick
-         script <- lift getWorldScripts >>= M.lookup (pk,sid)
+         script <- lift getWorldScripts >>= mlookup (pk,sid)
          continueWith $ FVal $ ticksToDuration (t - scriptLastResetTick script)
 
 getAndResetTick pk sid =
     do
         scripts <- lift getWorldScripts
-        script <- M.lookup (pk,sid) scripts
+        script <- mlookup (pk,sid) scripts
         let t = scriptLastResetTick script
         t' <- lift getTick
         lift $ setWorldScripts (M.insert (pk,sid) (script { scriptLastResetTick = t' } ) scripts)
@@ -1964,7 +1964,7 @@ llGetSimulatorHostname (ScriptInfo _ _ _ pk _) [] =
 llGetRegionName (ScriptInfo _ _ _ pk _) [] = 
     do  regionIndex <- getPrimRegion pk
         regions <- lift getWorldRegions
-        region <- M.lookup regionIndex regions
+        region <- mlookup regionIndex regions
         continueWith $ SVal $ regionName region
 
 llGetAgentSize info@(ScriptInfo _ _ _ pk _) [KVal ak] =
@@ -2004,7 +2004,7 @@ llDetectedGrab (ScriptInfo _ _ _ _ mevent) [IVal i] =
 llDetectedPos (ScriptInfo _ _ _ _ mevent) [IVal i] =
     do  avatars <- lift getWorldAvatars
         Just event <- return mevent
-        KVal key <- M.lookup ("key_" ++ show i) (eventInfo event)
+        KVal key <- mlookup ("key_" ++ show i) (eventInfo event)
         v <- case M.lookup key avatars of
             Just av -> return $ avatarPosition av
             Nothing -> getRootPrim key >>= getObjectPosition
@@ -2014,7 +2014,7 @@ llDetectedRot (ScriptInfo _ _ _ _ mevent) [IVal i] =
     do
         avatars <- lift getWorldAvatars
         Just event <- return mevent
-        KVal key <- M.lookup ("key_" ++ show i) (eventInfo event)
+        KVal key <- mlookup ("key_" ++ show i) (eventInfo event)
         r <- case M.lookup key avatars of
             Just av -> return $ avatarRotation av
             Nothing -> getRootPrim key >>= getObjectRotation
@@ -2023,7 +2023,7 @@ llDetectedRot (ScriptInfo _ _ _ _ mevent) [IVal i] =
 llDetectedName (ScriptInfo _ _ _ _ mevent) [IVal i] =
     do  avatars <- lift getWorldAvatars
         Just event <- return mevent
-        KVal key <- M.lookup ("key_" ++ show i) (eventInfo event)
+        KVal key <- mlookup ("key_" ++ show i) (eventInfo event)
         name <- case M.lookup key avatars of
             Just av -> return $ avatarName av
             Nothing -> getPrimName key
@@ -2032,7 +2032,7 @@ llDetectedName (ScriptInfo _ _ _ _ mevent) [IVal i] =
 llDetectedOwner (ScriptInfo _ _ _ _ mevent) [IVal i] =
     do  avatars <- lift getWorldAvatars
         Just event <- return mevent
-        KVal key <- M.lookup ("key_" ++ show i) (eventInfo event)
+        KVal key <- mlookup ("key_" ++ show i) (eventInfo event)
         k <- case M.lookup key avatars of
             Just av -> return key
             Nothing -> getPrimOwner key
@@ -2040,18 +2040,18 @@ llDetectedOwner (ScriptInfo _ _ _ _ mevent) [IVal i] =
 
 llDetectedGroup info@(ScriptInfo _ _ _ _ mevent) [IVal i] =
     do  Just event <- return mevent
-        KVal key <- M.lookup ("key_" ++ show i) (eventInfo event) <||> throwError ("index " ++ show i ++ " out of range")
+        KVal key <- mlookup ("key_" ++ show i) (eventInfo event) <||> throwError ("index " ++ show i ++ " out of range")
         avatars <- lift getWorldAvatars
         prims <- lift getPrims
-        k <- (M.lookup key avatars >>= return . fromMaybe nullKey . avatarActiveGroup) <||>
-            (M.lookup key prims >>= return . fromMaybe nullKey . primGroup) <||> throwError ("error: key not an avatar or an object!")
+        k <- (mlookup key avatars >>= return . fromMaybe nullKey . avatarActiveGroup) <||>
+            (mlookup key prims >>= return . fromMaybe nullKey . primGroup) <||> throwError ("error: key not an avatar or an object!")
         continueWith (KVal k)
     
 llDetectedVel _ [IVal i] = continueWith $ VVal 0 0 0 -- TODO: physics!!!
 
 llDetectedType (ScriptInfo _ _ _ _ mevent) [IVal i] =
     do  Just event <- return mevent
-        KVal key <- M.lookup ("key_" ++ show i) (eventInfo event)
+        KVal key <- mlookup ("key_" ++ show i) (eventInfo event)
         avatars <- lift getWorldAvatars
         t <- case M.lookup key avatars of
             Just _ -> return cAgent
@@ -2095,7 +2095,7 @@ llStartAnimation info@(ScriptInfo _ _ sid pk _) [SVal anim] =
              Nothing -> return ()
              Just ak -> do
                 avatars <- lift getWorldAvatars
-                av <- M.lookup ak avatars
+                av <- mlookup ak avatars
                 let anims = avatarActiveAnimations av
                 now <- lift getTick
                 result <- findAnimation pk anim
@@ -2125,7 +2125,7 @@ llStopAnimation info@(ScriptInfo _ _ sid pk _) [SVal anim] =
             Nothing -> return ()
             Just ak -> do
                 avatars <- lift getWorldAvatars
-                av <- M.lookup ak avatars
+                av <- mlookup ak avatars
                 let anims = avatarActiveAnimations av
                 result <- findAnimation pk anim
                 case result of
@@ -2167,7 +2167,7 @@ llRemoteDataReply info@(ScriptInfo _ _ _ _ mevent) [KVal channel, KVal messageId
     do  Just event <- return mevent
         when (eventName event /= "remote_data") $ throwError "no effect unless called within remote_data handler"
         let m = eventInfo event
-        (KVal k) <- M.lookup "requestKey" m <||> throwError ("problem: invalid or mistyped request key in event")
+        (KVal k) <- mlookup "requestKey" m <||> throwError ("problem: invalid or mistyped request key in event")
         lift $ putWorldEvent 0 (XMLReplyEvent k channel messageId sdata idata)
         lift $ logFromScript info ("llRemoteDataReply: (" ++ show channel ++ "," ++ show messageId ++ "," ++ show sdata ++ "," ++
                                                              show idata ++ ")")
@@ -2183,7 +2183,7 @@ llDialog info@(ScriptInfo _ _ _ pk _) [KVal ak, SVal message, LVal buttons, IVal
         let buttons' = take 12 $ map ( \ (SVal s) -> s) buttons
         when (any ((24 <) . length) buttons') $ doErr "Button Labels cannot have more that 24 characters"
         when (any null buttons') $ doErr "all buttons must have label strings"
-        (lift getWorldAvatars >>= M.lookup ak) <||> throwError ("no such agent/avatar - " ++ ak)
+        (lift getWorldAvatars >>= mlookup ak) <||> throwError ("no such agent/avatar - " ++ ak)
         lift $ putWorldEvent 0 (DialogEvent ak message buttons' channel pk) -- deprecated!
         lift $ putWorldEvent 0 (AvatarInputEvent ak (AvatarDialog message buttons' channel pk))
         continueWith VoidVal
@@ -2199,7 +2199,7 @@ llMakeFountain info _ = lift $ logFromScript info "llMakeFountain: deprecated" >
 --------------------------------------------------------------------------------
 llTakeControls info@(ScriptInfo {scriptInfoPrimKey = pk, scriptInfoScriptName = sn}) [IVal controls, IVal accept, IVal pass] =
     do  allScripts <- lift getWorldScripts
-        script <- M.lookup (pk,sn) allScripts
+        script <- mlookup (pk,sn) allScripts
         case scriptLastPerm script of
             Nothing -> lift $ logFromScript info "no persmission to take controls from any agent"
             Just ak -> do
@@ -2220,13 +2220,13 @@ llVolumeDetect info@(ScriptInfo { scriptInfoObjectKey = oid }) [IVal i] =
     
 llCollisionFilter info@(ScriptInfo { scriptInfoPrimKey = pk, scriptInfoScriptName = sn }) [SVal name, KVal k, IVal i] =
     do  allScripts <- lift getWorldScripts
-        script <- M.lookup (pk,sn) allScripts
+        script <- mlookup (pk,sn) allScripts
         lift $ setWorldScripts (M.insert (pk,sn) (script { scriptCollisionFilter = (name,k, i /= 0) }) allScripts)
         continueWith VoidVal
 
 llTarget info@(ScriptInfo { scriptInfoPrimKey = pk, scriptInfoScriptName = sn}) [VVal x y z, FVal range] =
     do  allScripts <- lift getWorldScripts
-        script <- M.lookup (pk,sn) allScripts
+        script <- mlookup (pk,sn) allScripts
         let index = scriptTargetIndex script
         let script' = script {scriptTargetIndex = index + 1,
                               scriptPositionTargets = IM.insert index ((x,y,z),range) (scriptPositionTargets script)
@@ -2236,14 +2236,14 @@ llTarget info@(ScriptInfo { scriptInfoPrimKey = pk, scriptInfoScriptName = sn}) 
 
 llTargetRemove info@(ScriptInfo { scriptInfoPrimKey = pk, scriptInfoScriptName = sn}) [IVal tnumber] =
     do  allScripts <- lift getWorldScripts
-        script <- M.lookup (pk,sn) allScripts
+        script <- mlookup (pk,sn) allScripts
         let script' = script { scriptPositionTargets = IM.delete tnumber (scriptPositionTargets script) }
         lift $ setWorldScripts (M.insert (pk,sn) script' allScripts)
         continueWith VoidVal
 
 llRotTarget info@(ScriptInfo { scriptInfoPrimKey = pk, scriptInfoScriptName = sn}) [RVal x y z s, FVal err] = 
     do  allScripts <- lift getWorldScripts
-        script <- M.lookup (pk,sn) allScripts
+        script <- mlookup (pk,sn) allScripts
         let index = scriptTargetIndex script
         let script' = script { scriptTargetIndex = index + 1,
                                scriptRotationTargets = IM.insert index ((x,y,z,s),err) (scriptRotationTargets script)
@@ -2253,7 +2253,7 @@ llRotTarget info@(ScriptInfo { scriptInfoPrimKey = pk, scriptInfoScriptName = sn
     
 llRotTargetRemove info@(ScriptInfo { scriptInfoPrimKey = pk, scriptInfoScriptName = sn}) [IVal tnumber] =
     do  allScripts <- lift getWorldScripts
-        script <- M.lookup (pk,sn) allScripts
+        script <- mlookup (pk,sn) allScripts
         let script' = script { scriptRotationTargets = IM.delete tnumber (scriptRotationTargets script) }
         lift $ setWorldScripts (M.insert (pk,sn) script' allScripts)
         continueWith VoidVal
@@ -2592,7 +2592,7 @@ putHTTPTimeoutEvent pk sn key delay =
 putHTTPResponseEvent pk sn key status metadata body delay =
     pushDeferredScriptEvent (Event "http_response" [KVal key, IVal status, LVal metadata, body] M.empty) pk sn delay
     
-getObject name = lift getObjects >>= M.lookup name
+getObject name = lift getObjects >>= mlookup name
 setObject oid obj = getObjects >>= setObjects . M.insert oid obj
 getObjectDynamics k = getObject k >>= return . objectDynamics
 getObjectPosition k = getObjectDynamics k >>= return . objectPosition
@@ -2663,13 +2663,13 @@ registerListener listener =
       return id
 unregisterListener pk sname id = 
     do listeners <- lift getListeners
-       (listener,_) <- IM.lookup id listeners
+       (listener,_) <- ilookup id listeners
        when (listenerScriptName listener /= sname && listenerPrimKey listener /= pk)
             (throwError ("listener " ++ show id ++ " not registered for calling script"))
        lift $ setListeners $ IM.delete id listeners
 updateListener pk sname id active =
     do listeners <- lift getListeners
-       (listener,_) <- IM.lookup id listeners
+       (listener,_) <- ilookup id listeners
        when (listenerScriptName listener /= sname && listenerPrimKey listener /= pk)
             (throwError ("listener " ++ show id ++ " not registered for calling script"))
        lift $ setListeners $ IM.insert id (listener,active) listeners
@@ -2741,7 +2741,7 @@ processEvent (WorldSimEvent name args) =
 processEvent (PermissionRequestEvent pk sname ak mask) = 
     runAndLogIfErr ("can't find prim/script: " ++ pk ++ "/" ++ sname) () $ do
         scripts <- lift getWorldScripts
-        script <- M.lookup (pk,sname) scripts
+        script <- mlookup (pk,sname) scripts
         let script' = script { scriptPermissions = M.insert ak mask (scriptPermissions script), scriptLastPerm = Just ak }
         lift $ setWorldScripts (M.insert (pk,sname) script' scripts)
         lift $ pushEvent (Event "run_time_permissions" [IVal mask] M.empty) pk sname
@@ -2847,7 +2847,7 @@ processEvent (XMLRequestEvent source channel idata sdata) =
                                               (M.fromList [("requestKey",KVal key)])) pk sn
 processEvent (XMLReplyEvent key channel messageId sdata idata) = do
     runAndLogIfErr "invalid xml reply" () $ do
-        source <- (lift getWorldXMLRequestRegistry >>= M.lookup key) <||> throwError "missing source for XML request"
+        source <- (lift getWorldXMLRequestRegistry >>= mlookup key) <||> throwError "missing source for XML request"
         lift (getWorldXMLRequestRegistry >>= return . M.delete key >>= setWorldXMLRequestRegistry)
         case source of
             XMLRequestInternal tag -> do
@@ -2875,7 +2875,7 @@ processEvent (DialogEvent agent message buttons channel source) =
             Nothing -> return ()
             Just (moduleName,state) -> do
                 lib <- lift getWLibrary
-                avName <- (lift getWorldAvatars >>= M.lookup agent >>= return . avatarName) <||> throwError "problem finding avatar"
+                avName <- (lift getWorldAvatars >>= mlookup agent >>= return . avatarName) <||> throwError "problem finding avatar"
                 objName <- getPrimName source <||> throwError "problem finding object"
                 case hasFunc lib (moduleName,"dialog") of
                     Left s -> throwError s
@@ -2941,7 +2941,7 @@ processEvent (DetachCompleteEvent oid ak) =
          -- need to remove the object and it's prims and its active scripts from the live lists, but
          -- save the script states
          avatars <- lift getWorldAvatars
-         avatar <- M.lookup ak avatars
+         avatar <- mlookup ak avatars
          LSLObject { primKeys = links } <- getObject oid
          prims <- mapM passivatePrim links
          when (null prims) $ throwError "object has no prims!"
@@ -2957,12 +2957,12 @@ processEvent (DetachCompleteEvent oid ak) =
                scriptItems <- getPrimScripts pk
                mapM_ (moveScriptStateToPrim pk) (map inventoryItemName scriptItems)
                prims <- lift getPrims
-               prim <- M.lookup pk prims
+               prim <- mlookup pk prims
                lift $ setPrims $ M.delete pk prims
                return prim
            moveScriptStateToPrim pk sn = do
                scripts <- lift getWorldScripts
-               script <- M.lookup (pk,sn) scripts
+               script <- mlookup (pk,sn) scripts
                let img = scriptImage script
                primInv <- getPrimInventory pk
                let (xs,ys) = break (\ item -> sn == inventoryItemName item) primInv
@@ -3245,7 +3245,7 @@ handleMovers = runAndLogIfErr "problem determining which objects moved" () $
        let newKeys = curKeys `S.difference` lastKeys
        let keysFromBefore = curKeys `S.difference` newKeys
        m <- return . M.fromList =<< mapM ( \ (k,pos) -> if k `S.member` keysFromBefore
-                                                        then do (moving,lpos) <- M.lookup k lastPositions
+                                                        then do (moving,lpos) <- mlookup k lastPositions
                                                                 let moving' = lpos /= pos
                                                                 when (moving' && not moving) $ 
                                                                     lift $ pushEventToPrim (Event "moving_start" [] M.empty) k

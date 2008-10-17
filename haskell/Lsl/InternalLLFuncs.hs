@@ -118,7 +118,7 @@ import Data.Char
 import Data.Bits
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
-import qualified Data.Digest.MD5 as MD5
+import qualified Data.Digest.Pure.MD5 as MD5
 import qualified Data.ByteString.UTF8 as UTF8
 import Network.URI
 --import System.Random

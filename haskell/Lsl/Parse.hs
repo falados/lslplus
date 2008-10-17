@@ -8,7 +8,9 @@ module Lsl.Parse(
         exprParser,
         parseType,
         parseScriptFromString,
-        parseModuleFromString
+        parseModuleFromString,
+        parseScriptFromString1,
+        parseModuleFromString1
     ) where
 
 import Data.Char
@@ -34,7 +36,7 @@ lslStyle = javaStyle
                P.identStart = letter <|> char '_',
                P.opLetter = oneOf "*/+:!#$%&*+./=?@\\^|-~",
                P.opStart = oneOf ":!#$%&*+./<=>?@\\^|-~" }
-lexer :: P.TokenParser ()
+lexer :: P.TokenParser Bool
 lexer  = P.makeTokenParser lslStyle
 
 identLetter = P.identLetter lslStyle
@@ -309,13 +311,19 @@ notExpr = ctxify ((char '!' <?> "prefix operator") >> whiteSpace >> expr2 >>= re
 invExpr = ctxify ((char '~' <?> "prefix operator") >> whiteSpace >> expr2 >>= return.Inv)
 negExpr = ctxify ((char '-' <?> "prefix operator") >> whiteSpace >> expr2 >>= return.Neg)
 
-atomicExpr = (ctxify $
+atomicExpr = do
+    aq <- getState
+    (ctxify $
               try ( do m <- option 1 (reservedOp "-" >> return (-1))
                        n <- naturalOrFloat
                        return $ case n of
                            Left nat -> (IntLit $ m * fromIntegral nat)
                            Right flt -> (FloatLit $ fromRational $ toRational m * toRational flt)))
          <|> (ctxify (stringLiteral >>= return.StringLit))
+         <|> (if aq then (ctxify (reservedOp "$string:" >> identifier >>= return . AQString)) else fail "")
+         <|> (if aq then (ctxify (reservedOp "$integer:" >> identifier >>= return . AQInteger)) else fail "")
+         <|> (if aq then (ctxify (reservedOp "$key:" >> identifier >>= return . AQKey)) else fail "")
+         <|> (if aq then (ctxify (reservedOp "$float:" >> identifier >>= return . AQFloat)) else fail "")
          <|> (ctxify listExpr)
          <|> (ctxify vecRotExpr)
          <|> (ctxify $ try callExpr)
@@ -336,17 +344,17 @@ prefixExpr = ctxify $
                             
 unaryExpr = choice [try prefixExpr,notExpr,invExpr, negExpr,try castExpr,atomicExpr]
 
-expr2 :: GenParser Char () (Ctx Expr)
+expr2 :: GenParser Char Bool (Ctx Expr)
 expr2 = choice [try assignment, try postfixExpr, unaryExpr]
 
 expr1 = orExpr
 
-expr :: GenParser Char () (Ctx Expr)
+expr :: GenParser Char Bool (Ctx Expr)
 expr = 
     do r <- choice [try assignment, expr1]
        mtrace "expr: " r
 
-exprParser text = parse expr "" text
+exprParser text = runParser expr False "" text
 
 ------------------------------------------------------------------------------
 -- STATEMENT PARSING
@@ -438,7 +446,7 @@ doWhileStatement = do reserved "do"
                       e <- parens expr
                       return $ DoWhile stmt e
 
-parseType text = parse typeName "" text
+parseType text = runParser typeName False "" text
 ------------------------------------------------------------
 -- HANDLER Parsing
 
@@ -558,7 +566,7 @@ moduleParser = do whiteSpace
                   return $ LModule globs freevars
                                 
 parseFile p file =
-    let parser = parse p "" in
+    let parser = runParser p False "" in
         do s <- readFile file
            case parser s of
                Left err -> do putStr "parse error at: "
@@ -571,14 +579,17 @@ parseFile' p file =
        case parser s of
            Left err -> return $ Left (show err)
            Right x -> return  $ Right x
-    where parser = parse p ""
+    where parser = runParser p False ""
 
 parseFromString parser string =
-    case parse parser "" string of
+    case runParser parser False "" string of
         Left err -> fail (snd (fromParseError err))
         Right x -> return x
 parseScriptFromString s = parseFromString lslParser s
 parseModuleFromString s = parseFromString moduleParser s
+
+parseScriptFromString1 s = runParser lslParser True "" s
+parseModuleFromString1 s = runParser moduleParser True "" s
 
 parseScript file = parseFile' lslParser file
 parseModule file = parseFile' moduleParser file
@@ -601,7 +612,7 @@ parseFile'' p file =
        case parser s of
            Left err -> return $ Left (fromParseError err)
            Right x -> return $ Right x
-    where parser = parse p file
+    where parser = runParser p False file
     
 txtLoc pos len =
     TextLocation { textName = sourceName pos, 

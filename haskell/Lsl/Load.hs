@@ -19,7 +19,7 @@ import Debug.Trace
 
 parseFiles p files =
     let parseFile (name,path) =
-            do result <- tryJust (return.show) $ p path
+            do result <- tryJust (\ e@(SomeException x) -> Just (show e)) $ p path
                case result of
                    Left msg -> return (name,Left (UnknownSourceContext,msg))
                    Right (Left err) -> return (name,Left err)
@@ -46,16 +46,3 @@ splitResults ((name,Left err):xs) =
 splitResults ((name, Right m):xs) =
     let (lefts,rights) = splitResults xs in
         (lefts,(name,m):rights)
-
-        
-        
-putErr = hPutStr stderr
-
-try1 :: IO a -> String -> ErrorT String IO a
-try1 action errMsg =
-    do result <- liftIO $ try action
-       case result of
-           Left _ -> throwError errMsg
-           Right v -> return v
-
-tryElse defaultVal action = liftIO $ tryJust (const $ Just defaultVal) action >>= return . (either id id)

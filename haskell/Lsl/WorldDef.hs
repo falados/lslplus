@@ -71,7 +71,7 @@ import Lsl.Exec(ScriptImage,initLSLScript)
 import Lsl.Key(mkKey,nullKey)
 import Lsl.Structure(Validity(..),State(..))
 import Lsl.Type
-import Lsl.Util(readM,Permutation3(..),rotationsToQuaternion)
+import Lsl.Util(mlookup,readM,Permutation3(..),rotationsToQuaternion)
 
 type KeyManagerM = ErrorT String (SM.State (M.Map String String,Integer))
 
@@ -509,7 +509,7 @@ activateScript scripts primMap (k@(primKey,invName),(scriptID)) =
     do  let script = case lookup scriptID scripts of
              Nothing -> fail "script not found"
              Just v -> v
-        prim <- (lift . fctx ("looking up prim " ++ primKey ++ " failed")) (M.lookup primKey primMap)
+        prim <- (lift . fctx ("looking up prim " ++ primKey ++ " failed")) (mlookup primKey primMap)
         when (isNothing (findByInvName invName (primInventory prim))) $ fail (invName ++ " doesn't exist in prim " ++ primKey)
         case script of
             Invalid (_,s) -> tell [("script \"" ++ invName ++ "\" in prim " ++ primKey ++ " failed to activate because of error: " ++ s)] 
@@ -525,7 +525,7 @@ newKey xref = do
     lift $ SM.put (m',i+1)            
     return k
     
-findRealKey k = lift SM.get >>= M.lookup k . fst
+findRealKey k = lift SM.get >>= mlookup k . fst
 
 --worldElement :: ElemAcceptor KeyManagerM FullWorldDef
 worldElement =

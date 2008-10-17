@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -XDeriveDataTypeable #-}
 module Lsl.Structure (
     -- Types
     Expr(..),
@@ -38,6 +39,7 @@ import Lsl.Type
 import Lsl.Constants
 import Lsl.EventSigs
 import Lsl.FuncSigs
+import Data.Data
 import Data.List
 import Data.Bits
 import Lsl.Util
@@ -49,18 +51,18 @@ trace1 s v = trace (s ++ show v) v
 
 type CtxVar = Ctx Var
 
-data Var = Var { varName :: String, varType :: LSLType } deriving (Show)
+data Var = Var { varName :: String, varType :: LSLType } deriving (Show,Typeable,Data)
 
 type CtxName = Ctx String
 
 data FuncDec = FuncDec { funcName :: CtxName, funcType :: LSLType, funcParms :: [CtxVar] }
-    deriving (Show)
+    deriving (Show,Typeable,Data)
 
 type CtxStmt = Ctx Statement
-data Func = Func FuncDec [CtxStmt] deriving (Show)
+data Func = Func FuncDec [CtxStmt] deriving (Show,Typeable,Data)
 
 data LModule = LModule [GlobDef] [CtxVar]
-    deriving (Show)
+    deriving (Show,Typeable,Data)
 
 type CtxExpr = Ctx Expr
 data Expr = IntLit Int
@@ -104,7 +106,11 @@ data Expr = IntLit Int
           | Neg CtxExpr
           | Inv CtxExpr
           | Cast LSLType CtxExpr
-            deriving (Show)
+          | AQString String
+          | AQInteger String
+          | AQKey String
+          | AQFloat String
+            deriving (Show,Typeable,Data)
 
                           
 data Statement = Compound [CtxStmt]
@@ -119,19 +125,19 @@ data Statement = Compound [CtxStmt]
                | Do CtxExpr
                | Label String
                | Jump String
-    deriving (Show)
+    deriving (Show,Typeable,Data)
 
 isLabel (Label _) = True
 isLabel _ = False
                
 data Global = GDecl Var (Maybe Expr)
-    deriving (Show)
+    deriving (Show,Typeable,Data)
 
 data GlobDef = GV CtxVar (Maybe CtxExpr) | GF Func | GI CtxName [(String,String)] String
-    deriving (Show)
+    deriving (Show,Typeable,Data)
 
 data Handler = Handler CtxName [CtxVar] [CtxStmt]
-    deriving (Show)
+    deriving (Show,Typeable,Data)
     
 goodHandlers :: [(String,[LSLType])]
 goodHandlers = simpleLslEventDescriptors
@@ -173,9 +179,9 @@ goodHandlers = simpleLslEventDescriptors
 --     ]
     
 data State = State CtxName [Handler]
-    deriving (Show)
+    deriving (Show,Typeable,Data)
 
-data LSLScript = LSLScript [GlobDef] [State] deriving (Show)
+data LSLScript = LSLScript [GlobDef] [State] deriving (Show,Typeable,Data)
 
 type ModuleInfo = ([Global],[Func])
 type Library = [(String,Validity LModule)]
@@ -956,12 +962,12 @@ rewriteMExpression bindings = fmap (rewriteCtxExpr bindings)
 
 data SourceContext = TextLocation { textLine0 :: Int, textColumn0 :: Int, textLine1 :: Int, textColumn1 :: Int, textName :: String } |
                      UnknownSourceContext
-                     deriving (Show)
+                     deriving (Show,Typeable,Data)
 
 isTextLocation (TextLocation _ _ _ _ _) = True
 isTextLocation _ = False
 
-data Ctx a = Ctx { srcCtx :: SourceContext, ctxItem :: a } deriving Show
+data Ctx a = Ctx { srcCtx :: SourceContext, ctxItem :: a } deriving (Show,Typeable,Data)
 instance Functor Ctx where
     fmap f (Ctx c v) = (Ctx c $ f v)
 

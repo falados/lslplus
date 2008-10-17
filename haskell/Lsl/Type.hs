@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -XFlexibleContexts #-}
+{-# OPTIONS_GHC -XFlexibleContexts -XDeriveDataTypeable #-}
 module Lsl.Type(
     LSLType(..),
     LSLValue(..),
@@ -36,6 +36,7 @@ module Lsl.Type(
     liftV2) where
     
 import Control.Monad.Error
+import Data.Data
 import Lsl.NumberParsing
 import Lsl.Key
 import Lsl.Util
@@ -44,7 +45,7 @@ import Lsl.DOMProcessing
 import Text.Printf
 
 data LSLType = LLList | LLInteger | LLVector | LLFloat | LLString | LLRot | LLKey | LLVoid
-    deriving (Eq, Show)
+    deriving (Eq, Show, Typeable, Data)
 
 -- A value.  Values correspond to the built in types (LSLType) that LSL
 -- supports.  A value is an item that can be pushed onto the value stack.
@@ -52,7 +53,7 @@ data LSLValue = IVal Int | FVal Float | SVal String | VVal Float Float Float
               | RVal Float Float Float Float | LVal [LSLValue] | KVal String
               | VoidVal deriving (Show,Eq,Ord)
 
-data Component = X | Y | Z | S | All deriving (Eq,Show)
+data Component = X | Y | Z | S | All deriving (Eq,Show, Typeable, Data)
 
 defaultValue LLList = LVal []
 defaultValue LLInteger = IVal 0

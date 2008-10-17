@@ -1,4 +1,6 @@
 module Lsl.Util (
+    mlookup,
+    ilookup,
     ctx,
     swap,
     extractOne, 
@@ -60,7 +62,11 @@ module Lsl.Util (
     angleBetween) where
 
 import Control.Monad.State hiding (modify)
+import Control.Monad.Error
 import Data.List
+import qualified Data.Map as Map
+import qualified Data.IntMap as IntMap
+
 -- import Debug.Trace
 
 import Lsl.Math
@@ -68,6 +74,13 @@ import Lsl.Math
 import IO
 import Network.URI
 
+-- lifting lookups for Map (if key is instance of Show) and IntMap
+
+mlookup k m = 
+    maybe (throwError $ "key " ++ show k ++ " not found") return (Map.lookup k m)
+ilookup i m = 
+    maybe (throwError $ "key " ++ show i ++ " not found") return (IntMap.lookup i m)
+    
 -- utilities
 
 tuplify [] = []
