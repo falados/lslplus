@@ -53,7 +53,6 @@ module Lsl.WorldDef(Avatar(..),
                     mkScript
                    ) where
 
-import Control.Monad
 import Control.Monad.Error
 import Control.Monad.Writer
 
@@ -63,13 +62,12 @@ import Data.List
 import qualified Data.Map as M
 import qualified Data.IntMap as IM
 import Data.Maybe
-import Debug.Trace
 
 import Lsl.DOMProcessing hiding (find)
 import Lsl.Evaluation
 import Lsl.Exec(ScriptImage,initLSLScript)
 import Lsl.Key(mkKey,nullKey)
-import Lsl.Structure(Validity(..),State(..))
+import Lsl.Structure(Validity(..))
 import Lsl.Type
 import Lsl.Util(mlookup,readM,Permutation3(..),rotationsToQuaternion)
 

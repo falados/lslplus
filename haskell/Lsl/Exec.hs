@@ -19,7 +19,7 @@ module Lsl.Exec(
     hardReset,
     hasActiveHandler) where
 
-import Debug.Trace
+--import Debug.Trace
 import Data.Bits
 import Data.Int
 import Data.List
@@ -29,14 +29,12 @@ import Data.Maybe
 import Lsl.Breakpoint hiding (checkBreakpoint)
 import Lsl.CodeHelper
 import Lsl.FuncSigs
-import Lsl.Log
 import Lsl.Util
 import Lsl.Structure
 import Lsl.Type
 import Lsl.Key
 import Lsl.Evaluation
 import Lsl.Constants
-import Control.Monad
 import Control.Monad.State hiding (State)
 import Control.Monad.Error
 

@@ -17,37 +17,17 @@ module Lsl.Util (
     fromInt,
     tuplify,
     cut,
---     dist3d,
---     dist3d2,
---     mag3d2,
---     mag3d,
---     norm3d,
---     diff3d,
---     add3d,
---     neg3d,
---     scale3d,
---     rot3d,
     unescape,
     processLines,
     processLinesS,
---     quaternionToMatrix,
---     matrixToQuaternion,
---     quaternionMultiply,
---     invertQuaternion,
---     Permutation3(..),
---     quaternionToRotations,
---     rotationsToQuaternion,
---     cross,
     generatePermutation,
     fac,
-    module Lsl.Math,
---     axisAngleToRotation,
---     rotationBetween,
---     angleBetween
+    module Lsl.Math
     ) where
 
-import Control.Monad.Error
-import Data.List
+import Control.Monad(liftM,when)
+import Control.Monad.Error(throwError)
+import Data.List(find,elemIndex,isPrefixOf,tails)
 import qualified Data.Map as Map
 import qualified Data.IntMap as IntMap
 

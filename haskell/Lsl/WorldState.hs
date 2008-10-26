@@ -158,33 +158,22 @@ module Lsl.WorldState(
     updatePrimFace,
     wrand) where
 
-import Control.Monad
 import Control.Monad.State hiding (State)
-import Control.Monad.Identity
 import Control.Monad.Error
 import Data.List
-import Data.Bits
 import Data.Int
 import Data.Map(Map)
 import Data.Maybe
 import qualified Data.IntMap as IM
 import qualified Data.Map as M
 import qualified Data.Set as S
-import Debug.Trace
 
 import qualified Lsl.AvEvents as AvEvent
 import Lsl.Breakpoint
-import Lsl.CodeHelper
-import Lsl.Constants
 import Lsl.Evaluation
-import Lsl.EventSigs
 import Lsl.Exec hiding (scriptImage)
-import Lsl.ExpressionHandler
-import Lsl.FuncSigs
-import Lsl.InternalLLFuncs
 import Lsl.Key
 import Lsl.Log
-import Lsl.Parse
 import Lsl.Structure
 import Lsl.Type
 import Lsl.Util

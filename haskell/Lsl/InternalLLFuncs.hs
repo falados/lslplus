@@ -108,7 +108,6 @@ module Lsl.InternalLLFuncs(
     internalLLFuncNames
     ) where
 
-import Debug.Trace
 import Lsl.Util
 import Lsl.Type
 import Lsl.Evaluation
@@ -612,7 +611,7 @@ llXorBase64Strings _ [SVal s1, SVal s2] =
 --              s1 = YWJjZGVm, s2 = eHl6dw== => GRsZEx0f
 --              s1 = YWJjZGVm, s2 = eHl6d3h5 => GRsZEx0f
 
-trace1 v = trace (show v) v
+--trace1 v = trace (show v) v
 llXorBase64StringsCorrect _ [SVal s1, SVal s2] =
     let s1' = map fromEnum $ decodeB64 s1
         s2' = map fromEnum $ decodeB64 s2

@@ -7,7 +7,6 @@ import Lsl.Constants
 import Lsl.EventSigs
 import Lsl.FuncSigs
 import Lsl.InternalLLFuncs
-import Lsl.Structure
 import Lsl.Type
 import qualified Lsl.XmlCreate as X
 

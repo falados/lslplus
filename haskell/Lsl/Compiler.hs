@@ -16,9 +16,7 @@ import System.FilePath
 import System.Time
 import Text.XML.HaXml hiding (when,xmlEscape)
 import Text.XML.HaXml.Posn
-import Text.XML.HaXml.Pretty
 import Lsl.Optimize(optimizeScript) 
-import Lsl.Util
 import Lsl.XmlCreate hiding (emit)
 import qualified Lsl.XmlCreate as E
 

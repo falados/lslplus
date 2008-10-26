@@ -4,9 +4,6 @@ module Lsl.DOMSourceDescriptor(sourceFiles,sourceFilesElement) where
 import Control.Monad.Error
 import Lsl.DOMProcessing
 import Text.XML.HaXml hiding (when)
-import Text.XML.HaXml.Posn
-import Text.XML.HaXml.Pretty
-import Lsl.Util
 
 sourceFiles e = match sourceFilesElement e
 

@@ -7,10 +7,8 @@ import Lsl.DOMProcessing hiding (find)
 import Lsl.ExpressionHandler
 import Lsl.Type
 import Lsl.UnitTest
-import Lsl.Util
 
-import Debug.Trace
-trace1 v = trace (show v) v
+--trace1 v = trace (show v) v
 
 testsElement :: MonadError String m => ElemAcceptor m [LSLUnitTest]
 testsElement = elementList "tests" testElement

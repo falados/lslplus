@@ -2,9 +2,7 @@
 module Lsl.BuiltInModules(avEventGen) where
 
 import Lsl.Structure
-import Lsl.Parse
 import Lsl.QQ
-import Data.List
 
 -- (Just avEventGenAST) = parseModuleFromString $ intercalate "\n"
 --     ["$module ",

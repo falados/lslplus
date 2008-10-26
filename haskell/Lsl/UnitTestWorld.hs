@@ -7,35 +7,24 @@ module Lsl.UnitTestWorld(
     ExecutionInfo(..),
     ExecCommand(..)) where
 
-import Control.Exception
-import Control.Monad
 import Control.Monad.State
 import Control.Monad.Error
 import Data.List
-import Data.Bits
 import Data.Maybe(isJust)
-import Debug.Trace
 import Lsl.Breakpoint
 import Lsl.CodeHelper
 import Lsl.FuncSigs
 import Lsl.InternalLLFuncs
-import Lsl.Load
-import Lsl.Parse
-import Lsl.Render
 import Lsl.Structure hiding (State)
 import qualified Lsl.Structure as L
 import Lsl.Type
-import Lsl.Key
 import Lsl.Evaluation
 import Lsl.Exec
 import Lsl.TestResult
 import Lsl.UnitTest
-import Lsl.UnitTestParser
 import Lsl.Util
-import System
-import System.Random
 
-trace1 v = trace ("->>" ++ (show v)) v
+--trace1 v = trace ("->>" ++ (show v)) v
 
 data SimpleWorld = SimpleWorld {
         maxTick :: Int,

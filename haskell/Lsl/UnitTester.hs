@@ -1,7 +1,6 @@
 {-# OPTIONS_GHC -XFlexibleContexts #-}
 module Lsl.UnitTester where
 
-import Control.Exception
 import Control.Monad.Error
 import IO
 import Lsl.BreakpointsDeserialize
@@ -9,18 +8,14 @@ import Lsl.Compiler
 import Lsl.DOMProcessing
 import Lsl.DOMSourceDescriptor
 import Lsl.DOMUnitTestDescriptor
-import Lsl.Exec
 import Lsl.ExecInfo
 import Lsl.Structure
 import Lsl.TestResult
-import Lsl.Type
 import Lsl.UnitTest
 import Lsl.UnitTestWorld
 import Lsl.Util
 import Lsl.XmlCreate
 import Text.XML.HaXml hiding (when)
-import Text.XML.HaXml.Posn
-import Text.XML.HaXml.Pretty
 import Debug.Trace
 
 trace1 x = trace (show x) x

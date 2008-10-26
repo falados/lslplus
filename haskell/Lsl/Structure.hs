@@ -41,13 +41,10 @@ import Lsl.EventSigs
 import Lsl.FuncSigs
 import Data.Data
 import Data.List
-import Data.Bits
 import Lsl.Util
-import Control.Monad
 import Control.Monad.Error
-import Debug.Trace
 
-trace1 s v = trace (s ++ show v) v
+--trace1 s v = trace (s ++ show v) v
 
 type CtxVar = Ctx Var
 

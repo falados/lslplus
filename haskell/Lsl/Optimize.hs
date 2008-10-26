@@ -1,9 +1,7 @@
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 module Lsl.Optimize(optimizeScript) where
 
-import Data.Maybe(fromMaybe)
 import Lsl.Structure
-import Lsl.Util
 
 optimizeScript :: ([Global],[Func],[State]) -> ([Global],[Func],[State])
 optimizeScript (gs,fs,ss) = (gs, fs', ss)

@@ -10,7 +10,6 @@ module Lsl.World1(SimStatus(..),
                   unimplementedFuncs,
                   module Lsl.WorldState) where
 
-import Control.Monad
 import Control.Monad.State hiding (State,get)
 import Control.Monad.Identity
 import Control.Monad.Error
@@ -22,13 +21,10 @@ import Data.Maybe
 import qualified Data.Map as M
 import qualified Data.Set as S
 import qualified Data.IntMap as IM
-import Debug.Trace
 
---import Lsl.Avatar
 import Lsl.Animation
 import Lsl.AvEvents
 import Lsl.Breakpoint
---import Lsl.Builder
 import Lsl.CodeHelper
 import Lsl.Constants
 import Lsl.Evaluation
@@ -39,13 +35,11 @@ import Lsl.FuncSigs
 import Lsl.InternalLLFuncs
 import Lsl.Key
 import Lsl.Log
-import Lsl.Parse
 import Lsl.Physics
 import Lsl.Structure
 import Lsl.Type
 import Lsl.UnitTestWorld(simFunc,hasFunc)
 import Lsl.Util
---import Lsl.ValueDB
 import Lsl.WorldDef
 import Lsl.WorldState
 

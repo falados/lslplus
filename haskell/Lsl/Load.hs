@@ -3,19 +3,11 @@ module Lsl.Load(
     loadModules) where
 
 import Control.Exception
-import Control.Monad
 import Control.Monad.Error
 import Data.List
 import Lsl.BuiltInModules(avEventGen)
 import Lsl.Structure(validLSLScript,validLibrary,SourceContext(..), Validity(..))
 import Lsl.Parse(parseModule', parseScript')
-import System
-import System.Directory
-import System.FilePath
-import System.IO
-import Lsl.Util
-
-import Debug.Trace
 
 parseFiles p files =
     let parseFile (name,path) =

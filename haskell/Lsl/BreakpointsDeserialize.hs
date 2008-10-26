@@ -4,10 +4,7 @@ module Lsl.BreakpointsDeserialize(breakpointsElement, module Lsl.Breakpoint) whe
 import Control.Monad.Error
 import Lsl.DOMProcessing
 import Lsl.Breakpoint
-import Lsl.Util
 import Text.XML.HaXml hiding (when)
-import Text.XML.HaXml.Posn
-import Text.XML.HaXml.Pretty
 
 breakpointsElement :: MonadError String m => ElemAcceptor m [Breakpoint]
 breakpointsElement = elementList "breakpoints" breakpointElement

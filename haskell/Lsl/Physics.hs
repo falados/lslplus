@@ -16,7 +16,6 @@ module Lsl.Physics(
 import Lsl.Math
 import Lsl.WorldDef
 import Lsl.Constants
-import Debug.Trace
 
 rangeOverlap (mn0,mx0) (mn1,mx1) = mn0 >= mn1 && mn0 <= mx1 || mx0 >= mn1 && mx0 <= mx1 || mn0 <= mn1 && mx0 >= mx1
 bbIntersect ((mnX0,mnY0,mnZ0),(mxX0,mxY0,mxZ0)) ((mnX1,mnY1,mnZ1),(mxX1,mxY1,mxZ1)) =

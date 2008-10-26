@@ -22,9 +22,8 @@ import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Set (Set)
 import qualified Data.Set as S
-import Debug.Trace
 
-trace1 v = trace ("--> " ++ show v) v
+--trace1 v = trace ("--> " ++ show v) v
 
 data Breakpoint = Breakpoint { breakpointFile :: String, breakpointLine :: Int, breakpointColumn :: Int }
     deriving (Show,Eq,Ord)

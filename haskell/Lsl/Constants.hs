@@ -1,7 +1,6 @@
 module Lsl.Constants where
 
 import Data.Bits
-import Data.List(find)
 import Lsl.Type
 import Lsl.Util(findM)
 

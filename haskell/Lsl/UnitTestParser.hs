@@ -1,11 +1,8 @@
 module Lsl.UnitTestParser(parseUnitTestFile,parseUnitTestInput) where
 
-import Lsl.FuncSigs
 import Lsl.Type
 import Lsl.UnitTest
-import Control.Monad
 import Control.Monad.Error
-import Debug.Trace
 import IO hiding (try)
 import Text.ParserCombinators.Parsec
 import qualified Text.ParserCombinators.Parsec.Token as P

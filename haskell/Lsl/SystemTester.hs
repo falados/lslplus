@@ -1,7 +1,6 @@
 {-# OPTIONS_GHC -XFlexibleContexts #-}
 module Lsl.SystemTester where
 
-import Control.Exception
 import Control.Monad.Error
 import Control.Monad.State
 import qualified Data.Map as M
@@ -10,17 +9,13 @@ import Lsl.BreakpointsDeserialize
 import Lsl.Compiler
 import Lsl.DOMProcessing
 import Lsl.DOMSourceDescriptor
-import Lsl.Exec
 import Lsl.ExecInfo
 import Lsl.Log
 import Lsl.Structure
-import Lsl.TestResult
-import Lsl.Type
 import Lsl.Util
 import Lsl.World1
 import Lsl.WorldDef
 import Lsl.XmlCreate
-import Debug.Trace
 
 initializationFromXML xml = let doc = xmlParse "" xml in parseInitialization doc
 
