@@ -1,9 +1,9 @@
 module Lsl.Constants where
 
 import Data.Bits
-import Data.List
+import Data.List(find)
 import Lsl.Type
-import Lsl.Util
+import Lsl.Util(findM)
 
 data Constant = Constant { constName :: String, constVal :: LSLValue }
     deriving (Show)

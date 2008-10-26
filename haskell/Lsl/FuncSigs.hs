@@ -1,6 +1,9 @@
-module Lsl.FuncSigs where
+module Lsl.FuncSigs(
+    funcDescriptions,
+    funcMeta,
+    funcSigs) where
 
-import Lsl.Type
+import Lsl.Type(LSLType(..))
 
 -- TODO: import real info into funcMeta, and derive funcSigs from that
 funcMeta :: [(String,LSLType,[(String,LSLType)],String)]

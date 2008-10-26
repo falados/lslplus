@@ -212,9 +212,9 @@ llInsertString _ [SVal dst, IVal pos, SVal src] =
 separate :: Eq a => [a] -> [[a]] -> [[a]] -> [a] -> Bool -> [[a]]
 separate [] _ _ accum keepNulls = if keepNulls || length accum > 0 then [reverse accum] else []
 separate l seps spacers accum keepNulls =
-   case find ((flip isPrefix) l) seps of
+   case find ((flip isPrefixOf) l) seps of
        Nothing ->  
-           case find ((flip isPrefix) l) spacers of
+           case find ((flip isPrefixOf) l) spacers of
                Nothing -> let rest = tail l in separate rest seps spacers (head l:accum) keepNulls
                Just p -> let rest = drop (length p) l in
                          if accum == [] && not keepNulls then

@@ -1,17 +1,28 @@
 Name:           Lsl
-Version:        0.1
+version:        0.1
+Synopsis:	execution and testing framework for Linden Scripting Language (LSL)
+Description:	
+	Provides a framework for executing Linden Scripting Language scripts 'offline',
+	e.g. outside a Second Life simulator.  Includes a quasiquotation parser for LSL,
+	a simulation of Second Life (a simulated simulator), and a unit testing framework.
+	Also provides the LslPlus executable, for use with the LslPlus Eclips plugin.
 Cabal-Version:  >= 1.2
 License:        BSD3
 License-file:   LICENSE
+Category:	Language
+Copyright:	Copyright (c) Robert Greayer 2008.
 Author:         Robert Greayer
-Synopsis:       Programs supporting compiling/testing LSL code
+Maintainer:	robgreayer@yahoo.com
+Stability:	experimental
 Build-Type:     Simple
+Tested-With:	GHC ==6.10.1
 
 Executable LslPlus
-  Build-Depends:  base, haskell98, filepath >= 1.1.0.0, parsec >= 2.1.0.0, HaXml >= 1.19.2, directory, mtl >= 1.1,
-                  network >= 2.1, random >= 1.0, containers >= 0.1, QuickCheck >= 1.1.0.0, old-time, utf8-string >= 0.3.1,
-                  pureMD5 >= 0.1.2, bytestring > 0.9
+  Build-Depends:  ghc >= 6.10, base >= 4.0 && < 4.1, haskell98, filepath >= 1.1.0.0 && < 1.2, parsec >= 2.1.0.0 && < 3,
+                  HaXml >= 1.19 && < 1.20, directory > 1 && < 1.1, mtl >= 1.1 && < 1.2,
+                  network >= 2.1 && < 2.3, random >= 1.0, containers >= 0.1 && < 0.3, old-time, utf8-string >= 0.3 && < 0.4,
+                  pureMD5 >= 0.2 && < 3, bytestring >= 0.9 && < 0.10, template-haskell >= 2.3.0.0 && < 2.4, syb >= 0.1.0.0 && < 0.2.0.0
   Main-Is:        LslPlus.hs
   Hs-Source-Dirs: .
-  Ghc-Options:
+  Ghc-Options: -fwarn-unused-imports
   

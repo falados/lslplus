@@ -1,67 +1,51 @@
+{-# OPTIONS_GHC -fwarn-unused-binds #-}
 module Lsl.Util (
     mlookup,
     ilookup,
     ctx,
-    swap,
-    extractOne, 
     readM,
     filtMap, 
     filtMapM,
-    listProd, 
-    hasCycle, 
-    filter2, 
-    modify, 
-    modifyLookup, 
-    modifyM, 
-    modifyLookupM, 
-    modifyByPredM,
-    replace,
-    replaceLookup,
     lookupByIndex,
     lookupM,
     removeLookup,
     findM,
     elemAtM,
-    unwrap,
     weave,
     separateWith,
-    isPrefix,
     indexOf,
     fromInt,
-    headsAndTails,
-    trimFront,
-    trimEnd,
-    trim,
     tuplify,
     cut,
-    dist3d,
-    dist3d2,
-    mag3d2,
-    mag3d,
-    norm3d,
-    diff3d,
-    add3d,
-    neg3d,
-    scale3d,
-    rot3d,
+--     dist3d,
+--     dist3d2,
+--     mag3d2,
+--     mag3d,
+--     norm3d,
+--     diff3d,
+--     add3d,
+--     neg3d,
+--     scale3d,
+--     rot3d,
     unescape,
     processLines,
     processLinesS,
-    quaternionToMatrix,
-    matrixToQuaternion,
-    quaternionMultiply,
-    invertQuaternion,
-    Permutation3(..),
-    quaternionToRotations,
-    rotationsToQuaternion,
-    cross,
+--     quaternionToMatrix,
+--     matrixToQuaternion,
+--     quaternionMultiply,
+--     invertQuaternion,
+--     Permutation3(..),
+--     quaternionToRotations,
+--     rotationsToQuaternion,
+--     cross,
     generatePermutation,
     fac,
-    axisAngleToRotation,
-    rotationBetween,
-    angleBetween) where
+    module Lsl.Math,
+--     axisAngleToRotation,
+--     rotationBetween,
+--     angleBetween
+    ) where
 
-import Control.Monad.State hiding (modify)
 import Control.Monad.Error
 import Data.List
 import qualified Data.Map as Map
@@ -94,17 +78,6 @@ readM s = case reads s of
 ctx s (Left s') = fail (s ++ ": " ++ s' )
 ctx _ (Right v) = return v
 
-swap (x,y) = (y,x)
-
--- extract an element from a list based on a predicate to apply to each element, and return
--- a tuple containing the element (or Nothing) and the other elements of the list.
-extractOne :: (a -> Bool) -> [a] -> (Maybe a, [a])
-extractOne predicate list =
-   let f [] others = (Nothing, others)
-       f (x:xs) others = if predicate x then (Just x, others ++ xs) else f xs (x:others)
-   in
-       f list []
-
 -- monadified lookup
 lookupM :: (Monad m, Eq a, Show a) => a -> [(a,b)] -> m b
 lookupM x l =
@@ -134,62 +107,6 @@ filtMapM f (x:xs) =
             Nothing -> filtMapM f xs
             Just y -> liftM (y:) (filtMapM f xs)
             
-unwrap f = f >>= id
-
--- form a cartesian product of two lists, applying the function to
--- each element of the resulting product
-listProd :: (a -> b -> c) -> [a] -> [b] -> [c]
-listProd f x y = 
-  concat (map (\p -> map (f p) y) x)
-
--- test to see if a list of tuples (taken to be edges in a graph)
--- has a cycle of a specified minimum length
-hasCycle :: (Eq a) => Int -> a -> [(a,a)] -> Bool
-hasCycle minLength x list =
-  let hasPath i x y list =
-        i >= minLength && elem (x,y) list ||
-        case extractOne (\(x',_) -> x == x') list of
-            (Nothing,_) -> False
-            (Just (_,x'), rest) ->
-                hasPath (i+1) x' y rest || hasPath (i+1) x y rest
-  in hasPath 1 x x list
-     
--- filter a list, returning a tuple containing a list of elements which match the predicate,
--- and a list of elements which do not.
-filter2 :: (a -> Bool) -> [a] -> ([a],[a])
-filter2 f l =
-  let filt _ [] r = r
-      filt f (x:xs) (ys, ns) = if (f x) then filt f xs (x:ys, ns) else filt f xs (ys, x:ns) in
-          filt f l ([],[])
-
--- modify a single element of a list
-modify :: Int -> (a -> a) -> [a] -> [a]
-modify index f l =
-    map (\ (i,v) -> if i == index then f v else v) $ zip [0..] l
-
--- replace a single element of a list
-replace :: Int -> a -> [a] -> [a]
-replace index v = modify index (const v) 
-    
-modifyM :: (Monad m) => Int -> (a -> m a) -> [a] -> m [a]
-modifyM index f l =
-    mapM (\ (i,v) -> if i == index then f v else return v) $ zip [0..] l
-
-modifyByPredM :: (Monad m) => (a -> Bool) -> (a -> m a) -> [a] -> m [a]
-modifyByPredM p f l =
-    mapM (\ v -> if p v then f v else return v) l
-        
-modifyLookup :: Eq a => a -> (a -> b -> b) -> [(a,b)] -> [(a,b)]
-modifyLookup key f l =
-    map (\ (k,v) -> if key == k then (k, f k v) else (k,v)) l
-
-replaceLookup key v l =
-    map (\ (k,v') -> if key == k then (k,v) else (k,v')) l
-    
-modifyLookupM :: (Functor m, Monad m, Eq a) => a -> (a -> b -> m b) -> [(a,b)] -> m [(a,b)]
-modifyLookupM key f l =
-    mapM (\ (k,v) -> if key == k then fmap ((,)k) (f k v) else return (k,v)) l
-
 lookupByIndex :: Monad m => Int -> [a] -> m a
 lookupByIndex i l = lookupM i $ zip [0..] l
 
@@ -208,11 +125,8 @@ weave (a:as) (b:bs) = a:b:(weave as bs)
 separateWith :: a -> [a] -> [a]
 separateWith sep list = weave list (replicate (length list - 1) sep)
 
-isPrefix :: Eq a => [a] -> [a] -> Bool
-isPrefix p list = p == take (length p) list
-
 indexOf :: Eq a => [a] -> [a] -> Maybe Int
-indexOf sub list = elemIndex True $ map (isPrefix sub) (tails list) 
+indexOf sub list = elemIndex True $ map (isPrefixOf sub) (tails list) 
 
 fromInt :: Num a => Int -> a
 fromInt = fromInteger . toInteger
@@ -225,13 +139,6 @@ elemAtM index list =
     if index >= 0 && index < length list then return (list !! index)
     else fail ("index " ++ (show index) ++ " out of range")
   
-headsAndTails [] = []
-headsAndTails (a:as) = (a,as):(headsAndTails as)
-
-trimFront s = let (_,s') = span (==' ') s in s'
-trimEnd s = let (_,s') = span (==' ') $ reverse s in reverse s'
-
-trim s = trimEnd $ trimFront s
 
 unescape = unEscapeString
 

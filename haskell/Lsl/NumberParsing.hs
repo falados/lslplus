@@ -2,11 +2,6 @@ module Lsl.NumberParsing(readHexFloat,readInt) where
 
 import Data.Char
 import Text.ParserCombinators.Parsec
-import qualified Text.ParserCombinators.Parsec.Token as P
-import Text.ParserCombinators.Parsec.Language( javaStyle )
-import Text.ParserCombinators.Parsec.Error
-import Text.ParserCombinators.Parsec.Expr
-import Control.Monad
 import Control.Monad.Error
 
 hexFloat =

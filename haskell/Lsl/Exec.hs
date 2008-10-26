@@ -345,7 +345,7 @@ updateExState :: Monad w => (ScriptImage -> ScriptImage) -> Eval w ()
 updateExState u = updateState (\s -> s { scriptImage = u $ scriptImage s })
 
 getTick :: Monad w => Eval w Int
-getTick = unwrap $ evalT (\s -> (lift $ lift $ qwtick s,s))
+getTick = join $ evalT (\s -> (lift $ lift $ qwtick s,s))
 setTick v = do f <- (queryState uwtick) 
                lift $ lift $ f v
 getNextEvent key name =  do f <- (queryState nextEvent)
@@ -998,6 +998,11 @@ eval' =
                        (LLVector,SVal s) -> parseVector s
                        (LLRot,SVal s) -> parseRotation s
                        (LLList,SVal s) -> LVal [SVal s]
+                       (LLKey,SVal s) -> KVal s
+                       (LLKey,KVal s) -> KVal s
+                       (LLVector, v@(VVal _ _ _)) -> v
+                       (LLRot, v@(RVal _ _ _ _)) -> v
+                       (LLList, LVal l) -> LVal l
                     continue
                EvMkVec -> do
                    z <- popVal
