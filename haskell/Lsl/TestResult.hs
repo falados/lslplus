@@ -1,6 +1,6 @@
 module Lsl.TestResult(TestResult(..),resultToXML, emitTestResult) where
 
-import Lsl.XmlCreate
+import Lsl.XmlCreate(emit,emitSimple)
 import qualified Lsl.XmlCreate as X
 
 data TestResult = ErrorResult String String [(Int,String)] |

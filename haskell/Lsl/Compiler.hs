@@ -4,18 +4,20 @@
 
 module Lsl.Compiler(compile,main0) where
 
-import Control.Monad
-import IO
-import Lsl.DOMSourceDescriptor
-import Lsl.Load
-import Lsl.Render
-import Lsl.Structure
-import Lsl.Type
-import System.Directory
-import System.FilePath
-import System.Time
-import Text.XML.HaXml hiding (when,xmlEscape)
-import Text.XML.HaXml.Posn
+import Control.Monad(when)
+import IO(Handle,hGetContents,stdin)
+import Lsl.DOMSourceDescriptor(sourceFiles)
+import Lsl.Load(loadModules,loadScripts)
+import Lsl.Render(renderCompiledScript)
+import Lsl.Structure(AugmentedLibrary(..),CompiledLSLScript(..),Ctx(..),Func(..),Global(..),
+                     GlobDef(..),Handler(..),LModule(..),SourceContext(..),State(..),Validity(..),Var(..),
+                     funcName,funcParms,funcType,libFromAugLib)
+import Lsl.Type(lslTypeString)
+import System.Directory(doesFileExist,removeFile)
+import System.FilePath(replaceExtension)
+import System.Time(calendarTimeToString,getClockTime,toCalendarTime)
+import Text.XML.HaXml(Document(..),xmlParse) --hiding (when,xmlEscape)
+import Text.XML.HaXml.Posn(Posn(..))
 import Lsl.Optimize(optimizeScript) 
 import Lsl.XmlCreate hiding (emit)
 import qualified Lsl.XmlCreate as E

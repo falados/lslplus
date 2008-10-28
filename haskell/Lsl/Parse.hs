@@ -13,14 +13,15 @@ module Lsl.Parse(
         parseModuleFromString1
     ) where
 
-import Data.Char
-import Lsl.Structure
+import Data.Char(digitToInt)
+import Data.List(intersperse)
+import Lsl.Structure(Expr(..),Statement(..),Func(..),FuncDec(..),Handler(..),State(..),Ctx(..),SourceContext(..),LSLType(..),
+                     Component(..),Var(..),LModule(..),LSLScript(..),GlobDef(..),goodHandlers)
 import Text.ParserCombinators.Parsec
 import qualified Text.ParserCombinators.Parsec.Token as P
 import Text.ParserCombinators.Parsec.Language( javaStyle )
 import Text.ParserCombinators.Parsec.Error
-import Control.Monad.Error
-import Lsl.Util
+import Control.Monad.Error(liftIO)
 
 -- define basic rules for lexical analysis
 lslStyle = javaStyle
@@ -535,7 +536,7 @@ params = sepBy param comma
 gimport = do reserved "$import" <?> "$import keyword"
              ids <- (ctxify $ (char '$' >> identifier >>= return . (:[]) . ("$"++)))
                  <|>(ctxify $ sepBy identifier dot)
-             let id = fmap (concat . separateWith ".") ids
+             let id = fmap (concat . intersperse ".") ids
              let binding = do id0 <- identifier
                               reservedOp "="
                               id1 <- identifier

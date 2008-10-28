@@ -6,11 +6,11 @@ module Lsl.UnitTest(
         expectedReturns,
         removeExpectation) where
     
-import Control.Monad
-import Data.List
-import Lsl.Type
-import Lsl.Exec
-import Lsl.Util
+import Control.Monad(liftM2)
+import Data.List(maximumBy)
+import Lsl.Type(LSLValue(..))
+import Lsl.Exec(Binding(..))
+import Lsl.Util(removeLookup)
    
 data FuncCallExpectations = FuncCallExpectations {
     expectationMode :: ExpectationMode,

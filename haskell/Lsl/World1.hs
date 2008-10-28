@@ -10,42 +10,54 @@ module Lsl.World1(SimStatus(..),
                   unimplementedFuncs,
                   module Lsl.WorldState) where
 
-import Control.Monad.State hiding (State,get)
-import Control.Monad.Identity
-import Control.Monad.Error
-import Data.List
-import Data.Bits
-import Data.Int
+import Control.Monad(MonadPlus(..),(>=>),filterM,foldM,forM_,liftM,liftM2,unless,when)
+import Control.Monad.State(StateT(..),lift)
+import Control.Monad.Identity(Identity(..))
+import Control.Monad.Error(MonadError(..),ErrorT(..))
+import Data.List(elemIndex,find,foldl',isSuffixOf,nub,sortBy)
+import Data.Bits((.&.),(.|.),bit,clearBit,complement,xor,setBit,shiftL,testBit)
+import Data.Int()
 import Data.Map(Map)
-import Data.Maybe
+import Data.Maybe(fromMaybe,isJust,isNothing)
 import qualified Data.Map as M
 import qualified Data.Set as S
 import qualified Data.IntMap as IM
 
-import Lsl.Animation
-import Lsl.AvEvents
-import Lsl.Breakpoint
-import Lsl.CodeHelper
+import Lsl.Animation(builtInAnimations)
+import Lsl.AvEvents(AvatarOutputEvent(..),AvatarInputEvent(..))
+import Lsl.Breakpoint(Breakpoint,emptyBreakpointManager,setStepOverBreakpoint,setStepOutBreakpoint,replaceBreakpoints,
+                      setStepBreakpoint,breakpointFile,breakpointLine,checkBreakpoint)
+import Lsl.CodeHelper(renderCall)
 import Lsl.Constants
-import Lsl.Evaluation
-import Lsl.EventSigs
-import Lsl.Exec hiding (scriptImage)
-import Lsl.ExpressionHandler
-import Lsl.FuncSigs
-import Lsl.InternalLLFuncs
-import Lsl.Key
-import Lsl.Log
-import Lsl.Physics
-import Lsl.Structure
-import Lsl.Type
+import Lsl.Evaluation(ScriptInfo(..),Event(..),EvalResult(..))
+import Lsl.EventSigs(EventAdditionalData(..),EventDelivery(..),lslEventDescriptors)
+import Lsl.Exec(ExecutionState(..),ExecutionInfo(ExecutionInfo),ScriptImage(..),executeLsl,frameInfo,hardReset,hasActiveHandler,initLSLScript)
+import Lsl.ExpressionHandler(evaluateExpression)
+import Lsl.FuncSigs(funcSigs)
+import Lsl.InternalLLFuncs(internalLLFuncs)
+import Lsl.Key(nullKey)
+import Lsl.Log(LogLevel(..),LogMessage(..))
+import Lsl.Physics(calcAccel,checkIntersections,dampForce,dampTorque,dampZForce,gravC,kin,primMassApprox,rotDyn,totalTorque)
+import Lsl.Structure(Ctx(..),FuncDec(..),Validity(..),predefFuncs)
+import Lsl.Type(LSLValue(..),LSLType(..),defaultValue,isIVal,isLVal,isSVal,
+                lslShowVal,lslTypeString,lslValString,rVal2Rot,rot2RVal,typeOfLSLValue,vVal2Vec,vec2VVal)
 import Lsl.UnitTestWorld(simFunc,hasFunc)
-import Lsl.Util
-import Lsl.WorldDef
+import Lsl.Util(add3d,angleBetween,diff3d,dist3d2,fac,findM,fromInt,generatePermutation,ilookup,lookupByIndex,
+                mag3d,mlookup,neg3d,norm3d,quaternionMultiply,quaternionToMatrix,rot3d,rotationBetween,scale3d,tuplify)
+import Lsl.WorldDef(Attachment(..),Avatar(..),AvatarControlListener(..),Email(..),Flexibility(..),InventoryInfo(..),
+                    InventoryItem(..),InventoryItemData(..),InventoryItemIdentification(..),LightInfo(..),LSLObject(..),
+                    ObjectDynamics(..),Parcel(..),Prim(..),PrimFace(..),PrimType(..),PositionTarget(..),Region(..),RotationTarget(..),
+                    Script(..),TextureInfo(..),WebHandling(..),
+                    defaultCamera,defaultDynamics,emptyPrim,findByInvKey,findByInvName,
+                    inventoryInfoPermValue,inventoryItemName,mkScript,
+                    isInvAnimationItem,isInvBodyPartItem,isInvClothingItem,isInvGestureItem,isInvNotecardItem,
+                    isInvObjectItem,isInvScriptItem,isInvSoundItem,isInvTextureItem,
+                    primPhantomBit,primPhysicsBit,scriptInventoryItem,worldFromFullWorldDef)
 import Lsl.WorldState
 
-import System.Random
-import System.Time
-import Text.Printf
+import System.Random(mkStdGen)
+import System.Time(ClockTime(..),CalendarTime(..),TimeDiff(..),addToClockTime,toUTCTime)
+import Text.Printf(PrintfType(..),printf)
 
 -- execute a predefined ('ll') function
 doPredef :: Monad m => String -> ScriptInfo -> [LSLValue] -> WorldM m (EvalResult,LSLValue)

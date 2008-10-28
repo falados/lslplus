@@ -1,11 +1,11 @@
 module Lsl.SimMetaData where
 
-import Control.Monad.Identity
+import Control.Monad.Identity(Identity(..))
 import qualified Data.Map as M
 
-import Lsl.Type
-import Lsl.World1
-import Lsl.XmlCreate
+import Lsl.Type(lslTypeString)
+import Lsl.World1(SimInputEventDefinition(..),SimParam(..),SimParamType(..),eventDescriptors)
+import Lsl.XmlCreate(emit,emitList,emitSimple)
 
 printSimMeta = putStr buildSimMetaData
 

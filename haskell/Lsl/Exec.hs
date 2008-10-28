@@ -20,23 +20,43 @@ module Lsl.Exec(
     hasActiveHandler) where
 
 --import Debug.Trace
-import Data.Bits
-import Data.Int
-import Data.List
+import Data.Bits((.&.),(.|.),xor,shiftL,shiftR,complement)
+import Data.List(intersperse,find)
 import qualified Data.Map as M
-import Data.Maybe
+import Data.Maybe(isJust)
 
-import Lsl.Breakpoint hiding (checkBreakpoint)
-import Lsl.CodeHelper
-import Lsl.FuncSigs
-import Lsl.Util
-import Lsl.Structure
-import Lsl.Type
-import Lsl.Key
-import Lsl.Evaluation
-import Lsl.Constants
-import Control.Monad.State hiding (State)
-import Control.Monad.Error
+import Lsl.Breakpoint(Breakpoint(..),StepManager(..),pushStepManagerFrame,popStepManagerFrame,emptyStepManager,mkBreakpoint)
+import Lsl.CodeHelper(renderCall)
+import Lsl.FuncSigs(funcSigs)
+import Lsl.Util(fromInt,lookupM,ctx,findM)
+import Lsl.Structure(Expr(..),
+                     CompiledLSLScript,
+                     Statement(..),
+                     Func(..),
+                     FuncDec(..),
+                     Var(..),
+                     State(..),
+                     Ctx(..),
+                     Global(..),
+                     SourceContext(..),
+                     Handler(..),
+                     ctxVr2Vr,
+                     findFunc,
+                     findFuncDec,
+                     ctxItems,
+                     findState,
+                     fromMCtx,
+                     predefFuncs,
+                     isTextLocation)
+import Lsl.Type(LSLType(..),LSLValue(..),typeOfLSLComponent,typeOfLSLValue,toFloat,toSVal,
+                lslShowVal,replaceLslValueComponent,vecMulScalar,rotMulVec,
+                parseInt,parseFloat,invRot,rotMul,vcross,Component(..),lslValueComponent)
+import Lsl.Key(nullKey,nextKey)
+import Lsl.Evaluation(EvalResult(..),Event(..),ScriptInfo(..))
+import Lsl.Constants(findConstVal,llcZeroRotation,llcZeroVector)
+import Control.Monad(foldM_,when,mplus,msum,join,zipWithM)
+import Control.Monad.State(lift,StateT(..))
+import Control.Monad.Error(ErrorT(..))
 
 -- initialize a script for execution
 initLSLScript :: CompiledLSLScript -> ScriptImage
@@ -228,14 +248,6 @@ writeMem name value cells =
 
 readMem :: Monad m => String -> MemRegion -> m LSLValue
 readMem = lookupM
-
-goodEvents = goodHandlers
-
--- validEvent :: Event -> Validity ()
--- validEvent (Event name values) =
---     do expectedTypes <- incontext ("looking for event named: " ++ name) $ lookupM name goodEvents
---        let valueTypes = map typeOfLSLValue values
---        when (valueTypes /= expectedTypes) $ fail ("invalid types for event " ++ name)
 
 initGlobals :: [Global] -> MemRegion
 initGlobals globals = map (initGlobal globals) globals
@@ -574,7 +586,7 @@ setupSimple path globbindings args =
         (params,stmts,ctx) <- getEntryPoint path
         mem <- bindParmsForgiving params args
         initStacks
-        pushFrame (concat $ separateWith "." path) ctx Nothing
+        pushFrame (concat $ intersperse "." path) ctx Nothing
         pushScope mem $ labelBlocks stmts
         pushElement (EvBlock stmts)
         setExecutionState Executing

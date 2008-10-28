@@ -6,7 +6,7 @@ import Data.Bits
 import IO
 
 import Lsl.Constants
-import Lsl.DOMProcessing hiding (xmlEscape)
+import Lsl.DOMProcessing
 import Lsl.Parse
 import Lsl.Structure
 import Lsl.Type

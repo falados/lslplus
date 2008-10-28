@@ -158,28 +158,32 @@ module Lsl.WorldState(
     updatePrimFace,
     wrand) where
 
-import Control.Monad.State hiding (State)
-import Control.Monad.Error
-import Data.List
-import Data.Int
+import Control.Monad(MonadPlus(..))
+import Control.Monad.State(StateT(..))-- hiding (State)
+import Control.Monad.Error(lift,ErrorT(..),MonadError(..))
+import Data.List(elemIndex)
 import Data.Map(Map)
-import Data.Maybe
+import Data.Maybe(fromMaybe)
 import qualified Data.IntMap as IM
 import qualified Data.Map as M
 import qualified Data.Set as S
 
 import qualified Lsl.AvEvents as AvEvent
-import Lsl.Breakpoint
-import Lsl.Evaluation
-import Lsl.Exec hiding (scriptImage)
-import Lsl.Key
-import Lsl.Log
-import Lsl.Structure
-import Lsl.Type
-import Lsl.Util
-import Lsl.WorldDef
+import Lsl.Breakpoint(BreakpointManager(..))
+import Lsl.Evaluation(Event(..),ScriptInfo(..),EvalResult(..))
+import Lsl.Exec(hasActiveHandler)
+import Lsl.Key(mkKey)
+import Lsl.Log(LogMessage(..),LogLevel(..))
+import Lsl.Structure(Validity(..),LModule(..),CompiledLSLScript(..))
+import Lsl.Type(LSLValue(..),LSLType(..))
+import Lsl.Util(mlookup,lookupByIndex)
+import Lsl.WorldDef(Prim(..),PrimFace(..),InventoryItem(..),InventoryItemIdentification(..),
+                    LSLObject(..),Script(..),Avatar(..),Region(..),
+                    WebHandling(..),isInvNotecardItem,isInvLandmarkItem,isInvClothingItem,
+                    isInvBodyPartItem,isInvGestureItem,isInvSoundItem,isInvAnimationItem,
+                    isInvTextureItem,isInvScriptItem,isInvObjectItem)
 
-import System.Random
+import System.Random(StdGen(..),Random(..))
 
 -- a data type that defines the state of the 'world'
 data World m = World {
@@ -316,7 +320,6 @@ getPrimName k = getPrimVal k primName
 getPrimPosition k = getPrimVal k primPosition
 getPrimParent k = getPrimVal k primParent
 getRootPrim k = getPrimVal k primParent >>= \ val -> return $ fromMaybe k val
-isRootPrim k = getPrimVal k primParent >>= return . isNothing
 getPrimDescription k = getPrimVal k primDescription
 getPrimOwner k = getPrimVal k primOwner
 getPrimGroup k = getPrimVal k primGroup

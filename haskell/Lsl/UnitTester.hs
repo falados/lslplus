@@ -1,24 +1,24 @@
 {-# OPTIONS_GHC -XFlexibleContexts #-}
-module Lsl.UnitTester where
+module Lsl.UnitTester(main2) where
 
-import Control.Monad.Error
-import IO
-import Lsl.BreakpointsDeserialize
-import Lsl.Compiler
-import Lsl.DOMProcessing
-import Lsl.DOMSourceDescriptor
-import Lsl.DOMUnitTestDescriptor
-import Lsl.ExecInfo
-import Lsl.Structure
-import Lsl.TestResult
-import Lsl.UnitTest
-import Lsl.UnitTestWorld
-import Lsl.Util
-import Lsl.XmlCreate
-import Text.XML.HaXml hiding (when)
-import Debug.Trace
+import Control.Monad(MonadPlus(..))
+import Control.Monad.Error(MonadError(..))
+import Lsl.BreakpointsDeserialize(breakpointsElement)
+import Lsl.Compiler(compile)
+import Lsl.DOMProcessing(ElemAcceptor(..),findElement,findOptionalElement,match)
+import Lsl.DOMSourceDescriptor(sourceFilesElement)
+import Lsl.DOMUnitTestDescriptor(testsElement)
+import Lsl.ExecInfo(emitExecutionInfo)
+import Lsl.Structure(libFromAugLib)
+import Lsl.TestResult(emitTestResult)
+import Lsl.UnitTest(LSLUnitTest(..))
+import Lsl.UnitTestWorld(ExecCommand(..),TestEvent(..),simStep)
+import Lsl.Util(unescape,processLinesS)
+import Lsl.XmlCreate(emit)
+import Text.XML.HaXml(Element(..),Content(..),Document(..),xmlParse)
+-- import Debug.Trace
 
-trace1 x = trace (show x) x
+-- trace1 x = trace (show x) x
 
 testExecutionElement :: MonadError String m => ElemAcceptor m (([(String,String)],[(String,String)]),[LSLUnitTest])
 testExecutionElement =

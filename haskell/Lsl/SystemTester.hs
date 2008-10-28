@@ -1,21 +1,23 @@
 {-# OPTIONS_GHC -XFlexibleContexts #-}
 module Lsl.SystemTester where
 
-import Control.Monad.Error
-import Control.Monad.State
+import Control.Monad(MonadPlus(..))
+import Control.Monad.Error(MonadError(..),ErrorT(..))
+import Control.Monad.State(evalState)
 import qualified Data.Map as M
 import IO
-import Lsl.BreakpointsDeserialize
-import Lsl.Compiler
-import Lsl.DOMProcessing
-import Lsl.DOMSourceDescriptor
-import Lsl.ExecInfo
-import Lsl.Log
-import Lsl.Structure
-import Lsl.Util
-import Lsl.World1
-import Lsl.WorldDef
-import Lsl.XmlCreate
+import Lsl.BreakpointsDeserialize(breakpointsElement)
+import Lsl.Compiler(compile)
+import Lsl.DOMProcessing(Content(..),Document(..),Element(..),ElemAcceptor(..),
+                         elementList,simple,findElement,findOptionalElement,match,xmlParse)
+import Lsl.DOMSourceDescriptor(sourceFilesElement)
+import Lsl.ExecInfo(emitExecutionInfo)
+import Lsl.Log(LogMessage(..),logLevelToName)
+import Lsl.Structure(libFromAugLib)
+import Lsl.Util(unescape,processLinesS)
+import Lsl.World1(SimCommand(..),SimEvent(..),SimEventArg(..),SimStatus(..),SimStateInfo(..),simStep)
+import Lsl.WorldDef(worldElement)
+import Lsl.XmlCreate(emit,emitList,emitSimple)
 
 initializationFromXML xml = let doc = xmlParse "" xml in parseInitialization doc
 

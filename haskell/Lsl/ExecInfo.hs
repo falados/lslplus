@@ -1,9 +1,9 @@
 module Lsl.ExecInfo(emitExecutionInfo) where
 
-import Lsl.Exec
-import Lsl.Structure
-import Lsl.Type
-import Lsl.XmlCreate
+import Lsl.Exec(ExecutionInfo(..),FrameInfo(..))
+import Lsl.Structure(SourceContext(..))
+import Lsl.Type(LSLValue(..))
+import Lsl.XmlCreate(emit,emitSimple)
 
 emitExecutionInfo (ExecutionInfo name line threadInfo) =
     emit "script-state" [] [emitSimple "sourceElement" [] name,

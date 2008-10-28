@@ -23,12 +23,11 @@ module Lsl.DOMProcessing(ElemAcceptor(..),
                          module Text.XML.HaXml,
                          module Text.XML.HaXml.Posn) where
 
-import Control.Monad.Error
-import Data.List
-import Lsl.Util
-import Text.XML.HaXml hiding (when)
-import Text.XML.HaXml.Posn
-import Text.XML.HaXml.Pretty
+import Control.Monad(MonadPlus(..),liftM2)
+import Control.Monad.Error(MonadError(..))
+import Lsl.Util(readM)
+import Text.XML.HaXml(AttValue(..),Document(..),Element(..),Content(..),Reference(..),xmlParse)
+import Text.XML.HaXml.Posn(Posn(..))
 
 data Monad m => ElemAcceptor m t = ElemAcceptor { acceptorTag :: String,  acceptorFunc :: (Element Posn -> m t) }
 

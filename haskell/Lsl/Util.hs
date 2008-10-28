@@ -35,8 +35,8 @@ import qualified Data.IntMap as IntMap
 
 import Lsl.Math
 
-import IO
-import Network.URI
+import IO(hFlush,stdout)
+import Network.URI(escapeURIString,isUnescapedInURI,unEscapeString)
 
 -- lifting lookups for Map (if key is instance of Show) and IntMap
 

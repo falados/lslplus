@@ -1,8 +1,7 @@
 module Lsl.NumberParsing(readHexFloat,readInt) where
 
-import Data.Char
-import Text.ParserCombinators.Parsec
-import Control.Monad.Error
+import Data.Char(digitToInt)
+import Text.ParserCombinators.Parsec(GenParser(..),(<|>),char,digit,hexDigit,many,many1,oneOf,option,parse,satisfy)
 
 hexFloat =
     do char '0'

@@ -2,12 +2,11 @@ module Lsl.MetaData where
 
 -- constructs meta-data about the LSL+ language, and emits it as XML.
 
-import IO
-import Lsl.Constants
-import Lsl.EventSigs
-import Lsl.FuncSigs
-import Lsl.InternalLLFuncs
-import Lsl.Type
+import Lsl.Constants(Constant(..),allConstants)
+import Lsl.EventSigs(lslEventDescriptors)
+import Lsl.FuncSigs(funcMeta)
+import Lsl.InternalLLFuncs(internalLLFuncNames)
+import Lsl.Type(LSLValue(..),LSLType(..),lslTypeString,lslValString,typeOfLSLValue)
 import qualified Lsl.XmlCreate as X
 
 emit t = X.emit t []

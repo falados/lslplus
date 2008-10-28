@@ -108,19 +108,20 @@ module Lsl.InternalLLFuncs(
     internalLLFuncNames
     ) where
 
-import Lsl.Util
-import Lsl.Type
-import Lsl.Evaluation
-import Lsl.Constants
-import Data.List
-import Data.Char
-import Data.Bits
+import Lsl.Util(Permutation3(..),axisAngleToRotation,cut,dist3d,elemAtM,
+               filtMap,fromInt,indexOf,mag3d,mag3d2,matrixToQuaternion,quaternionToMatrix,
+               quaternionToRotations,rotationBetween,rotationsToQuaternion)
+import Lsl.Type(LSLType(..),LSLValue(..),lslValString,parseFloat,parseInt,rot2RVal,toSVal,typeOfLSLValue,vVal2Vec)
+import Lsl.Evaluation(EvalResult(..))
+import Lsl.Constants(findConstVal)
+import Data.List(elemIndex,find,foldl',intersperse,isPrefixOf,sort)
+import Data.Char(toLower,toUpper)
+import Data.Bits((.|.),(.&.),shiftL,shiftR,xor)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 import qualified Data.Digest.Pure.MD5 as MD5
 import qualified Data.ByteString.UTF8 as UTF8
-import Network.URI
---import System.Random
+import Network.URI(escapeURIChar,unEscapeString)
 
 internalLLFuncNames :: [String]
 internalLLFuncNames = map fst (internalLLFuncs :: [(String, a -> [LSLValue] -> Maybe (EvalResult,LSLValue))])
@@ -404,7 +405,7 @@ llList2List _ [LVal source, IVal start, IVal end] = continueWith $ LVal (subList
 llDeleteSubList _ [LVal source, IVal start, IVal end] = continueWith $ LVal (deleteSubList source start end)
 
 llDumpList2String _ [LVal list, SVal sep] = 
-    continueWith $ SVal $ concat $ weave (map lslValString list) (replicate (length list - 1) sep)
+    continueWith $ SVal $ concat $ intersperse sep (map lslValString list) --weave (map lslValString list) (replicate (length list - 1) sep)
    
 deleteSubList source start end = 
     let n = length source
@@ -430,7 +431,7 @@ convertIndex length index = if index < 0 then length + index else index
 llCSV2List _ [SVal s] =
     continueWith $ LVal $ map SVal (lslCsvToList [] s)
 llList2CSV _ [LVal l] =
-    continueWith $ SVal $ concat (weave (map lslValToString l) (replicate (length l - 1) ","))
+    continueWith $ SVal $ concat (intersperse "," (map lslValToString l)) --weave (map lslValToString l) (replicate (length l - 1) ","))
 
 lslValToString (VVal x y z) = "<" ++ (show x) ++ "," ++ (show y) ++ "," ++ (show z) ++ ">"
 lslValToString (RVal x y z s) = "<" ++ (show x) ++ "," ++ (show y) ++ "," ++ (show z) ++ "," ++ (show s) ++ ">"

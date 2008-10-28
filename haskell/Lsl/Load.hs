@@ -2,9 +2,8 @@ module Lsl.Load(
     loadScripts,
     loadModules) where
 
-import Control.Exception
-import Control.Monad.Error
-import Data.List
+import Control.Exception(SomeException(..),tryJust)
+import Control.Monad.Error(liftIO)
 import Lsl.BuiltInModules(avEventGen)
 import Lsl.Structure(validLSLScript,validLibrary,SourceContext(..), Validity(..))
 import Lsl.Parse(parseModule', parseScript')

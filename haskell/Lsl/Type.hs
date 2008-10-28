@@ -35,14 +35,15 @@ module Lsl.Type(
     liftV1,
     liftV2) where
     
-import Control.Monad.Error
-import Data.Data
-import Lsl.NumberParsing
-import Lsl.Key
-import Lsl.Util
-import Lsl.DOMProcessing
+import Control.Monad.Error(MonadError)
+import Data.Data(Data,Typeable)
+import Data.List(intersperse)
+import Lsl.NumberParsing(readInt,readHexFloat)
+import Lsl.Key(nullKey)
+import Lsl.Util(lookupM,readM,cross,quaternionMultiply,quaternionToMatrix,fromInt)
+import Lsl.DOMProcessing(Element(..),ElemAcceptor(..),findValue,elementsOnly,simple,attrString,acceptList)
 
-import Text.Printf
+import Text.Printf(printf)
 
 data LSLType = LLList | LLInteger | LLVector | LLFloat | LLString | LLRot | LLKey | LLVoid
     deriving (Eq, Show, Typeable, Data)
@@ -107,7 +108,7 @@ lslValString (SVal s) = s
 lslValString (KVal k) = k
 lslValString (VVal x y z) = concat ["<",comp2Str x,",",comp2Str y,",",comp2Str z,">"]
 lslValString (RVal x y z s) = concat ["<",comp2Str x,",",comp2Str y,",",comp2Str z,",",comp2Str s,">"]
-lslValString (LVal l) = concat (("[":(weave (map lslValString l) $ replicate (length l - 1) ",")) ++ ["]"])
+lslValString (LVal l) = concat ("[":(intersperse "," (map lslValString l) ++ ["]"]))
 lslValString (VoidVal) = ""
 
 -- convert a value to a string for display
@@ -119,7 +120,7 @@ lslShowVal (SVal s) = ('\"':escape s) ++ "\""
           escape (c:cs) = c:(escape cs)
           escape [] = []
 lslShowVal (KVal k) = lslShowVal (SVal k)
-lslShowVal (LVal l) = concat ("[":(separateWith "," (map lslShowVal l))) ++ "]"
+lslShowVal (LVal l) = concat ("[":(intersperse "," (map lslShowVal l))) ++ "]"
 lslShowVal VoidVal = "n/a"
 lslShowVal v = lslValString v
 

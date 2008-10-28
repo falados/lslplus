@@ -1,8 +1,8 @@
 module Lsl.Render(renderLSLScript,renderCompiledScript) where
 
-import Data.List(foldl')
-import Lsl.Structure
-import Lsl.Util
+import Data.List(foldl',intersperse)
+import Lsl.Structure(Expr(..),Func(..),FuncDec(..),Global(..),Handler(..),State(..),Statement(..),
+                     Ctx(..),Var(..),Validity(..),LSLType(..),Component(..),ctxItems,validLSLScript)
 
 renderLSLScript library lslScript = 
     case validLSLScript library lslScript of
@@ -26,7 +26,7 @@ renderCtxSimple (Ctx _ expr) = renderSimple expr
 renderSimple (Neg expr) = renderChar '-' . renderCtxExpr expr
 renderSimple (ListExpr l) =
     renderChar '[' .
-        (foldl' (.) id $ separateWith (renderChar ',') $ map renderCtxSimple l) .
+        (foldl' (.) id $ intersperse (renderChar ',') $ map renderCtxSimple l) .
         renderChar ']'
 renderSimple (VecExpr x y z) = renderChar '<' . renderCtxSimple x .
                                renderChar ',' . renderCtxSimple y .

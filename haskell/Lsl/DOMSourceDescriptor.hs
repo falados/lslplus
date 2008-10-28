@@ -1,9 +1,9 @@
 {-# OPTIONS_GHC -XFlexibleContexts #-}
 module Lsl.DOMSourceDescriptor(sourceFiles,sourceFilesElement) where
 
-import Control.Monad.Error
-import Lsl.DOMProcessing
-import Text.XML.HaXml hiding (when)
+import Control.Monad.Error(MonadError(..))
+import Lsl.DOMProcessing(ElemAcceptor(..),elementList,findElement,match,simple)
+import Text.XML.HaXml(Element(..),Content(..))
 
 sourceFiles e = match sourceFilesElement e
 

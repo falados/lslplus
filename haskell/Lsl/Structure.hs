@@ -35,14 +35,14 @@ module Lsl.Structure (
     libFromAugLib,
     isTextLocation) where
 
-import Lsl.Type
-import Lsl.Constants
-import Lsl.EventSigs
-import Lsl.FuncSigs
-import Data.Data
-import Data.List
-import Lsl.Util
-import Control.Monad.Error
+import Lsl.Type(Component(..),LSLType(..),lslTypeString)
+import Lsl.Constants(isConstant,findConstType)
+import Lsl.EventSigs(simpleLslEventDescriptors)
+import Lsl.FuncSigs(funcSigs)
+import Data.Data(Data,Typeable)
+import Data.List(find,sort,sortBy,nub)
+import Lsl.Util(ctx,findM,lookupM,filtMap)
+import Control.Monad(when,foldM,MonadPlus(..))
 
 --trace1 s v = trace (s ++ show v) v
 

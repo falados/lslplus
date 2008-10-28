@@ -7,22 +7,25 @@ module Lsl.UnitTestWorld(
     ExecutionInfo(..),
     ExecCommand(..)) where
 
-import Control.Monad.State
-import Control.Monad.Error
-import Data.List
+import Control.Monad(liftM2)
+import Control.Monad.State(MonadState(..),State(..),StateT(..),evalState)
+import Control.Monad.Error(ErrorT(..))
+import Data.List(find,intersperse)
 import Data.Maybe(isJust)
-import Lsl.Breakpoint
-import Lsl.CodeHelper
-import Lsl.FuncSigs
-import Lsl.InternalLLFuncs
+import Lsl.Breakpoint(Breakpoint,BreakpointManager,checkBreakpoint,emptyBreakpointManager,
+                      replaceBreakpoints,setStepBreakpoint,setStepOverBreakpoint,setStepOutBreakpoint,
+                      breakpointFile,breakpointLine)
+import Lsl.CodeHelper(renderCall)
+import Lsl.FuncSigs(funcSigs)
+import Lsl.InternalLLFuncs(internalLLFuncs)
 import Lsl.Structure hiding (State)
 import qualified Lsl.Structure as L
-import Lsl.Type
-import Lsl.Evaluation
-import Lsl.Exec
-import Lsl.TestResult
-import Lsl.UnitTest
-import Lsl.Util
+import Lsl.Type(LSLValue,lslValString,lslShowVal,defaultValue)
+import Lsl.Evaluation(EvalResult(..))
+import Lsl.Exec(ExecutionInfo(..),ScriptImage(..),evalSimple,runEval,scriptImage,setupSimple,initStateSimple,frameInfo)
+import Lsl.TestResult(TestResult(..))
+import Lsl.UnitTest(EntryPoint(..),LSLUnitTest(..),ExpectationMode(..),FuncCallExpectations(..),expectedReturns,removeExpectation)
+import Lsl.Util(findM,ctx)
 
 --trace1 v = trace ("->>" ++ (show v)) v
 
@@ -126,7 +129,7 @@ checkResults (ms1, val, globs, w) unitTest =
         if ((expectationMode $ expectations w) `elem` [Strict,Exhaust]) &&
            (not (null (callList $ expectations w))) then
              FailureResult name ("some expected function calls not made: " ++
-                 concat (separateWith ", " $ map (fst.fst) $ callList $ expectations w))
+                 concat (intersperse ", " $ map (fst.fst) $ callList $ expectations w))
                  (msgLog w)
         else case (ms0, ms1) of
           (Nothing, Just st) -> 

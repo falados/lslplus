@@ -2,7 +2,7 @@
 -- could be moved here.
 module Lsl.CodeHelper(renderCall) where
 
-import Lsl.Type
-import Lsl.Util
+import Data.List(intersperse)
+import Lsl.Type(lslShowVal)
 
-renderCall n a = concat ([n, "("] ++ (separateWith "," $ map lslShowVal a) ++ [")"])
+renderCall n a = concat ([n, "("] ++ (intersperse "," $ map lslShowVal a) ++ [")"])

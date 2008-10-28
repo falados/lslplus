@@ -53,22 +53,24 @@ module Lsl.WorldDef(Avatar(..),
                     mkScript
                    ) where
 
-import Control.Monad.Error
-import Control.Monad.Writer
+import Control.Monad(when,foldM)
+import Control.Monad.Error(MonadError(..),ErrorT(..))
+import Control.Monad.Writer(tell,lift,runWriterT)
 
-import qualified Control.Monad.State as SM
-import Data.Int
-import Data.List
+import qualified Control.Monad.State as SM(get,put,State)
+import Data.List(find)
 import qualified Data.Map as M
 import qualified Data.IntMap as IM
-import Data.Maybe
+import Data.Maybe(isNothing)
 
-import Lsl.DOMProcessing hiding (find)
-import Lsl.Evaluation
+import Lsl.DOMProcessing(ElemAcceptor(..),Element(..),findOrDefault,findValueOrDefault,elementList,
+                         findOptionalElement,elementsOnly,findValue,findElement,findSimple,simpleElement,
+                         findSimpleOrDefault,valueAcceptor,elementListWith,matchChoice)
+import Lsl.Evaluation(Event(..))
 import Lsl.Exec(ScriptImage,initLSLScript)
 import Lsl.Key(mkKey,nullKey)
 import Lsl.Structure(Validity(..))
-import Lsl.Type
+import Lsl.Type(LSLValue(..))
 import Lsl.Util(mlookup,readM,Permutation3(..),rotationsToQuaternion)
 
 type KeyManagerM = ErrorT String (SM.State (M.Map String String,Integer))
