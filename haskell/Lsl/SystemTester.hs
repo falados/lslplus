@@ -13,7 +13,7 @@ import Lsl.DOMProcessing(Content(..),Document(..),Element(..),ElemAcceptor(..),
 import Lsl.DOMSourceDescriptor(sourceFilesElement)
 import Lsl.ExecInfo(emitExecutionInfo)
 import Lsl.Log(LogMessage(..),logLevelToName)
-import Lsl.Structure(libFromAugLib)
+import Lsl.Syntax(libFromAugLib)
 import Lsl.Util(unescape,processLinesS)
 import Lsl.World1(SimCommand(..),SimEvent(..),SimEventArg(..),SimStatus(..),SimStateInfo(..),simStep)
 import Lsl.WorldDef(worldElement)

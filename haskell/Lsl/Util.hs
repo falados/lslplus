@@ -1,7 +1,8 @@
-{-# OPTIONS_GHC -fwarn-unused-binds #-}
+{-# OPTIONS_GHC -fwarn-unused-binds -XNoMonomorphismRestriction #-}
 module Lsl.Util (
     mlookup,
     ilookup,
+    throwStrError,
     ctx,
     readM,
     filtMap, 
@@ -11,8 +12,6 @@ module Lsl.Util (
     removeLookup,
     findM,
     elemAtM,
-    weave,
-    separateWith,
     indexOf,
     fromInt,
     tuplify,
@@ -26,7 +25,7 @@ module Lsl.Util (
     ) where
 
 import Control.Monad(liftM,when)
-import Control.Monad.Error(throwError)
+import Control.Monad.Error(MonadError(..),Error(..))
 import Data.List(find,elemIndex,isPrefixOf,tails)
 import qualified Data.Map as Map
 import qualified Data.IntMap as IntMap
@@ -44,9 +43,10 @@ mlookup k m =
     maybe (throwError $ "key " ++ show k ++ " not found") return (Map.lookup k m)
 ilookup i m = 
     maybe (throwError $ "key " ++ show i ++ " not found") return (IntMap.lookup i m)
-    
--- utilities
 
+throwStrError :: (Error e, MonadError e m) => String -> m a
+throwStrError = throwError . strMsg
+    
 tuplify [] = []
 tuplify (_:[]) = []
 tuplify (a:b:rest) = (a,b) : tuplify rest
@@ -96,15 +96,6 @@ removeLookup k l = let (xs,ys) = break ((k==).fst) l in
        (_:zs) -> xs ++ zs
        _ -> l
        
--- interleave the elements of two lists
-weave :: [a] -> [a] -> [a]
-weave as [] = as
-weave [] bs = bs
-weave (a:as) (b:bs) = a:b:(weave as bs)
-
-separateWith :: a -> [a] -> [a]
-separateWith sep list = weave list (replicate (length list - 1) sep)
-
 indexOf :: Eq a => [a] -> [a] -> Maybe Int
 indexOf sub list = elemIndex True $ map (isPrefixOf sub) (tails list) 
 

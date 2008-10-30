@@ -38,7 +38,7 @@ import Lsl.InternalLLFuncs(internalLLFuncs)
 import Lsl.Key(nullKey)
 import Lsl.Log(LogLevel(..),LogMessage(..))
 import Lsl.Physics(calcAccel,checkIntersections,dampForce,dampTorque,dampZForce,gravC,kin,primMassApprox,rotDyn,totalTorque)
-import Lsl.Structure(Ctx(..),FuncDec(..),Validity(..),predefFuncs)
+import Lsl.Syntax(Ctx(..),FuncDec(..),predefFuncs)
 import Lsl.Type(LSLValue(..),LSLType(..),defaultValue,isIVal,isLVal,isSVal,
                 lslShowVal,lslTypeString,lslValString,rVal2Rot,rot2RVal,typeOfLSLValue,vVal2Vec,vec2VVal)
 import Lsl.UnitTestWorld(simFunc,hasFunc)
@@ -2709,12 +2709,12 @@ processEvent (AddScript (name,script) key active) =
           t <- getTick
           case lookup script scripts of
               Nothing -> logAMessage LogWarn "sim" ("no such script: " ++ script)
-              Just (Invalid s) -> do
+              Just (Left s) -> do
                   scriptKey <- newKey
                   updatePrim (\ p -> return $ addScript p (scriptInventoryItem name scriptKey script)) key
 --                   scripts <- getWorldScripts
 --                   setWorldScripts (M.insert (key,name) ((mkScript (Invalid s)) { scriptActive = False, scriptStartTick = t, scriptLastResetTick = t, scriptEventQueue = []}) scripts)
-              Just (Valid code) -> do
+              Just (Right code) -> do
                   scriptKey <- newKey
                   updatePrim (\ p -> return $ addScript p (scriptInventoryItem name scriptKey script)) key
                   let sstate = initLSLScript code
@@ -3051,8 +3051,8 @@ activateScript pk sn scriptId Nothing startParam =
        worldScripts <- lift getWorldScripts
        case lookup scriptId wscripts of
            Nothing -> lift $ logAMessage LogWarn "sim" ("script " ++ scriptId ++ " not found")
-           Just (Invalid s) -> lift $ logAMessage LogWarn "sim" ("script " ++ scriptId ++ " not valid")
-           Just (Valid code) ->
+           Just (Left s) -> lift $ logAMessage LogWarn "sim" ("script " ++ scriptId ++ " not valid")
+           Just (Right code) ->
                lift $ setWorldScripts 
                    (M.insert (pk,sn) (mkScript (initLSLScript code)) worldScripts)
 activateScript pk sn _ (Just image) startParam = do

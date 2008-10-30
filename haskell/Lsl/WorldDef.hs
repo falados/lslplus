@@ -69,7 +69,6 @@ import Lsl.DOMProcessing(ElemAcceptor(..),Element(..),findOrDefault,findValueOrD
 import Lsl.Evaluation(Event(..))
 import Lsl.Exec(ScriptImage,initLSLScript)
 import Lsl.Key(mkKey,nullKey)
-import Lsl.Structure(Validity(..))
 import Lsl.Type(LSLValue(..))
 import Lsl.Util(mlookup,readM,Permutation3(..),rotationsToQuaternion)
 
@@ -512,9 +511,9 @@ activateScript scripts primMap (k@(primKey,invName),(scriptID)) =
         prim <- (lift . fctx ("looking up prim " ++ primKey ++ " failed")) (mlookup primKey primMap)
         when (isNothing (findByInvName invName (primInventory prim))) $ fail (invName ++ " doesn't exist in prim " ++ primKey)
         case script of
-            Invalid (_,s) -> tell [("script \"" ++ invName ++ "\" in prim " ++ primKey ++ " failed to activate because of error: " ++ s)] 
+            Left (_,s) -> tell [("script \"" ++ invName ++ "\" in prim " ++ primKey ++ " failed to activate because of error: " ++ s)] 
                              >> return Nothing
-            Valid code -> return $ Just (k,mkScript $ initLSLScript code)
+            Right code -> return $ Just (k,mkScript $ initLSLScript code)
 
 newKey xref = do
     (m,i) <- lift SM.get

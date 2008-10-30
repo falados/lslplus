@@ -8,7 +8,7 @@ import IO
 import Lsl.Constants
 import Lsl.DOMProcessing
 import Lsl.Parse
-import Lsl.Structure
+import Lsl.Syntax
 import Lsl.Type
 import Lsl.Util
 import Lsl.XmlCreate hiding (emit)

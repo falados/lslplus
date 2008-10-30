@@ -1,13 +1,13 @@
 module Lsl.Render(renderLSLScript,renderCompiledScript) where
 
 import Data.List(foldl',intersperse)
-import Lsl.Structure(Expr(..),Func(..),FuncDec(..),Global(..),Handler(..),State(..),Statement(..),
-                     Ctx(..),Var(..),Validity(..),LSLType(..),Component(..),ctxItems,validLSLScript)
+import Lsl.Syntax(Expr(..),Func(..),FuncDec(..),Global(..),Handler(..),State(..),Statement(..),
+                  Ctx(..),Var(..),LSLType(..),Component(..),ctxItems,validLSLScript)
 
 renderLSLScript library lslScript = 
     case validLSLScript library lslScript of
-        Invalid s -> Invalid s
-        Valid x -> Valid $ renderCompiledScript "" x
+        Left s -> Left s
+        Right x -> Right $ renderCompiledScript "" x
         
 renderCompiledScript stamp (globals,funcs,states) =
    renderString "// LSL script generated: " . renderString stamp . renderString "\n" .

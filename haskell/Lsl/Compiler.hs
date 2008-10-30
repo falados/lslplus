@@ -9,8 +9,8 @@ import IO(Handle,hGetContents,stdin)
 import Lsl.DOMSourceDescriptor(sourceFiles)
 import Lsl.Load(loadModules,loadScripts)
 import Lsl.Render(renderCompiledScript)
-import Lsl.Structure(AugmentedLibrary(..),CompiledLSLScript(..),Ctx(..),Func(..),Global(..),
-                     GlobDef(..),Handler(..),LModule(..),SourceContext(..),State(..),Validity(..),Var(..),
+import Lsl.Syntax(AugmentedLibrary(..),CompiledLSLScript(..),Ctx(..),Func(..),Global(..),
+                     GlobDef(..),Handler(..),LModule(..),SourceContext(..),State(..),Validity,Var(..),
                      funcName,funcParms,funcType,libFromAugLib)
 import Lsl.Type(lslTypeString)
 import System.Directory(doesFileExist,removeFile)
@@ -49,8 +49,8 @@ formatScriptCompilationSummary (name,result) =
     emit "item" 
         ([emit "name" [showString name]] ++ 
         case result of
-            Invalid err -> [formatErr err]
-            Valid (globals,funcs,states) ->
+            Left err -> [formatErr err]
+            Right (globals,funcs,states) ->
                 [emit "status" [emit "ok" [showString "true"]],
                 emit "entryPoints" (map emitFunc funcs ++ concatMap stateEntryPointEmitters states),
                 emit "globals" (map emitGlobal globals)])
@@ -61,8 +61,8 @@ formatModuleCompilationSummary (name,result) =
     emit "item"
         ([emit "name" [showString name]] ++
         case result of
-            Invalid err -> [formatErr err]
-            Valid (LModule globdefs freevars,(globals,_)) ->
+            Left err -> [formatErr err]
+            Right (LModule globdefs freevars,(globals,_)) ->
                 [emit "status" [emit "ok" [showString "true"]],
                 emit "entryPoints" (map emitFunc (funcs globdefs)),
                 emit "globals" (map emitGlobal globals ++ map emitFreeVar freevars)])
@@ -119,9 +119,9 @@ processCompileList (Document _ _ root _) =
 renderScriptsToFiles :: [(String,Validity CompiledLSLScript)] -> [(String,String)] -> IO ()
 renderScriptsToFiles compiledScripts pathTable = 
     let scriptsToRender = 
-         [(path,script) | (Just path,Valid script) <- map (\ (name,vs) -> (lookup name pathTable,vs)) compiledScripts]
+         [(path,script) | (Just path,Right script) <- map (\ (name,vs) -> (lookup name pathTable,vs)) compiledScripts]
         scriptsToRemove =
-         [path | (Just path,Invalid _) <- map (\ (name,vs) -> (lookup name pathTable,vs)) compiledScripts]
+         [path | (Just path,Left _) <- map (\ (name,vs) -> (lookup name pathTable,vs)) compiledScripts]
     in do
         clockTime <- getClockTime
         calTime <- toCalendarTime clockTime

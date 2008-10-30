@@ -405,7 +405,7 @@ llList2List _ [LVal source, IVal start, IVal end] = continueWith $ LVal (subList
 llDeleteSubList _ [LVal source, IVal start, IVal end] = continueWith $ LVal (deleteSubList source start end)
 
 llDumpList2String _ [LVal list, SVal sep] = 
-    continueWith $ SVal $ concat $ intersperse sep (map lslValString list) --weave (map lslValString list) (replicate (length list - 1) sep)
+    continueWith $ SVal $ concat $ intersperse sep (map lslValString list)
    
 deleteSubList source start end = 
     let n = length source
@@ -431,7 +431,7 @@ convertIndex length index = if index < 0 then length + index else index
 llCSV2List _ [SVal s] =
     continueWith $ LVal $ map SVal (lslCsvToList [] s)
 llList2CSV _ [LVal l] =
-    continueWith $ SVal $ concat (intersperse "," (map lslValToString l)) --weave (map lslValToString l) (replicate (length l - 1) ","))
+    continueWith $ SVal $ concat (intersperse "," (map lslValToString l))
 
 lslValToString (VVal x y z) = "<" ++ (show x) ++ "," ++ (show y) ++ "," ++ (show z) ++ ">"
 lslValToString (RVal x y z s) = "<" ++ (show x) ++ "," ++ (show y) ++ "," ++ (show z) ++ "," ++ (show s) ++ ">"

@@ -15,9 +15,9 @@ module Lsl.Parse(
 
 import Data.Char(digitToInt)
 import Data.List(intersperse)
-import Lsl.Structure(Expr(..),Statement(..),Func(..),FuncDec(..),Handler(..),State(..),Ctx(..),SourceContext(..),LSLType(..),
-                     Component(..),Var(..),LModule(..),LSLScript(..),GlobDef(..),goodHandlers)
-import Text.ParserCombinators.Parsec
+import Lsl.Syntax(Expr(..),Statement(..),Func(..),FuncDec(..),Handler(..),State(..),Ctx(..),SourceContext(..),LSLType(..),
+                  Component(..),Var(..),LModule(..),LSLScript(..),GlobDef(..),goodHandlers)
+import Text.ParserCombinators.Parsec hiding (State)
 import qualified Text.ParserCombinators.Parsec.Token as P
 import Text.ParserCombinators.Parsec.Language( javaStyle )
 import Text.ParserCombinators.Parsec.Error
@@ -484,7 +484,7 @@ stateName = choice [reserved "default" >> return "default" , reserved "state" >>
 
 stateDecl = do name <- ctxify stateName
                handlers <- braces $ many handler
-               return $ Lsl.Structure.State name handlers
+               return $ State name handlers
 
 stateDecls = many stateDecl
 

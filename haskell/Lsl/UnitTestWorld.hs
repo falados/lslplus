@@ -18,8 +18,8 @@ import Lsl.Breakpoint(Breakpoint,BreakpointManager,checkBreakpoint,emptyBreakpoi
 import Lsl.CodeHelper(renderCall)
 import Lsl.FuncSigs(funcSigs)
 import Lsl.InternalLLFuncs(internalLLFuncs)
-import Lsl.Structure hiding (State)
-import qualified Lsl.Structure as L
+import Lsl.Syntax hiding (State)
+import qualified Lsl.Syntax as L
 import Lsl.Type(LSLValue,lslValString,lslShowVal,defaultValue)
 import Lsl.Evaluation(EvalResult(..))
 import Lsl.Exec(ExecutionInfo(..),ScriptImage(..),evalSimple,runEval,scriptImage,setupSimple,initStateSimple,frameInfo)
@@ -103,8 +103,8 @@ getValidScript name =
     do  scripts <- getWScripts
         case lookup name scripts of
             Nothing -> return (Left $ "No such script: " ++ name)
-            Just (Invalid s) -> return $ Left $ "Invalid script: " ++ name    
-            Just (Valid script) -> return $ Right script
+            Just (Left s) -> return $ Left $ "Invalid script: " ++ name    
+            Just (Right script) -> return $ Right script
         
 convertEntryPoint (ScriptFunc scriptName funcName) =
     do  script <- getValidScript scriptName
@@ -116,11 +116,11 @@ convertEntryPoint (ModuleFunc moduleName funcName) =
     do  lib <- getWLibrary
         case lookup moduleName lib of
             Nothing -> return (Left $ "No such module: " ++ moduleName)
-            Just (Invalid s) -> return (Left $ "Invalid module: " ++ moduleName)
-            Just (Valid lmodule) -> 
+            Just (Left s) -> return (Left $ "Invalid module: " ++ moduleName)
+            Just (Right lmodule) -> 
                 case validLSLScript lib (mkScript lmodule) of
-                    Invalid _ -> return $ Left "Invalid entry point (internal error?)"
-                    Valid script -> return $ Right (script,[funcName])
+                    Left _ -> return $ Left "Invalid entry point (internal error?)"
+                    Right script -> return $ Right (script,[funcName])
 
 checkResults (ms1, val, globs, w) unitTest =
     let name = unitTestName unitTest

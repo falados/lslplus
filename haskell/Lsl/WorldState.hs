@@ -174,7 +174,7 @@ import Lsl.Evaluation(Event(..),ScriptInfo(..),EvalResult(..))
 import Lsl.Exec(hasActiveHandler)
 import Lsl.Key(mkKey)
 import Lsl.Log(LogMessage(..),LogLevel(..))
-import Lsl.Structure(Validity(..),LModule(..),CompiledLSLScript(..))
+import Lsl.Syntax(Validity,LModule(..),CompiledLSLScript(..))
 import Lsl.Type(LSLValue(..),LSLType(..))
 import Lsl.Util(mlookup,lookupByIndex)
 import Lsl.WorldDef(Prim(..),PrimFace(..),InventoryItem(..),InventoryItemIdentification(..),

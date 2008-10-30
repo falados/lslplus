@@ -4,7 +4,7 @@ module Lsl.QQ(lslm,lsl) where
 import Data.Generics.Aliases(extQ)
 import qualified Language.Haskell.TH as TH
 import Language.Haskell.TH.Quote(QuasiQuoter(..),dataToPatQ,dataToExpQ)
-import Lsl.Structure(Expr(..))
+import Lsl.Syntax(Expr(..))
 import Lsl.Parse(parseModuleFromString1,parseScriptFromString1)
 import Text.ParserCombinators.Parsec.Error
 import Text.ParserCombinators.Parsec.Pos

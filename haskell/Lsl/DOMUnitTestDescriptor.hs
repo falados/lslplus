@@ -3,7 +3,7 @@ module Lsl.DOMUnitTestDescriptor(testsElement) where
 
 import Control.Monad.Error(MonadError(..))
 import Data.List(find,isSuffixOf)
-import Lsl.DOMProcessing(ElemAcceptor(..),Element(..),Content(..),
+import Lsl.DOMProcessing(ElemAcceptor(..),Element(..),
                          attValueString,elementList,elementsOnly,findElement,findOptionalElement,matchChoice,simple)
 import Lsl.ExpressionHandler(evaluateExpression)
 import Lsl.Type(LSLType(..),LSLValue(..))
@@ -121,21 +121,6 @@ lslVoid =
         f (Elem name _ _) = fail ("unexpected content in " ++ name ++ " tag.")
     in ElemAcceptor "lsl-void" f
         
-float (Elem name _ [CString _ s _]) =
-       case (reads s)::[(Float,String)] of
-           [(v,[])] -> return v
-           _ -> fail ("invalid float in " ++ name ++ " tag")
-float (Elem name _ _) = fail ("invalid content in " ++ name ++ " tag.")
-
-
-xcomponent :: MonadError String m => ElemAcceptor m Float
-xcomponent = ElemAcceptor "x" float
-ycomponent :: MonadError String m => ElemAcceptor m Float
-ycomponent = ElemAcceptor "y" float
-zcomponent :: MonadError String m => ElemAcceptor m Float
-zcomponent = ElemAcceptor "z" float
-scomponent :: MonadError String m => ElemAcceptor m Float
-scomponent = ElemAcceptor "s" float
 
 expectedReturnElement :: MonadError String m => ElemAcceptor m (Maybe LSLValue)
 expectedReturnElement = maybeSomeVal "expectedReturn"

@@ -1,5 +1,5 @@
-{-# OPTIONS_GHC -XDeriveDataTypeable #-}
-module Lsl.Structure (
+{-# OPTIONS_GHC -XDeriveDataTypeable -XTypeSynonymInstances -XFlexibleContexts #-}
+module Lsl.Syntax (
     -- Types
     Expr(..),
     Var(..),
@@ -13,13 +13,14 @@ module Lsl.Structure (
     State(..),
     GlobDef(..),
     LSLScript(..),
-    Validity(..),
+    Validity,
     Global(..),
     SourceContext(..),
     Ctx(..),
     CompiledLSLScript,
     Library,
     AugmentedLibrary,
+    CodeErr,
     -- Values
     fromMCtx,
     ctxItems,
@@ -41,9 +42,9 @@ import Lsl.EventSigs(simpleLslEventDescriptors)
 import Lsl.FuncSigs(funcSigs)
 import Data.Data(Data,Typeable)
 import Data.List(find,sort,sortBy,nub)
-import Lsl.Util(ctx,findM,lookupM,filtMap)
+import Lsl.Util(ctx,findM,lookupM,filtMap,throwStrError)
 import Control.Monad(when,foldM,MonadPlus(..))
-
+import Control.Monad.Error(MonadError(..),Error(..))
 --trace1 s v = trace (s ++ show v) v
 
 type CtxVar = Ctx Var
@@ -138,42 +139,6 @@ data Handler = Handler CtxName [CtxVar] [CtxStmt]
     
 goodHandlers :: [(String,[LSLType])]
 goodHandlers = simpleLslEventDescriptors
---     [ 
---     ("at_rot_target", [LLInteger,LLRot,LLRot]),
---     ("at_target", [LLInteger,LLVector,LLVector]),
---     ("attach",[LLKey]),
---     ("changed", [LLInteger]),
---     ("collision",[LLInteger]),
---     ("collision_end",[LLInteger]),
---     ("collision_start",[LLInteger]),
---     ("control",[LLKey,LLInteger,LLInteger]),
---     ("changed", [LLInteger]),
---     ("dataserver",[LLKey,LLString]),
---     ("email",[LLString,LLString,LLString,LLString,LLInteger]),
---     ("http_response",[LLKey,LLInteger,LLList,LLString]),
---     ("land_collision",[LLVector]),
---     ("land_collision_end",[LLVector]),
---     ("land_collision_start",[LLVector]),
---     ("link_message", [LLInteger, LLInteger, LLString, LLKey]),
---     ("listen", [LLInteger, LLString, LLKey, LLString]),
---     ("money",[LLKey,LLInteger]),
---     ("moving_end",[]),
---     ("moving_start",[]),
---     ("no_sensor",[]),
---     ("not_at_rot_target",[]),
---     ("not_at_target",[]),
---     ("object_rez",[LLKey]),
---     ("on_rez", [LLInteger]),
---     ("remote_data", [LLInteger,LLKey,LLKey,LLString,LLInteger,LLString]),
---     ("run_time_permissions", [LLInteger]),
---     ("sensor",[LLInteger]),
---     ("state_entry", []),
---     ("state_exit", []),
---     ("timer", []),
---     ("touch", [LLInteger]),
---     ("touch_start",[LLInteger]),
---     ("touch_end",[LLInteger])
---     ]
     
 data State = State CtxName [Handler]
     deriving (Show,Typeable,Data)
@@ -198,35 +163,26 @@ findFunc name = ctx ("finding function " ++ name) . findM (\ (Func fd _) -> ctxI
 
 lookupModule name lib =
     case lookup name lib of
-        Nothing -> fail ("unknown module")
-        Just (Invalid (_,s)) -> fail ("invalid library (" ++ s ++ ")")
-        Just (Valid m) -> return m
-        
-data Validity a = Invalid (SourceContext,String) | Valid a deriving (Show)
+        Nothing -> throwStrError "unknown module"
+        Just (Left (_,s)) -> throwStrError ("invalid library (" ++ s ++ ")")
+        Just (Right m) -> return m
 
-instance Monad Validity where
-    return = Valid
-    fail = Invalid . ((,)UnknownSourceContext)
-    Valid x >>= k = k x
-    Invalid x >>= _ = Invalid x
-instance MonadPlus Validity where
-    mzero = Invalid undefined
-    (Invalid _) `mplus` y = y
-    x `mplus` y = x
-instance Functor Validity where
-    fmap f (Invalid s) = (Invalid s)
-    fmap f (Valid x) = Valid (f x)
-        
-vfail = Invalid
+type CodeErr = (SourceContext,String)
 
-incontext (ctx,s) (Invalid (ctx',s')) =
+type Validity a = Either CodeErr a
+
+instance Error CodeErr where
+    noMsg = (UnknownSourceContext,"")
+    strMsg s = (UnknownSourceContext,s)
+    
+incontext (ctx,s) (Left (ctx',s')) =
     case ctx' of
-        UnknownSourceContext -> Invalid (ctx,msg)
-        _ -> Invalid (ctx',msg) 
+        UnknownSourceContext -> Left (ctx,msg)
+        _ -> Left (ctx',msg) 
     where msg = if null s then s' else s ++ ": " ++ s'
 incontext _ v = v
 
-incontext' (ctx,s) (Invalid (_,s')) = Invalid (ctx,s ++ ": " ++ s')
+incontext' (ctx,s) (Left (_,s')) = Left (ctx,s ++ ": " ++ s')
 incontext' _ v = v
 
 --------------------
@@ -244,12 +200,12 @@ typeGlobs library gs = foldM (typeGlob library "") ([],[]) gs
 noDupVars :: [String] -> [CtxVar] -> Validity [String]
 noDupVars used [] = return used
 noDupVars used ((Ctx ctx (Var n t)):vs) = do
-    when (n `elem` used) $ vfail (ctx, n ++ " already defined")
+    when (n `elem` used) $ throwError (ctx, n ++ " already defined")
     noDupVars (n:used) vs
 
 checkName :: Maybe SourceContext -> String -> [String] -> Validity ()
 checkName (Just ctx) name names = 
-    when (name `elem` names) $ vfail (ctx, name ++ " is multiply defined")
+    when (name `elem` names) $ throwError (ctx, name ++ " is multiply defined")
 
 noDupGlobs :: Maybe SourceContext -> String -> [String] -> Library -> [GlobDef] -> Validity [String]
 noDupGlobs forceCtx prefix usedNames library [] = return usedNames
@@ -279,25 +235,25 @@ validLSLScript library (LSLScript globs states) =
         return (reverse globvars,funcs,states)
     where snames = let sname (State cn _) = ctxItem cn in map sname states
 validGlob _ vars funcDecs (globvars,funcs,imports,namesUsed) (GV v mexpr) =
-    do when (isConstant $ varName v') $ vfail (srcCtx v, varName v' ++ " is a predefined constant")
+    do when (isConstant $ varName v') $ throwError (srcCtx v, varName v' ++ " is a predefined constant")
        -- find the vars that are defined prior to this global variable -- only one of these
        -- vars may be used to initialize the global variable.
-       when (varName v' `elem` namesUsed) $ vfail (srcCtx v, varName v' ++ " is already defined")
+       when (varName v' `elem` namesUsed) $ throwError (srcCtx v, varName v' ++ " is already defined")
        let (vars',_) = break (\ var -> varName var == varName v') vars
        case mexpr of
            Nothing -> return (GDecl v' Nothing:globvars,funcs,imports, (varName v'):namesUsed)
            Just expr -> do
                t <- validCtxSimple vars' expr
                let vt = varType v'
-               when (not (matchTypes vt t)) $ vfail (srcCtx expr, "expression not of the correct type")
+               when (not (matchTypes vt t)) $ throwError (srcCtx expr, "expression not of the correct type")
                return ((GDecl v' $ Just (ctxItem expr)):globvars,funcs,imports, (varName v'):namesUsed)
     where v' = ctxItem v
 validGlob _ vars funcDecs (globvars,funcs,imports,namesUsed) (GF f@(Func (FuncDec name t params) statements)) =
     do  noDupVars [] params
-        when (ctxItem name `elem` namesUsed) $ vfail (srcCtx name, ctxItem name ++ " is already defined")
+        when (ctxItem name `elem` namesUsed) $ throwError (srcCtx name, ctxItem name ++ " is already defined")
         returns <- validStatements False [] funcDecs vars t [] [[],params'] statements
         when (not returns && t /= LLVoid) $
-            vfail (srcCtx name, "function " ++ (ctxItem name) ++ ": not all code paths return a value")
+            throwError (srcCtx name, "function " ++ (ctxItem name) ++ ": not all code paths return a value")
         return (globvars,f:funcs,imports,(ctxItem name):namesUsed)
     where params' = ctxItems params
 validGlob library vars funcDecs vstate@(globvars,funcs,imports,namesUsed) (GI (Ctx ctx name) bindings prefix) =
@@ -315,12 +271,12 @@ validGlob library vars funcDecs vstate@(globvars,funcs,imports,namesUsed) (GI (C
 
 rewriteGlob _ _ renames vars (globvars,funcs,imports,namesUsed) (GF (Func (FuncDec name t params) statements)) =
     do  name' <- incontext (srcCtx name,  "renaming function " ++ ctxItem name ++ ", " ++ show renames) $ lookupM (ctxItem name) renames
-        when (name' `elem` namesUsed) $ fail (name' ++ " imported from module is already defined")
+        when (name' `elem` namesUsed) $ throwStrError (name' ++ " imported from module is already defined")
         let rewrittenFunc = (Func (FuncDec (Ctx (srcCtx name) name') t params) $ rewriteStatements 0 renames statements)
         return (globvars,rewrittenFunc:funcs,imports,name':namesUsed)
 rewriteGlob _ _ renames vars (globvars,funcs,imports,namesUsed) (GV (Ctx ctx (Var name t)) mexpr) =
     do  name' <- incontext (ctx,"renaming variable " ++ name) $ lookupM name renames
-        when (name' `elem` namesUsed) $ fail (name' ++ " imported from module is already defined")
+        when (name' `elem` namesUsed) $ throwStrError (name' ++ " imported from module is already defined")
         let rewrittenGlobVar = GDecl (Var name' t) $
                 case mexpr of
                     Nothing -> Nothing
@@ -342,18 +298,18 @@ rewriteGlob prefix0 library renames vars vstate@(globvars,funcs,imports,namesUse
 
 validBindings vars freevars bindings = 
     if length freevars /= length bindings then
-        fail ("wrong number of bindings in import: " ++ (show $ length freevars) ++ " required")
+        throwStrError ("wrong number of bindings in import: " ++ (show $ length freevars) ++ " required")
     else let f [] = return ()
              f ((x,y):xys) = 
                 case (findType x (ctxItems freevars), findType y vars) of
-                    (Nothing,_) -> fail ("free variable " ++ x ++ " not found")
-                    (_,Nothing) -> fail ("global variable " ++ y ++ " not found")
-                    (Just t0,Just t1) | not (matchTypes t0 t1) -> fail ("types of " ++ x ++ " and " ++ y ++ " don't match")
+                    (Nothing,_) -> throwStrError ("free variable " ++ x ++ " not found")
+                    (_,Nothing) -> throwStrError ("global variable " ++ y ++ " not found")
+                    (Just t0,Just t1) | not (matchTypes t0 t1) -> throwStrError ("types of " ++ x ++ " and " ++ y ++ " don't match")
                             | otherwise -> f xys
          in f bindings
 
 validState snames used vars funcs (State (Ctx ctx name) handlers) =
-    do when (name `elem` used) $ vfail (ctx, name ++ " already used")
+    do when (name `elem` used) $ throwError (ctx, name ++ " already used")
        incontext (ctx,"") $ validHandlers snames [] funcs vars handlers
        return name
        
@@ -370,7 +326,7 @@ validCast t0 t1 =
                       (LLString,LLKey),(LLKey,LLString),
                       (LLRot,LLString),(LLString,LLRot),
                       (LLList,LLString),(LLString,LLList)] in
-    do when (t0 /= t1 && (t0,t1) `notElem` validCasts) $ fail ("can't cast from " ++ (lslTypeString t0) ++ " to " ++ (lslTypeString t1))
+    do when (t0 /= t1 && (t0,t1) `notElem` validCasts) $ throwStrError ("can't cast from " ++ (lslTypeString t0) ++ " to " ++ (lslTypeString t1))
 
 validCtxSimple :: [Var] -> Ctx Expr -> Validity LSLType
 validCtxSimple vars (Ctx ctx expr) = incontext (ctx,"") $ validSimple vars expr
@@ -384,24 +340,24 @@ validSimple vars (Get (Ctx ctx name,All)) =
     (do (Var _ t) <- incontext (ctx, "variable " ++ name) $ findM (\ v -> varName v == name) vars
         return t)
     `mplus` (findConstType name)
-validSimple vars (Get (Ctx ctx name,_)) = vfail (ctx,"can't access vector/rotation component in global variable initialization")
+validSimple vars (Get (Ctx ctx name,_)) = throwError (ctx,"can't access vector/rotation component in global variable initialization")
 validSimple vars (ListExpr []) = return LLList
 validSimple vars (ListExpr (e:es)) = 
     do t <- validCtxSimple vars e
-       when (t == LLList) $ vfail (srcCtx e,"lists cannot contain other lists")
+       when (t == LLList) $ throwError (srcCtx e,"lists cannot contain other lists")
        validSimple vars (ListExpr es)
 validSimple vars (VecExpr e1 e2 e3) = validSimpleStructure vars LLVector [e1,e2,e3]
 validSimple vars (RotExpr e1 e2 e3 e4) = validSimpleStructure vars LLRot [e1,e2,e3,e4]
 validSimple vars (Neg e) = 
     do t <- validCtxSimple vars e
-       when (t `notElem` [LLFloat, LLInteger]) $ vfail (srcCtx e,"operator only applicable to integers and floats in this context")
+       when (t `notElem` [LLFloat, LLInteger]) $ throwError (srcCtx e,"operator only applicable to integers and floats in this context")
        return t
-validSimple vars e = fail ("expression is not valid in a static context.")
+validSimple vars e = throwStrError ("expression is not valid in a static context.")
 
 validSimpleStructure vars t [] = return t
 validSimpleStructure vars t (e:es) =
     do  t' <- validCtxSimple vars e
-        when (t' `notElem` [LLFloat,LLInteger]) $ vfail (srcCtx e, "literal of type " ++
+        when (t' `notElem` [LLFloat,LLInteger]) $ throwError (srcCtx e, "literal of type " ++
              (lslTypeString t') ++ " not a valid element of " ++ (lslTypeString t))
         validSimpleStructure vars t es
 
@@ -412,26 +368,26 @@ validExpression (Cast t expr) funcs vars locals  =
       return t
 validExpression (Get ((Ctx ctx name),component)) funcs vars locals =
    case (findType name (concat locals ++ vars) `mplus` findConstType name,component) of
-       (Nothing,_) -> vfail (ctx, "undefined variable or constant: " ++ name)
+       (Nothing,_) -> throwError (ctx, "undefined variable or constant: " ++ name)
        (Just LLRot,All) -> return LLRot
        (Just LLRot,_) -> return LLFloat
        (Just LLVector,All) -> return LLVector
-       (Just LLVector,S) -> vfail (ctx,"s is not a valid component of a vector")
+       (Just LLVector,S) -> throwError (ctx,"s is not a valid component of a vector")
        (Just LLVector,_) -> return LLFloat
        (Just t,All) -> return t
-       (Just t,_) -> vfail (ctx,"only vectors and rotations have components")
+       (Just t,_) -> throwError (ctx,"only vectors and rotations have components")
 validExpression (Call name exprs) funcs vars locals = validCall funcs vars locals name exprs
 validExpression (Not expr) funcs vars locals =
     do t <- validCtxExpr expr funcs vars locals
-       when (t /= LLInteger) $ vfail (srcCtx expr, "expression is not an integer expression, which is required for applying the Not operator")
+       when (t /= LLInteger) $ throwError (srcCtx expr, "expression is not an integer expression, which is required for applying the Not operator")
        return t
 validExpression (Neg expr) funcs vars locals =
     do t <- validCtxExpr expr funcs vars locals
-       when (t == LLList) $ vfail (srcCtx expr, "operator not applicable to list type")
+       when (t == LLList) $ throwError (srcCtx expr, "operator not applicable to list type")
        return t
 validExpression (Inv expr) funcs vars locals =
     do t <- validCtxExpr expr funcs vars locals
-       when (t /= LLInteger) $ vfail (srcCtx expr, "expression is not an integer expression, which is required for applying the inverse operator")
+       when (t /= LLInteger) $ throwError (srcCtx expr, "expression is not an integer expression, which is required for applying the inverse operator")
        return t
 validExpression plus@(Add expr1 expr2) funcs vars locals =
     do  (t1,t2) <- validEach (expr1,expr2) funcs vars locals
@@ -643,20 +599,20 @@ validExpression (VecExpr xExpr yExpr zExpr) funcs vars locals =
     do  xt <- validCtxExpr xExpr funcs vars locals
         yt <- validCtxExpr yExpr funcs vars locals
         zt <- validCtxExpr zExpr funcs vars locals
-        when (not (all (`elem` [LLInteger,LLFloat]) [xt,yt,zt])) $ fail "invalid components for vector"
+        when (not (all (`elem` [LLInteger,LLFloat]) [xt,yt,zt])) $ throwStrError "invalid components for vector"
         return LLVector
 validExpression (RotExpr xExpr yExpr zExpr sExpr) funcs vars locals = 
     do  xt <- validCtxExpr xExpr funcs vars locals
         yt <- validCtxExpr yExpr funcs vars locals
         zt <- validCtxExpr zExpr funcs vars locals
         st <- validCtxExpr sExpr funcs vars locals
-        when (not (all (`elem` [LLInteger,LLFloat]) [xt,yt,zt,st])) $ fail "invalid components for rotation"
+        when (not (all (`elem` [LLInteger,LLFloat]) [xt,yt,zt,st])) $ throwStrError "invalid components for rotation"
         return LLRot
 --validExpression x funcs vars locals = error ("what to do with " ++ (show x))
 
 validListExprElement (Ctx ctx e) funcs vars locals = do
     t <- validExpression e funcs vars locals
-    when (t `elem` [LLVoid,LLList]) $ vfail (ctx,"invalid type for list element")
+    when (t `elem` [LLVoid,LLList]) $ throwError (ctx,"invalid type for list element")
     return ()
 
 validMExpression Nothing funcs vars locals = return LLVoid
@@ -671,10 +627,10 @@ validRelExpr (expr1,expr2) funcs vars locals =
            (LLInteger,LLFloat) -> return LLInteger
            (LLFloat, LLInteger) -> return LLInteger
            (LLFloat, LLFloat) -> return LLInteger
-           (t0,t1) -> fail ("operands are of incompatible types")
+           (t0,t1) -> throwStrError ("operands are of incompatible types")
 validBothInteger (expr1, expr2) funcs vars locals =
     do (t1,t2) <- validEach (expr1,expr2) funcs vars locals
-       when (t1 /= LLInteger || t2 /= LLInteger) $ fail ("operands are of incompatible types") 
+       when (t1 /= LLInteger || t2 /= LLInteger) $ throwStrError ("operands are of incompatible types") 
        return LLInteger
 validEach (expr1, expr2) funcs vars locals =
     do t1 <- validCtxExpr expr1 funcs vars locals
@@ -684,17 +640,17 @@ validEach (expr1, expr2) funcs vars locals =
 validNameExpr (Ctx ctx name, expr) funcs vars locals = 
     case (findType name (concat locals ++ vars), 
           validCtxExpr expr funcs vars locals) of
-        (Just t1, Valid t2) -> return (t1,t2)
-        (Nothing, _) -> vfail (ctx, "variable " ++ name ++ " not defined")
-        (_,Invalid s) -> vfail s
+        (Just t1, Right t2) -> return (t1,t2)
+        (Nothing, _) -> throwError (ctx, "variable " ++ name ++ " not defined")
+        (_,Left s) -> throwError s
 validCall funcs vars locals (Ctx ctx fname) exprs =
     do  (FuncDec _ t params) <- findFuncDec fname funcs
         let vArg _ [] [] = return ()
-            vArg _ (p:ps) [] = vfail (ctx, "mismatch of arguments vs. formal paramters in call to function " ++ fname)
-            vArg _ [] (a:as) = vfail (ctx, "mismatch of arguments vs. formal paramters in call to function " ++ fname)
+            vArg _ (p:ps) [] = throwError (ctx, "mismatch of arguments vs. formal paramters in call to function " ++ fname)
+            vArg _ [] (a:as) = throwError (ctx, "mismatch of arguments vs. formal paramters in call to function " ++ fname)
             vArg n (Var name t:ts) (arg:args) = 
               do t' <- validCtxExpr arg funcs vars locals
-                 when (not (matchTypes t t')) $ vfail (ctx, "argument " ++ (show n) ++ " in call to function (" ++ fname ++ ") is of wrong type:" ++ (lslTypeString t') ++ ", should be " ++ (lslTypeString t))
+                 when (not (matchTypes t t')) $ throwError (ctx, "argument " ++ (show n) ++ " in call to function (" ++ fname ++ ") is of wrong type:" ++ (lslTypeString t') ++ ", should be " ++ (lslTypeString t))
                  vArg (n+1) ts args
         vArg 1 (ctxItems params) exprs
         return t
@@ -704,68 +660,68 @@ validCtxExpr (Ctx ctx e) fs vs ls = incontext (ctx,"") $ validExpression e fs vs
 validIncDecOp (n@(Ctx ctx name),c) vars locals op =
     do  failIfNoModify n
         case (findType name (concat locals ++ vars),c) of
-            (Nothing,_) ->  vfail (ctx, "variable " ++ name ++ " not found")
+            (Nothing,_) ->  throwError (ctx, "variable " ++ name ++ " not found")
             (Just LLInteger,All) -> return LLInteger
             (Just LLFloat,All) -> return LLFloat
             (Just LLRot,S) -> return LLFloat
-            (Just LLVector,S) -> vfail (ctx, "s is not a valid component of " ++ name)
-            (Just t,All) -> vfail (ctx, name ++ " is not a valid operand for " ++ op)
+            (Just LLVector,S) -> throwError (ctx, "s is not a valid component of " ++ name)
+            (Just t,All) -> throwError (ctx, name ++ " is not a valid operand for " ++ op)
             (Just LLVector,_) -> return LLFloat
             (Just LLRot,_) -> return LLFloat
-            _ -> vfail (ctx, name ++ " is not a valid operand for " ++ op)
+            _ -> throwError (ctx, name ++ " is not a valid operand for " ++ op)
 
 failIfNoModify (Ctx ctx name) = 
-    when (isConstant name) $ vfail (ctx,"cannot modify " ++ name ++ " because it is a constant")
+    when (isConstant name) $ throwError (ctx,"cannot modify " ++ name ++ " because it is a constant")
 
 incompatibleOperands expr t0 t1 = 
-    fail ("types of the operands aren't compatible (" ++ 
+    throwStrError ("types of the operands aren't compatible (" ++ 
              (lslTypeString t0) ++ " vs. " ++ (lslTypeString t1) ++ ")")
 
 defined :: String -> [Var] -> Bool
 defined n = any (\ (Var n' _) -> n == n')
 
 validStatement _ _ funcs vars rtype labels locals@(scope:scopes) returns (Decl var@(Var name t) expr) = 
-    do when (defined name $ concat locals) $ fail ("variable " ++ name ++ " already defined") -- can't hide another local, even in a surrounding scope
-       when (isConstant name) $ fail ("variable " ++ name ++ " is a predefined constant")
+    do when (defined name $ concat locals) $ throwStrError ("variable " ++ name ++ " already defined") -- can't hide another local, even in a surrounding scope
+       when (isConstant name) $ throwStrError ("variable " ++ name ++ " is a predefined constant")
        case expr of
            Nothing -> return ((var:scope):scopes,returns)
            Just expr' -> do t' <- validCtxExpr expr' funcs vars locals
-                            when (not $ matchTypes t t') $ vfail (srcCtx expr', "type of expression in declaration of " ++ name ++ " does not match " ++ lslTypeString t)
+                            when (not $ matchTypes t t') $ throwError (srcCtx expr', "type of expression in declaration of " ++ name ++ " does not match " ++ lslTypeString t)
                             return ((var:scope):scopes,returns)
 validStatement scallow snames funcs vars rtype labels locals returns (While expr statement) =
     do t <- validCtxExpr expr funcs vars locals
-       --when (t /= LLInteger) $ vfail (srcCtx expr, "expression is not a valid loop condition")
+       --when (t /= LLInteger) $ throwError (srcCtx expr, "expression is not a valid loop condition")
        validStatement scallow snames funcs vars rtype labels locals False statement
        return (locals,returns)
 validStatement scallow snames funcs vars rtype labels locals returns (DoWhile statement expr) =
     do t <- validCtxExpr expr funcs vars locals
-       --when (t /= LLInteger) $ vfail (srcCtx expr, "expression is not a valid loop condition")
+       --when (t /= LLInteger) $ throwError (srcCtx expr, "expression is not a valid loop condition")
        validStatement scallow snames funcs vars rtype labels locals False statement
        return (locals,returns)
 validStatement scallow snames funcs vars rtype labels locals returns (For mexpr1 mexpr2 mexpr3 statement) =
     do  validExpressions mexpr1 funcs vars locals
         validExpressions mexpr3 funcs vars locals
         t <- validMExpression mexpr2 funcs vars locals
-        --when (t /= LLInteger) $ fail ("expression is not a valid loop condition")
+        --when (t /= LLInteger) $ throwStrError ("expression is not a valid loop condition")
         validStatement scallow snames funcs vars rtype labels locals False statement
         return (locals,returns)
 validStatement scallow snames funcs vars rtype labels locals returns (If expr thenStmt elseStmt) =
     do t <- validCtxExpr expr funcs vars locals
-       --when (t /= LLInteger) $ vfail (srcCtx expr, "expression is not a valid 'if' condition")
+       --when (t /= LLInteger) $ throwError (srcCtx expr, "expression is not a valid 'if' condition")
        (_,ret1) <- validStatement scallow snames funcs vars rtype labels locals False thenStmt
        (_,ret2) <- validStatement scallow snames funcs vars rtype labels locals False elseStmt
        return (locals,returns || ret1 && ret2)
 validStatement _ _ _ _ _ _ locals returns NullStmt = return (locals,returns)
 validStatement _ _ funcs vars rtype labels locals _ (Return Nothing) = 
-    do  when (rtype /= LLVoid) (fail "function must return a value")
+    do  when (rtype /= LLVoid) (throwStrError "function must return a value")
         return (locals,True)
 validStatement _ _ funcs vars rtype labels locals _ (Return (Just expr)) = 
     do  t <- validCtxExpr expr funcs vars locals
-        when (t /= rtype && not (all (`elem` [LLString,LLKey]) [t,rtype])) (fail "inappropriate return type for function/handler")
+        when (t /= rtype && not (all (`elem` [LLString,LLKey]) [t,rtype])) (throwStrError "inappropriate return type for function/handler")
         return (locals,True)
 validStatement scallow snames funcs vars rtype labels locals returns (StateChange name) = do
-    when (not scallow) $ fail ("state changes not allowed from this context")
-    when (not (name `elem` snames)) $ fail (name ++ " is not a valid state")
+    when (not scallow) $ throwStrError "state changes not allowed from this context"
+    when (not (name `elem` snames)) $ throwStrError (name ++ " is not a valid state")
     return (locals,returns)
 validStatement _ _ funcs vars rtype labels locals returns (Do expr) = validCtxExpr expr funcs vars locals>>return (locals,returns)
 validStatement scallow snames funcs vars rtype labels locals returns (Compound stmts) = 
@@ -773,7 +729,7 @@ validStatement scallow snames funcs vars rtype labels locals returns (Compound s
         return (locals,returns || returns')
 validStatement _ _ funcs vars rtype labels locals _ (Label _) = return (locals,False)
 validStatement _ _ funcs vars rtype labels locals returns (Jump s) = 
-    do when (s `notElem` concat labels) $ fail ("no such label to jump to: " ++ s)
+    do when (s `notElem` concat labels) $ throwStrError ("no such label to jump to: " ++ s)
        return (locals,returns)
 
 validStatement' scallow snames funcs vars rtype labels locals returns line (Ctx ctx stmt) = 
@@ -787,10 +743,10 @@ validStatements scallow snames funcs vars rtype labels locals stmts =
        return r'
 
 validHandler snames used funcs vars (Handler (Ctx ctx name) args stmts) = 
-    do  when (name `elem` used) $ vfail (ctx,name ++ " already used in state")
+    do  when (name `elem` used) $ throwError (ctx,name ++ " already used in state")
         types <- incontext (ctx,"handler: ") $ lookupM name goodHandlers
-        when (types /= map varType args') $ vfail (ctx,"invalid argument types for handler " ++ name)
-        when (length args /= (length $ nub $ map varName args')) $ vfail (ctx,"not all argument names are unique for handler " ++ name)
+        when (types /= map varType args') $ throwError (ctx,"invalid argument types for handler " ++ name)
+        when (length args /= (length $ nub $ map varName args')) $ throwError (ctx,"not all argument names are unique for handler " ++ name)
         validStatements True snames funcs vars LLVoid [] [[],args'] stmts
         return name
     where args' = ctxItems args
@@ -821,7 +777,7 @@ moduleDependencies lib chain m =
     in  do  (LModule globs _) <- lookupM m lib
             case filtMap f globs of
                 [] -> return []
-                list -> if any (`elem` list) (m:chain) then fail ("circular dependency")
+                list -> if any (`elem` list) (m:chain) then throwStrError "circular dependency"
                         else
                             do deps <- fmap concat (
                                    let chain' = (m:chain) in
@@ -846,22 +802,22 @@ sortModules modules =
        
 validLibrary modules =
     let checkDep (n,m) = case moduleDependencies modules [] n of
-            Valid deps -> (n,Valid (m,deps))
-            Invalid s -> (n,Invalid s)
-        categorize (good,bad) (n,Invalid s) = (good,(n,s):bad)
-        categorize (good,bad) (n,Valid (m,deps)) = ((n,(m,deps)):good,bad)
+            Right deps -> (n,Right (m,deps))
+            Left s -> (n,Left s)
+        categorize (good,bad) (n,Left s) = (good,(n,s):bad)
+        categorize (good,bad) (n,Right (m,deps)) = ((n,(m,deps)):good,bad)
         (good,bad) = foldl categorize ([],[]) $ map checkDep modules
         sorted = sortModules good
         validate augLib (name,m) =
             case validModule (libFromAugLib augLib) m of
-                Invalid s -> (name, Invalid s):augLib
-                Valid gs -> (name,Valid (m,gs)):augLib
-    in (foldl validate [] sorted) ++ (map (\ (n,s) -> (n,Invalid s)) bad)
+                Left s -> (name, Left s):augLib
+                Right gs -> (name,Right (m,gs)):augLib
+    in (foldl validate [] sorted) ++ (map (\ (n,s) -> (n,Left s)) bad)
 
 libFromAugLib :: AugmentedLibrary -> Library
 libFromAugLib augLib = 
-   let f (name,Invalid s) = (name,Invalid s)
-       f (name,Valid (lm,_)) = (name, Valid lm)
+   let f (name,Left s) = (name,Left s)
+       f (name,Right (lm,_)) = (name, Right lm)
    in map f augLib
    
 tstLib = [
