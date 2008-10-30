@@ -23,7 +23,7 @@ public class NewHttpRpcSampleWizard extends Wizard implements INewWizard {
 	private class SampleWizardPage extends LslSampleCreationWizardPage {
 		public SampleWizardPage(IStructuredSelection selection) {
 			super("createSample", selection); //$NON-NLS-1$
-			setTitle("HTTP/RPC Sample");
+			setTitle(Messages.getString("NewHttpRpcSampleWizard.0")); //$NON-NLS-1$
 			setPageComplete(false);
 			setFileExtension(null); //$NON-NLS-1$
 			setDefaultPageImageDescriptor(image());
@@ -48,6 +48,11 @@ public class NewHttpRpcSampleWizard extends Wizard implements INewWizard {
 		protected IStatus validateFileName(String fileName) {
 			return new Status(IStatus.OK,  "lslplus",""); //$NON-NLS-1$ //$NON-NLS-2$
 		}
+
+
+        protected String getNewFileLabel() {
+            return Messages.getString("NewHttpRpcSampleWizard.DirName"); //$NON-NLS-1$
+        }
 	}
 
 	public NewHttpRpcSampleWizard() {

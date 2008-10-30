@@ -23,7 +23,7 @@ public class NewDialogSampleWizard extends Wizard implements INewWizard {
 	private class SampleWizardPage extends LslSampleCreationWizardPage {
 		public SampleWizardPage(IStructuredSelection selection) {
 			super("createSample", selection); //$NON-NLS-1$
-			setTitle("Dialog Example");
+			setTitle("Dialog Example"); //$NON-NLS-1$
 			setPageComplete(false);
 			setFileExtension(null);
 			setDefaultPageImageDescriptor(image());
@@ -45,7 +45,12 @@ public class NewDialogSampleWizard extends Wizard implements INewWizard {
 		    return list;
         }
 
-		protected IStatus validateFileName(String fileName) {
+		protected String getNewFileLabel() {
+            return Messages.getString("NewDialogSampleWizard.1"); //$NON-NLS-1$
+        }
+
+
+        protected IStatus validateFileName(String fileName) {
 			return new Status(IStatus.OK,  "lslplus",""); //$NON-NLS-1$ //$NON-NLS-2$
 		}
 	}
