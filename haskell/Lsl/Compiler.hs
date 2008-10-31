@@ -9,7 +9,7 @@ import IO(Handle,hGetContents,stdin)
 import Lsl.DOMSourceDescriptor(sourceFiles)
 import Lsl.Load(loadModules,loadScripts)
 import Lsl.Render(renderCompiledScript)
-import Lsl.Syntax(AugmentedLibrary(..),CompiledLSLScript(..),Ctx(..),Func(..),Global(..),
+import Language.Lsl.Syntax(AugmentedLibrary(..),CompiledLSLScript(..),Ctx(..),Func(..),Global(..),
                      GlobDef(..),Handler(..),LModule(..),SourceContext(..),State(..),Validity,Var(..),
                      funcName,funcParms,funcType,libFromAugLib)
 import Lsl.Type(lslTypeString)

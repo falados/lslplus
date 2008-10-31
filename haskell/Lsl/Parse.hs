@@ -1,10 +1,7 @@
+{-# OPTIONS_GHC -fwarn-unused-binds #-}
 module Lsl.Parse(
-        lslParser,
-        moduleParser,
         parseScript,
         parseModule,
-        parseScript',
-        parseModule',
         exprParser,
         parseType,
         parseScriptFromString,
@@ -15,7 +12,7 @@ module Lsl.Parse(
 
 import Data.Char(digitToInt)
 import Data.List(intersperse)
-import Lsl.Syntax(Expr(..),Statement(..),Func(..),FuncDec(..),Handler(..),State(..),Ctx(..),SourceContext(..),LSLType(..),
+import Language.Lsl.Syntax(Expr(..),Statement(..),Func(..),FuncDec(..),Handler(..),State(..),Ctx(..),SourceContext(..),LSLType(..),
                   Component(..),Var(..),LModule(..),LSLScript(..),GlobDef(..),goodHandlers)
 import Text.ParserCombinators.Parsec hiding (State)
 import qualified Text.ParserCombinators.Parsec.Token as P
@@ -226,7 +223,7 @@ stringToComponent "z" = Z
 stringToComponent "s" = S
 
 listExpr = do whiteSpace
-              exprs <- (brackets $ sepBy expr comma) <?> "list expression"
+              exprs <- (brackets $ commaSep expr) <?> "list expression"
               return $ ListExpr exprs
               
 -- structExpr = do  whiteSpace
@@ -291,7 +288,7 @@ tailStruct = (try (do e <- expr
                      return e)                 
 callExpr = do 
     name <- ctxify identifier
-    exprs <- parens $ sepBy expr comma
+    exprs <- parens $ commaSep expr
     return $ Call name exprs
               
 castExpr = ctxify $
@@ -428,11 +425,11 @@ stateStatement = do reserved "state"
 forStatement = do reserved "for"
                   char '('
                   whiteSpace
-                  mexpr1 <- sepBy expr comma
+                  mexpr1 <- commaSep expr
                   semi
                   mexpr2 <- option Nothing (expr >>= return . Just)
                   semi
-                  mexpr3 <- sepBy expr comma
+                  mexpr3 <- commaSep expr
                   char ')'
                   whiteSpace
                   stmt <- statement
@@ -509,7 +506,7 @@ param = ctxify $
         do t <- typeName
            id <- identifier
            return $ Var id t
-params = sepBy param comma
+params = commaSep param
 
 -- function = do (t,id,ps) <- try $ do t <- option LLVoid typeName <?> "type name"
 --                                     id <- ctxify identifier <?> "function name"
@@ -541,7 +538,7 @@ gimport = do reserved "$import" <?> "$import keyword"
                               reservedOp "="
                               id1 <- identifier
                               return (id0,id1)
-             bindings <- option [] $ parens $ sepBy binding comma
+             bindings <- option [] $ parens $ commaSep binding
              prefix <- option "" identifier
              semi
              return $ GI id bindings prefix
@@ -562,22 +559,6 @@ moduleParser = do whiteSpace
                   globs <- globals
                   eof
                   return $ LModule globs freevars
-                                
-parseFile p file =
-    let parser = runParser p False "" in
-        do s <- readFile file
-           case parser s of
-               Left err -> do putStr "parse error at: "
-                              print err
-                              fail "parse failed"
-               Right x -> return x
-
-parseFile' p file =
-    do s <- liftIO $ readFile file
-       case parser s of
-           Left err -> return $ Left (show err)
-           Right x -> return  $ Right x
-    where parser = runParser p False ""
 
 parseFromString parser string =
     case runParser parser False "" string of
@@ -589,11 +570,8 @@ parseModuleFromString s = parseFromString moduleParser s
 parseScriptFromString1 s = runParser lslParser True "" s
 parseModuleFromString1 s = runParser moduleParser True "" s
 
-parseScript file = parseFile' lslParser file
-parseModule file = parseFile' moduleParser file
-
-parseModule' file = parseFile'' moduleParser file
-parseScript' file = parseFile'' lslParser file
+parseModule file = parseFile moduleParser file
+parseScript file = parseFile lslParser file
 
 fromParseError :: ParseError -> (SourceContext,String)
 fromParseError err =
@@ -605,7 +583,7 @@ fromParseError err =
                            textName = sourceName pos },
             msg)
 
-parseFile'' p file =
+parseFile p file =
     do s <- liftIO $ readFile file
        case parser s of
            Left err -> return $ Left (fromParseError err)

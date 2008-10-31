@@ -18,8 +18,8 @@ import Lsl.Breakpoint(Breakpoint,BreakpointManager,checkBreakpoint,emptyBreakpoi
 import Lsl.CodeHelper(renderCall)
 import Lsl.FuncSigs(funcSigs)
 import Lsl.InternalLLFuncs(internalLLFuncs)
-import Lsl.Syntax hiding (State)
-import qualified Lsl.Syntax as L
+import Language.Lsl.Syntax hiding (State)
+import qualified Language.Lsl.Syntax as L
 import Lsl.Type(LSLValue,lslValString,lslShowVal,defaultValue)
 import Lsl.Evaluation(EvalResult(..))
 import Lsl.Exec(ExecutionInfo(..),ScriptImage(..),evalSimple,runEval,scriptImage,setupSimple,initStateSimple,frameInfo)

@@ -38,7 +38,7 @@ import Lsl.InternalLLFuncs(internalLLFuncs)
 import Lsl.Key(nullKey)
 import Lsl.Log(LogLevel(..),LogMessage(..))
 import Lsl.Physics(calcAccel,checkIntersections,dampForce,dampTorque,dampZForce,gravC,kin,primMassApprox,rotDyn,totalTorque)
-import Lsl.Syntax(Ctx(..),FuncDec(..),predefFuncs)
+import Language.Lsl.Syntax(Ctx(..),FuncDec(..),predefFuncs)
 import Lsl.Type(LSLValue(..),LSLType(..),defaultValue,isIVal,isLVal,isSVal,
                 lslShowVal,lslTypeString,lslValString,rVal2Rot,rot2RVal,typeOfLSLValue,vVal2Vec,vec2VVal)
 import Lsl.UnitTestWorld(simFunc,hasFunc)

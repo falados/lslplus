@@ -1,7 +1,7 @@
 {-# OPTIONS_GHC -XQuasiQuotes #-}
 module Lsl.BuiltInModules(avEventGen) where
 
-import Lsl.Syntax
+import Language.Lsl.Syntax
 import Lsl.QQ(lslm)
 
 avEventGenAST = [$lslm|$module

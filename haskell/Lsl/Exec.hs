@@ -29,7 +29,7 @@ import Lsl.Breakpoint(Breakpoint(..),StepManager(..),pushStepManagerFrame,popSte
 import Lsl.CodeHelper(renderCall)
 import Lsl.FuncSigs(funcSigs)
 import Lsl.Util(fromInt,lookupM,ctx,findM)
-import Lsl.Syntax(Expr(..),
+import Language.Lsl.Syntax(Expr(..),
                   CompiledLSLScript,
                   Statement(..),
                   Func(..),

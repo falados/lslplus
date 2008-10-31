@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -XDeriveDataTypeable -XTypeSynonymInstances -XFlexibleContexts #-}
-module Lsl.Syntax (
+module Language.Lsl.Syntax (
     -- Types
     Expr(..),
     Var(..),

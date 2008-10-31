@@ -1,7 +1,7 @@
 module Lsl.Render(renderLSLScript,renderCompiledScript) where
 
 import Data.List(foldl',intersperse)
-import Lsl.Syntax(Expr(..),Func(..),FuncDec(..),Global(..),Handler(..),State(..),Statement(..),
+import Language.Lsl.Syntax(Expr(..),Func(..),FuncDec(..),Global(..),Handler(..),State(..),Statement(..),
                   Ctx(..),Var(..),LSLType(..),Component(..),ctxItems,validLSLScript)
 
 renderLSLScript library lslScript = 

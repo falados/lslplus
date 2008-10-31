@@ -5,8 +5,8 @@ module Lsl.Load(
 import Control.Exception(SomeException(..),tryJust)
 import Control.Monad.Error(liftIO)
 import Lsl.BuiltInModules(avEventGen)
-import Lsl.Syntax(validLSLScript,validLibrary,SourceContext(..))
-import Lsl.Parse(parseModule', parseScript')
+import Language.Lsl.Syntax(validLSLScript,validLibrary,SourceContext(..))
+import Lsl.Parse(parseModule, parseScript)
 
 parseFiles p files =
     let parseFile (name,path) =
@@ -18,14 +18,14 @@ parseFiles p files =
     in liftIO $ mapM parseFile files
 
 loadModules files =
-    do parseResults <- parseFiles parseModule' files
+    do parseResults <- parseFiles parseModule files
        let (bad,ok) = splitResults parseResults
        let augLib = validLibrary (avEventGen:ok)
        return (augLib ++ (map (\ (n,err) -> (n,Left err)) bad))
        --return (validated ++ (map (\ (n,err) -> (n,Left err)) bad))
 
 loadScripts library files =
-    do parseResults <- parseFiles parseScript' files
+    do parseResults <- parseFiles parseScript files
        let (bad,ok) = splitResults parseResults
        return $ (map (\ (n,script) -> (n,validLSLScript library script)) ok) ++ 
            (map (\ (n,err) -> (n,Left err)) bad)
