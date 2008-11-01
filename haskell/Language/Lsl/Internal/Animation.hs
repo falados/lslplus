@@ -1,4 +1,4 @@
-module Lsl.Animation(builtInAnimations) where
+module Language.Lsl.Internal.Animation(builtInAnimations) where
 
 builtInAnimations :: [(String,String,Maybe Float)]
 builtInAnimations =

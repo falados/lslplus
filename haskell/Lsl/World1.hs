@@ -23,7 +23,7 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 import qualified Data.IntMap as IM
 
-import Lsl.Animation(builtInAnimations)
+import Language.Lsl.Internal.Animation(builtInAnimations)
 import Lsl.AvEvents(AvatarOutputEvent(..),AvatarInputEvent(..))
 import Lsl.Breakpoint(Breakpoint,emptyBreakpointManager,setStepOverBreakpoint,setStepOutBreakpoint,replaceBreakpoints,
                       setStepBreakpoint,breakpointFile,breakpointLine,checkBreakpoint)
