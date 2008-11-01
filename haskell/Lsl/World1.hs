@@ -24,7 +24,7 @@ import qualified Data.Set as S
 import qualified Data.IntMap as IM
 
 import Language.Lsl.Internal.Animation(builtInAnimations)
-import Lsl.AvEvents(AvatarOutputEvent(..),AvatarInputEvent(..))
+import Language.Lsl.Internal.AvEvents(AvatarOutputEvent(..),AvatarInputEvent(..))
 import Lsl.Breakpoint(Breakpoint,emptyBreakpointManager,setStepOverBreakpoint,setStepOutBreakpoint,replaceBreakpoints,
                       setStepBreakpoint,breakpointFile,breakpointLine,checkBreakpoint)
 import Lsl.CodeHelper(renderCall)
@@ -37,7 +37,7 @@ import Lsl.FuncSigs(funcSigs)
 import Lsl.InternalLLFuncs(internalLLFuncs)
 import Lsl.Key(nullKey)
 import Lsl.Log(LogLevel(..),LogMessage(..))
-import Lsl.Physics(calcAccel,checkIntersections,dampForce,dampTorque,dampZForce,gravC,kin,primMassApprox,rotDyn,totalTorque)
+import Language.Lsl.Internal.Physics(calcAccel,checkIntersections,dampForce,dampTorque,dampZForce,gravC,kin,primMassApprox,rotDyn,totalTorque)
 import Language.Lsl.Syntax(Ctx(..),FuncDec(..),predefFuncs)
 import Lsl.Type(LSLValue(..),LSLType(..),defaultValue,isIVal,isLVal,isSVal,
                 lslShowVal,lslTypeString,lslValString,rVal2Rot,rot2RVal,typeOfLSLValue,vVal2Vec,vec2VVal)

@@ -1,4 +1,4 @@
-module Lsl.ExecInfo(emitExecutionInfo) where
+module Language.Lsl.Internal.ExecInfo(emitExecutionInfo) where
 
 import Lsl.Exec(ExecutionInfo(..),FrameInfo(..))
 import Language.Lsl.Syntax(SourceContext(..))

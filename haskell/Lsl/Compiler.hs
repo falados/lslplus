@@ -7,7 +7,7 @@ module Lsl.Compiler(compile,main0) where
 import Control.Monad(when)
 import IO(Handle,hGetContents,stdin)
 import Lsl.DOMSourceDescriptor(sourceFiles)
-import Lsl.Load(loadModules,loadScripts)
+import Language.Lsl.Internal.Load(loadModules,loadScripts)
 import Lsl.Render(renderCompiledScript)
 import Language.Lsl.Syntax(AugmentedLibrary(..),CompiledLSLScript(..),Ctx(..),Func(..),Global(..),
                      GlobDef(..),Handler(..),LModule(..),SourceContext(..),State(..),Validity,Var(..),

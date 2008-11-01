@@ -1,5 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
-module Lsl.QQ(lslm,lsl) where
+module Language.Lsl.QQ(lslm,lsl) where
 
 import Data.Generics.Aliases(extQ)
 import qualified Language.Haskell.TH as TH

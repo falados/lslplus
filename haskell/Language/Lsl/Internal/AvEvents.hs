@@ -1,4 +1,4 @@
-module Lsl.AvEvents(AvatarOutputEvent(..),
+module Language.Lsl.Internal.AvEvents(AvatarOutputEvent(..),
                     AvatarInputEvent(..)) where
 
 data AvatarOutputEvent =

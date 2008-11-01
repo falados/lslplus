@@ -2,7 +2,7 @@
 module Lsl.BuiltInModules(avEventGen) where
 
 import Language.Lsl.Syntax
-import Lsl.QQ(lslm)
+import Language.Lsl.QQ(lslm)
 
 avEventGenAST = [$lslm|$module
         string mkTouch(string primKey, float duration) {

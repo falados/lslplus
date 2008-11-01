@@ -1,4 +1,4 @@
-module Lsl.Load(
+module Language.Lsl.Internal.Load(
     loadScripts,
     loadModules) where
 

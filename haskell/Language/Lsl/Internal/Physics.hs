@@ -1,4 +1,4 @@
-module Lsl.Physics(
+module Language.Lsl.Internal.Physics(
                    bbIntersect,
                    kin,
                    rotDyn,

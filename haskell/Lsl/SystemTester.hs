@@ -11,7 +11,7 @@ import Lsl.Compiler(compile)
 import Lsl.DOMProcessing(Content(..),Document(..),Element(..),ElemAcceptor(..),
                          elementList,simple,findElement,findOptionalElement,match,xmlParse)
 import Lsl.DOMSourceDescriptor(sourceFilesElement)
-import Lsl.ExecInfo(emitExecutionInfo)
+import Language.Lsl.Internal.ExecInfo(emitExecutionInfo)
 import Lsl.Log(LogMessage(..),logLevelToName)
 import Language.Lsl.Syntax(libFromAugLib)
 import Lsl.Util(unescape,processLinesS)
