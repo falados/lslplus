@@ -32,7 +32,7 @@
    modelled.  Thus, the operation of all other LSL predefined functions is specific to
    the implementation of the 'world', but these are not.
 -}
-module Lsl.InternalLLFuncs(
+module Language.Lsl.Internal.InternalLLFuncs(
     -- String Functions
     llStringLength,
     llGetSubString,

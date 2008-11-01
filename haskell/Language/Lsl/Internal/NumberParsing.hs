@@ -1,4 +1,4 @@
-module Lsl.NumberParsing(readHexFloat,readInt) where
+module Language.Lsl.Internal.NumberParsing(readHexFloat,readInt) where
 
 import Data.Char(digitToInt)
 import Text.ParserCombinators.Parsec(GenParser(..),(<|>),char,digit,hexDigit,many,many1,oneOf,option,parse,satisfy)

@@ -1,4 +1,4 @@
-module Lsl.Render(renderLSLScript,renderCompiledScript) where
+module Language.Lsl.Render(renderLSLScript,renderCompiledScript) where
 
 import Data.List(foldl',intersperse)
 import Language.Lsl.Syntax(Expr(..),Func(..),FuncDec(..),Global(..),Handler(..),State(..),Statement(..),

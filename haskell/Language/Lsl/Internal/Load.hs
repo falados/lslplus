@@ -4,7 +4,7 @@ module Language.Lsl.Internal.Load(
 
 import Control.Exception(SomeException(..),tryJust)
 import Control.Monad.Error(liftIO)
-import Lsl.BuiltInModules(avEventGen)
+import Language.Lsl.Internal.BuiltInModules(avEventGen)
 import Language.Lsl.Syntax(validLSLScript,validLibrary,SourceContext(..))
 import Lsl.Parse(parseModule, parseScript)
 

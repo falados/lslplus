@@ -1,4 +1,4 @@
-module Lsl.Log(LogLevel(..), LogMessage(..),logLevelToName) where
+module Language.Lsl.Internal.Log(LogLevel(..), LogMessage(..),logLevelToName) where
 
 data LogLevel = LogTrace | LogDebug | LogInfo | LogWarn | LogError
     deriving (Show,Eq,Ord)

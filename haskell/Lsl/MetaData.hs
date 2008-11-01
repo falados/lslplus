@@ -5,7 +5,7 @@ module Lsl.MetaData where
 import Lsl.Constants(Constant(..),allConstants)
 import Lsl.EventSigs(lslEventDescriptors)
 import Lsl.FuncSigs(funcMeta)
-import Lsl.InternalLLFuncs(internalLLFuncNames)
+import Language.Lsl.Internal.InternalLLFuncs(internalLLFuncNames)
 import Lsl.Type(LSLValue(..),LSLType(..),lslTypeString,lslValString,typeOfLSLValue)
 import qualified Lsl.XmlCreate as X
 

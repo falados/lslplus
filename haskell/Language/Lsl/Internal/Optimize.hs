@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
-module Lsl.Optimize(optimizeScript) where
+module Language.Lsl.Internal.Optimize(optimizeScript) where
 
 import Language.Lsl.Syntax(Expr(..),Statement(..),Global(..),Func(..),FuncDec(..),State(..),Ctx(..),Handler(..))
 

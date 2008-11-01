@@ -38,7 +38,7 @@ module Lsl.Type(
 import Control.Monad.Error(MonadError)
 import Data.Data(Data,Typeable)
 import Data.List(intersperse)
-import Lsl.NumberParsing(readInt,readHexFloat)
+import Language.Lsl.Internal.NumberParsing(readInt,readHexFloat)
 import Lsl.Key(nullKey)
 import Lsl.Util(lookupM,readM,cross,quaternionMultiply,quaternionToMatrix,fromInt)
 import Lsl.DOMProcessing(Element(..),ElemAcceptor(..),findValue,elementsOnly,simple,attrString,acceptList)

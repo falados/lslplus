@@ -6,13 +6,13 @@ import Control.Monad.Error(MonadError(..),ErrorT(..))
 import Control.Monad.State(evalState)
 import qualified Data.Map as M
 import IO
-import Lsl.BreakpointsDeserialize(breakpointsElement)
+import Language.Lsl.Internal.BreakpointsDeserialize(breakpointsElement)
 import Lsl.Compiler(compile)
 import Lsl.DOMProcessing(Content(..),Document(..),Element(..),ElemAcceptor(..),
                          elementList,simple,findElement,findOptionalElement,match,xmlParse)
 import Lsl.DOMSourceDescriptor(sourceFilesElement)
 import Language.Lsl.Internal.ExecInfo(emitExecutionInfo)
-import Lsl.Log(LogMessage(..),logLevelToName)
+import Language.Lsl.Internal.Log(LogMessage(..),logLevelToName)
 import Language.Lsl.Syntax(libFromAugLib)
 import Lsl.Util(unescape,processLinesS)
 import Lsl.World1(SimCommand(..),SimEvent(..),SimEventArg(..),SimStatus(..),SimStateInfo(..),simStep)

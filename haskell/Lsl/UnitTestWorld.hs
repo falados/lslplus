@@ -17,13 +17,13 @@ import Lsl.Breakpoint(Breakpoint,BreakpointManager,checkBreakpoint,emptyBreakpoi
                       breakpointFile,breakpointLine)
 import Lsl.CodeHelper(renderCall)
 import Lsl.FuncSigs(funcSigs)
-import Lsl.InternalLLFuncs(internalLLFuncs)
+import Language.Lsl.Internal.InternalLLFuncs(internalLLFuncs)
 import Language.Lsl.Syntax hiding (State)
 import qualified Language.Lsl.Syntax as L
 import Lsl.Type(LSLValue,lslValString,lslShowVal,defaultValue)
 import Lsl.Evaluation(EvalResult(..))
 import Lsl.Exec(ExecutionInfo(..),ScriptImage(..),evalSimple,runEval,scriptImage,setupSimple,initStateSimple,frameInfo)
-import Lsl.TestResult(TestResult(..))
+import Language.Lsl.Internal.TestResult(TestResult(..))
 import Lsl.UnitTest(EntryPoint(..),LSLUnitTest(..),ExpectationMode(..),FuncCallExpectations(..),expectedReturns,removeExpectation)
 import Lsl.Util(findM,ctx)
 

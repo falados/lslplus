@@ -8,7 +8,7 @@ import Control.Monad(when)
 import IO(Handle,hGetContents,stdin)
 import Lsl.DOMSourceDescriptor(sourceFiles)
 import Language.Lsl.Internal.Load(loadModules,loadScripts)
-import Lsl.Render(renderCompiledScript)
+import Language.Lsl.Render(renderCompiledScript)
 import Language.Lsl.Syntax(AugmentedLibrary(..),CompiledLSLScript(..),Ctx(..),Func(..),Global(..),
                      GlobDef(..),Handler(..),LModule(..),SourceContext(..),State(..),Validity,Var(..),
                      funcName,funcParms,funcType,libFromAugLib)
@@ -18,7 +18,7 @@ import System.FilePath(replaceExtension)
 import System.Time(calendarTimeToString,getClockTime,toCalendarTime)
 import Text.XML.HaXml(Document(..),xmlParse) --hiding (when,xmlEscape)
 import Text.XML.HaXml.Posn(Posn(..))
-import Lsl.Optimize(optimizeScript) 
+import Language.Lsl.Internal.Optimize(optimizeScript) 
 import Lsl.XmlCreate hiding (emit)
 import qualified Lsl.XmlCreate as E
 

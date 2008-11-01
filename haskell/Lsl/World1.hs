@@ -34,9 +34,9 @@ import Lsl.EventSigs(EventAdditionalData(..),EventDelivery(..),lslEventDescripto
 import Lsl.Exec(ExecutionState(..),ExecutionInfo(ExecutionInfo),ScriptImage(..),executeLsl,frameInfo,hardReset,hasActiveHandler,initLSLScript)
 import Lsl.ExpressionHandler(evaluateExpression)
 import Lsl.FuncSigs(funcSigs)
-import Lsl.InternalLLFuncs(internalLLFuncs)
+import Language.Lsl.Internal.InternalLLFuncs(internalLLFuncs)
 import Lsl.Key(nullKey)
-import Lsl.Log(LogLevel(..),LogMessage(..))
+import Language.Lsl.Internal.Log(LogLevel(..),LogMessage(..))
 import Language.Lsl.Internal.Physics(calcAccel,checkIntersections,dampForce,dampTorque,dampZForce,gravC,kin,primMassApprox,rotDyn,totalTorque)
 import Language.Lsl.Syntax(Ctx(..),FuncDec(..),predefFuncs)
 import Lsl.Type(LSLValue(..),LSLType(..),defaultValue,isIVal,isLVal,isSVal,

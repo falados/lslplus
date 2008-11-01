@@ -1,4 +1,4 @@
-module Lsl.TestResult(TestResult(..),resultToXML, emitTestResult) where
+module Language.Lsl.Internal.TestResult(TestResult(..),resultToXML, emitTestResult) where
 
 import Lsl.XmlCreate(emit,emitSimple)
 import qualified Lsl.XmlCreate as X
