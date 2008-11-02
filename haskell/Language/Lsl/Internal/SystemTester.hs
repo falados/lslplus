@@ -15,7 +15,7 @@ import Language.Lsl.Internal.ExecInfo(emitExecutionInfo)
 import Language.Lsl.Internal.Log(LogMessage(..),logLevelToName)
 import Language.Lsl.Syntax(libFromAugLib)
 import Language.Lsl.Internal.Util(unescape,processLinesS)
-import Lsl.World1(SimCommand(..),SimEvent(..),SimEventArg(..),SimStatus(..),SimStateInfo(..),simStep)
+import Language.Lsl.Sim(SimCommand(..),SimEvent(..),SimEventArg(..),SimStatus(..),SimStateInfo(..),simStep)
 import Lsl.WorldDef(worldElement)
 import Language.Lsl.Internal.XmlCreate(emit,emitList,emitSimple)
 

@@ -7,7 +7,7 @@ import IO
 
 import Language.Lsl.Internal.Constants
 import Language.Lsl.Internal.DOMProcessing
-import Lsl.Parse
+import Language.Lsl.Parse
 import Language.Lsl.Syntax
 import Language.Lsl.Internal.Type
 import Language.Lsl.Internal.Util

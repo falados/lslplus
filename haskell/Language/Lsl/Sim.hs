@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -XFlexibleContexts -fwarn-unused-binds #-}
-module Lsl.World1(SimStatus(..), 
+module Language.Lsl.Sim(SimStatus(..), 
                   SimStateInfo(..),
                   SimCommand(..),
                   SimInputEventDefinition(..),

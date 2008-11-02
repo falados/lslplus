@@ -4,7 +4,7 @@ import Control.Monad.Identity(Identity(..))
 import qualified Data.Map as M
 
 import Language.Lsl.Internal.Type(lslTypeString)
-import Lsl.World1(SimInputEventDefinition(..),SimParam(..),SimParamType(..),eventDescriptors)
+import Language.Lsl.Sim(SimInputEventDefinition(..),SimParam(..),SimParamType(..),eventDescriptors)
 import Language.Lsl.Internal.XmlCreate(emit,emitList,emitSimple)
 
 printSimMeta = putStr buildSimMetaData

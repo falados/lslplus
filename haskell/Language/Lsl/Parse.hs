@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -fwarn-unused-binds #-}
-module Lsl.Parse(
+module Language.Lsl.Parse(
         parseScript,
         parseModule,
         exprParser,

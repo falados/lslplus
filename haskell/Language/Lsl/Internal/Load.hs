@@ -6,7 +6,7 @@ import Control.Exception(SomeException(..),tryJust)
 import Control.Monad.Error(liftIO)
 import Language.Lsl.Internal.BuiltInModules(avEventGen)
 import Language.Lsl.Syntax(validLSLScript,validLibrary,SourceContext(..))
-import Lsl.Parse(parseModule, parseScript)
+import Language.Lsl.Parse(parseModule, parseScript)
 
 parseFiles p files =
     let parseFile (name,path) =
