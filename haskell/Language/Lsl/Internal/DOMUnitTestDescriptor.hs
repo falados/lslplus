@@ -7,7 +7,7 @@ import Language.Lsl.Internal.DOMProcessing(ElemAcceptor(..),Element(..),
                          attValueString,elementList,elementsOnly,findElement,findOptionalElement,matchChoice,simple)
 import Language.Lsl.Internal.ExpressionHandler(evaluateExpression)
 import Language.Lsl.Internal.Type(LSLType(..),LSLValue(..))
-import Lsl.UnitTest(LSLUnitTest(..),EntryPoint(..),FuncCallExpectations(..),ExpectationMode(..))
+import Language.Lsl.UnitTest(LSLUnitTest(..),EntryPoint(..),FuncCallExpectations(..),ExpectationMode(..))
 
 --trace1 v = trace (show v) v
 

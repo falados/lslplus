@@ -1,4 +1,4 @@
-module Lsl.UnitTest(
+module Language.Lsl.UnitTest(
         LSLUnitTest(..),
         FuncCallExpectations(..),
         ExpectationMode(..),
