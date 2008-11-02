@@ -25,9 +25,9 @@ import Data.List(intersperse,find)
 import qualified Data.Map as M
 import Data.Maybe(isJust)
 
-import Lsl.Breakpoint(Breakpoint(..),StepManager(..),pushStepManagerFrame,popStepManagerFrame,emptyStepManager,mkBreakpoint)
-import Lsl.CodeHelper(renderCall)
-import Lsl.FuncSigs(funcSigs)
+import Language.Lsl.Internal.Breakpoint(Breakpoint(..),StepManager(..),pushStepManagerFrame,popStepManagerFrame,emptyStepManager,mkBreakpoint)
+import Language.Lsl.Internal.CodeHelper(renderCall)
+import Language.Lsl.Internal.FuncSigs(funcSigs)
 import Lsl.Util(fromInt,lookupM,ctx,findM)
 import Language.Lsl.Syntax(Expr(..),
                   CompiledLSLScript,
@@ -53,7 +53,7 @@ import Lsl.Type(LSLType(..),LSLValue(..),typeOfLSLComponent,typeOfLSLValue,toFlo
                 parseInt,parseFloat,invRot,rotMul,vcross,Component(..),lslValueComponent)
 import Lsl.Key(nullKey,nextKey)
 import Lsl.Evaluation(EvalResult(..),Event(..),ScriptInfo(..))
-import Lsl.Constants(findConstVal,llcZeroRotation,llcZeroVector)
+import Language.Lsl.Internal.Constants(findConstVal,llcZeroRotation,llcZeroVector)
 import Control.Monad(foldM_,when,mplus,msum,join,zipWithM)
 import Control.Monad.State(lift,StateT(..))
 import Control.Monad.Error(ErrorT(..))

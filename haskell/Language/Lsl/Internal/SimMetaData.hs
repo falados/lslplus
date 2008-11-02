@@ -1,4 +1,4 @@
-module Lsl.SimMetaData where
+module Language.Lsl.Internal.SimMetaData where
 
 import Control.Monad.Identity(Identity(..))
 import qualified Data.Map as M

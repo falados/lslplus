@@ -1,4 +1,4 @@
-module Lsl.Constants where
+module Language.Lsl.Internal.Constants where
 
 import Data.Bits((.|.),shiftL)
 import Lsl.Type(LSLValue(..),typeOfLSLValue)

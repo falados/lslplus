@@ -1,10 +1,10 @@
-module Lsl.MetaData where
+module Language.Lsl.Internal.MetaData where
 
 -- constructs meta-data about the LSL+ language, and emits it as XML.
 
-import Lsl.Constants(Constant(..),allConstants)
-import Lsl.EventSigs(lslEventDescriptors)
-import Lsl.FuncSigs(funcMeta)
+import Language.Lsl.Internal.Constants(Constant(..),allConstants)
+import Language.Lsl.Internal.EventSigs(lslEventDescriptors)
+import Language.Lsl.Internal.FuncSigs(funcMeta)
 import Language.Lsl.Internal.InternalLLFuncs(internalLLFuncNames)
 import Lsl.Type(LSLValue(..),LSLType(..),lslTypeString,lslValString,typeOfLSLValue)
 import qualified Lsl.XmlCreate as X

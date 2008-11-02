@@ -5,7 +5,7 @@ import Control.Monad.Error
 import Data.Bits
 import IO
 
-import Lsl.Constants
+import Language.Lsl.Internal.Constants
 import Lsl.DOMProcessing
 import Lsl.Parse
 import Language.Lsl.Syntax

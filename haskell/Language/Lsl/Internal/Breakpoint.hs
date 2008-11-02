@@ -1,4 +1,4 @@
-module Lsl.Breakpoint(
+module Language.Lsl.Internal.Breakpoint(
     Breakpoint,
     BreakpointManager,
     StepManager,

@@ -16,7 +16,7 @@ module Language.Lsl.Internal.Physics(
 import Lsl.Math(add3d,axisAngleFromRotation,axisAngleToRotation,diff3d,
                 invertQuaternion,mag3d,norm3d,quaternionMultiply,scale3d)
 import Lsl.WorldDef(Prim(..),PrimType(..))
-import Lsl.Constants(cPrimTypeBox,cPrimTypeCylinder,cPrimTypeSculpt,cPrimTypeSphere)
+import Language.Lsl.Internal.Constants(cPrimTypeBox,cPrimTypeCylinder,cPrimTypeSculpt,cPrimTypeSphere)
 
 rangeOverlap (mn0,mx0) (mn1,mx1) = mn0 >= mn1 && mn0 <= mx1 || mx0 >= mn1 && mx0 <= mx1 || mn0 <= mn1 && mx0 >= mx1
 bbIntersect ((mnX0,mnY0,mnZ0),(mxX0,mxY0,mxZ0)) ((mnX1,mnY1,mnZ1),(mxX1,mxY1,mxZ1)) =

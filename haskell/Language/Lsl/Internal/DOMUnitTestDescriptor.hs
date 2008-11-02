@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -XFlexibleContexts #-}
-module Lsl.DOMUnitTestDescriptor(testsElement) where
+module Language.Lsl.Internal.DOMUnitTestDescriptor(testsElement) where
 
 import Control.Monad.Error(MonadError(..))
 import Data.List(find,isSuffixOf)

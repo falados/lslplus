@@ -25,15 +25,15 @@ import qualified Data.IntMap as IM
 
 import Language.Lsl.Internal.Animation(builtInAnimations)
 import Language.Lsl.Internal.AvEvents(AvatarOutputEvent(..),AvatarInputEvent(..))
-import Lsl.Breakpoint(Breakpoint,emptyBreakpointManager,setStepOverBreakpoint,setStepOutBreakpoint,replaceBreakpoints,
+import Language.Lsl.Internal.Breakpoint(Breakpoint,emptyBreakpointManager,setStepOverBreakpoint,setStepOutBreakpoint,replaceBreakpoints,
                       setStepBreakpoint,breakpointFile,breakpointLine,checkBreakpoint)
-import Lsl.CodeHelper(renderCall)
-import Lsl.Constants
+import Language.Lsl.Internal.CodeHelper(renderCall)
+import Language.Lsl.Internal.Constants
 import Lsl.Evaluation(ScriptInfo(..),Event(..),EvalResult(..))
-import Lsl.EventSigs(EventAdditionalData(..),EventDelivery(..),lslEventDescriptors)
+import Language.Lsl.Internal.EventSigs(EventAdditionalData(..),EventDelivery(..),lslEventDescriptors)
 import Lsl.Exec(ExecutionState(..),ExecutionInfo(ExecutionInfo),ScriptImage(..),executeLsl,frameInfo,hardReset,hasActiveHandler,initLSLScript)
 import Lsl.ExpressionHandler(evaluateExpression)
-import Lsl.FuncSigs(funcSigs)
+import Language.Lsl.Internal.FuncSigs(funcSigs)
 import Language.Lsl.Internal.InternalLLFuncs(internalLLFuncs)
 import Lsl.Key(nullKey)
 import Language.Lsl.Internal.Log(LogLevel(..),LogMessage(..))

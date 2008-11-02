@@ -37,9 +37,9 @@ module Language.Lsl.Syntax (
     isTextLocation) where
 
 import Lsl.Type(Component(..),LSLType(..),lslTypeString)
-import Lsl.Constants(isConstant,findConstType)
-import Lsl.EventSigs(simpleLslEventDescriptors)
-import Lsl.FuncSigs(funcSigs)
+import Language.Lsl.Internal.Constants(isConstant,findConstType)
+import Language.Lsl.Internal.EventSigs(simpleLslEventDescriptors)
+import Language.Lsl.Internal.FuncSigs(funcSigs)
 import Data.Data(Data,Typeable)
 import Data.List(find,sort,sortBy,nub)
 import Lsl.Util(ctx,findM,lookupM,filtMap,throwStrError)

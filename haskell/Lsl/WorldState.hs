@@ -169,7 +169,7 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 
 import qualified Language.Lsl.Internal.AvEvents as AvEvent
-import Lsl.Breakpoint(BreakpointManager(..))
+import Language.Lsl.Internal.Breakpoint(BreakpointManager(..))
 import Lsl.Evaluation(Event(..),ScriptInfo(..),EvalResult(..))
 import Lsl.Exec(hasActiveHandler)
 import Lsl.Key(mkKey)

@@ -1,4 +1,4 @@
-module Lsl.EventSigs(lslEventDescriptors,simpleLslEventDescriptors, EventDelivery(..), EventAdditionalData(..)) where
+module Language.Lsl.Internal.EventSigs(lslEventDescriptors,simpleLslEventDescriptors, EventDelivery(..), EventAdditionalData(..)) where
 
 import Lsl.Type(LSLType(..))
 

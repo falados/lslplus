@@ -12,11 +12,11 @@ import Control.Monad.State(MonadState(..),State(..),StateT(..),evalState)
 import Control.Monad.Error(ErrorT(..))
 import Data.List(find,intersperse)
 import Data.Maybe(isJust)
-import Lsl.Breakpoint(Breakpoint,BreakpointManager,checkBreakpoint,emptyBreakpointManager,
+import Language.Lsl.Internal.Breakpoint(Breakpoint,BreakpointManager,checkBreakpoint,emptyBreakpointManager,
                       replaceBreakpoints,setStepBreakpoint,setStepOverBreakpoint,setStepOutBreakpoint,
                       breakpointFile,breakpointLine)
-import Lsl.CodeHelper(renderCall)
-import Lsl.FuncSigs(funcSigs)
+import Language.Lsl.Internal.CodeHelper(renderCall)
+import Language.Lsl.Internal.FuncSigs(funcSigs)
 import Language.Lsl.Internal.InternalLLFuncs(internalLLFuncs)
 import Language.Lsl.Syntax hiding (State)
 import qualified Language.Lsl.Syntax as L

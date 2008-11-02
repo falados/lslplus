@@ -1,4 +1,4 @@
-module Lsl.FuncSigs(
+module Language.Lsl.Internal.FuncSigs(
     funcDescriptions,
     funcMeta,
     funcSigs) where

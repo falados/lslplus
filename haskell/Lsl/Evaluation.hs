@@ -5,7 +5,7 @@ module Lsl.Evaluation(
     
 import Data.Map(Map)
 import Lsl.Type(LSLValue)
-import Lsl.Breakpoint(Breakpoint)
+import Language.Lsl.Internal.Breakpoint(Breakpoint)
 
 --type ScriptInfo = (String,Int,String,String) -- (object id, prim index, script name, prim key)
 data ScriptInfo = ScriptInfo { scriptInfoObjectKey :: String, 

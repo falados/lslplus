@@ -1,9 +1,9 @@
 module Main where
 
-import qualified Lsl.MetaData as MetaData
+import qualified Language.Lsl.Internal.MetaData as MetaData
 import qualified Lsl.Compiler as Compiler
 import qualified Lsl.ExpressionHandler as ExpressionHandler
-import qualified Lsl.SimMetaData as SimMetaData
+import qualified Language.Lsl.Internal.SimMetaData as SimMetaData
 import qualified Lsl.SystemTester as SystemTester
 import qualified Lsl.UnitTester as UnitTester
 
