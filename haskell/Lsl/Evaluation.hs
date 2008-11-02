@@ -4,7 +4,7 @@ module Lsl.Evaluation(
     Event(..)) where
     
 import Data.Map(Map)
-import Lsl.Type(LSLValue)
+import Language.Lsl.Internal.Type(LSLValue)
 import Language.Lsl.Internal.Breakpoint(Breakpoint)
 
 --type ScriptInfo = (String,Int,String,String) -- (object id, prim index, script name, prim key)

@@ -36,7 +36,7 @@ module Language.Lsl.Syntax (
     libFromAugLib,
     isTextLocation) where
 
-import Lsl.Type(Component(..),LSLType(..),lslTypeString)
+import Language.Lsl.Internal.Type(Component(..),LSLType(..),lslTypeString)
 import Language.Lsl.Internal.Constants(isConstant,findConstType)
 import Language.Lsl.Internal.EventSigs(simpleLslEventDescriptors)
 import Language.Lsl.Internal.FuncSigs(funcSigs)

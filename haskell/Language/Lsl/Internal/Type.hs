@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -XFlexibleContexts -XDeriveDataTypeable #-}
-module Lsl.Type(
+module Language.Lsl.Internal.Type(
     LSLType(..),
     LSLValue(..),
     Component(..),

@@ -48,7 +48,7 @@ import Language.Lsl.Syntax(Expr(..),
                   fromMCtx,
                   predefFuncs,
                   isTextLocation)
-import Lsl.Type(LSLType(..),LSLValue(..),typeOfLSLComponent,typeOfLSLValue,toFloat,toSVal,
+import Language.Lsl.Internal.Type(LSLType(..),LSLValue(..),typeOfLSLComponent,typeOfLSLValue,toFloat,toSVal,
                 lslShowVal,replaceLslValueComponent,vecMulScalar,rotMulVec,
                 parseInt,parseFloat,invRot,rotMul,vcross,Component(..),lslValueComponent)
 import Language.Lsl.Internal.Key(nullKey,nextKey)

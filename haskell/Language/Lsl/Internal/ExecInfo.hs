@@ -2,7 +2,7 @@ module Language.Lsl.Internal.ExecInfo(emitExecutionInfo) where
 
 import Lsl.Exec(ExecutionInfo(..),FrameInfo(..))
 import Language.Lsl.Syntax(SourceContext(..))
-import Lsl.Type(LSLValue(..))
+import Language.Lsl.Internal.Type(LSLValue(..))
 import Lsl.XmlCreate(emit,emitSimple)
 
 emitExecutionInfo (ExecutionInfo name line threadInfo) =

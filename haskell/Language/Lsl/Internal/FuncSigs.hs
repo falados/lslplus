@@ -3,7 +3,7 @@ module Language.Lsl.Internal.FuncSigs(
     funcMeta,
     funcSigs) where
 
-import Lsl.Type(LSLType(..))
+import Language.Lsl.Internal.Type(LSLType(..))
 
 -- TODO: import real info into funcMeta, and derive funcSigs from that
 funcMeta :: [(String,LSLType,[(String,LSLType)],String)]

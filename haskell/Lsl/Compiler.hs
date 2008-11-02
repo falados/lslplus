@@ -12,7 +12,7 @@ import Language.Lsl.Render(renderCompiledScript)
 import Language.Lsl.Syntax(AugmentedLibrary(..),CompiledLSLScript(..),Ctx(..),Func(..),Global(..),
                      GlobDef(..),Handler(..),LModule(..),SourceContext(..),State(..),Validity,Var(..),
                      funcName,funcParms,funcType,libFromAugLib)
-import Lsl.Type(lslTypeString)
+import Language.Lsl.Internal.Type(lslTypeString)
 import System.Directory(doesFileExist,removeFile)
 import System.FilePath(replaceExtension)
 import System.Time(calendarTimeToString,getClockTime,toCalendarTime)

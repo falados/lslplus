@@ -6,7 +6,7 @@ import Data.List(find,isSuffixOf)
 import Lsl.DOMProcessing(ElemAcceptor(..),Element(..),
                          attValueString,elementList,elementsOnly,findElement,findOptionalElement,matchChoice,simple)
 import Lsl.ExpressionHandler(evaluateExpression)
-import Lsl.Type(LSLType(..),LSLValue(..))
+import Language.Lsl.Internal.Type(LSLType(..),LSLValue(..))
 import Lsl.UnitTest(LSLUnitTest(..),EntryPoint(..),FuncCallExpectations(..),ExpectationMode(..))
 
 --trace1 v = trace (show v) v

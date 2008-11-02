@@ -1,6 +1,6 @@
 module Lsl.UnitTestParser(parseUnitTestFile,parseUnitTestInput) where
 
-import Lsl.Type
+import Language.Lsl.Internal.Type
 import Lsl.UnitTest
 import Control.Monad.Error
 import IO hiding (try)

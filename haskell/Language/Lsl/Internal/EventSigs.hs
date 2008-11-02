@@ -1,6 +1,6 @@
 module Language.Lsl.Internal.EventSigs(lslEventDescriptors,simpleLslEventDescriptors, EventDelivery(..), EventAdditionalData(..)) where
 
-import Lsl.Type(LSLType(..))
+import Language.Lsl.Internal.Type(LSLType(..))
 
 data EventDelivery = EventDeliveryScript | EventDeliveryPrim | EventDeliveryObject | EventDeliveryRoot
 data EventAdditionalData = EventAdditionalKeys String String | EventAdditionalAvatarKeys String String | EventAdditionalVectors String String
