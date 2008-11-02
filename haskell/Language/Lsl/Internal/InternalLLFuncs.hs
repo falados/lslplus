@@ -108,7 +108,7 @@ module Language.Lsl.Internal.InternalLLFuncs(
     internalLLFuncNames
     ) where
 
-import Lsl.Util(Permutation3(..),axisAngleToRotation,cut,dist3d,elemAtM,
+import Language.Lsl.Internal.Util(Permutation3(..),axisAngleToRotation,cut,dist3d,elemAtM,
                filtMap,fromInt,indexOf,mag3d,mag3d2,matrixToQuaternion,quaternionToMatrix,
                quaternionToRotations,rotationBetween,rotationsToQuaternion)
 import Lsl.Type(LSLType(..),LSLValue(..),lslValString,parseFloat,parseInt,rot2RVal,toSVal,typeOfLSLValue,vVal2Vec)

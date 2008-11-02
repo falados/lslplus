@@ -10,7 +10,7 @@ import Lsl.DOMProcessing
 import Lsl.Parse
 import Language.Lsl.Syntax
 import Lsl.Type
-import Lsl.Util
+import Language.Lsl.Internal.Util
 import Lsl.XmlCreate hiding (emit)
 import qualified Lsl.XmlCreate as E
 

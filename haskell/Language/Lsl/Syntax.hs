@@ -42,7 +42,7 @@ import Language.Lsl.Internal.EventSigs(simpleLslEventDescriptors)
 import Language.Lsl.Internal.FuncSigs(funcSigs)
 import Data.Data(Data,Typeable)
 import Data.List(find,sort,sortBy,nub)
-import Lsl.Util(ctx,findM,lookupM,filtMap,throwStrError)
+import Language.Lsl.Internal.Util(ctx,findM,lookupM,filtMap,throwStrError)
 import Control.Monad(when,foldM,MonadPlus(..))
 import Control.Monad.Error(MonadError(..),Error(..))
 --trace1 s v = trace (s ++ show v) v

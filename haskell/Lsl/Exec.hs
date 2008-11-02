@@ -28,7 +28,7 @@ import Data.Maybe(isJust)
 import Language.Lsl.Internal.Breakpoint(Breakpoint(..),StepManager(..),pushStepManagerFrame,popStepManagerFrame,emptyStepManager,mkBreakpoint)
 import Language.Lsl.Internal.CodeHelper(renderCall)
 import Language.Lsl.Internal.FuncSigs(funcSigs)
-import Lsl.Util(fromInt,lookupM,ctx,findM)
+import Language.Lsl.Internal.Util(fromInt,lookupM,ctx,findM)
 import Language.Lsl.Syntax(Expr(..),
                   CompiledLSLScript,
                   Statement(..),

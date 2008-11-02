@@ -2,7 +2,7 @@ module Language.Lsl.Internal.Constants where
 
 import Data.Bits((.|.),shiftL)
 import Lsl.Type(LSLValue(..),typeOfLSLValue)
-import Lsl.Util(findM)
+import Language.Lsl.Internal.Util(findM)
 
 data Constant = Constant { constName :: String, constVal :: LSLValue }
     deriving (Show)

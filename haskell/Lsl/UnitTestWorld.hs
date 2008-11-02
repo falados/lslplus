@@ -25,7 +25,7 @@ import Lsl.Evaluation(EvalResult(..))
 import Lsl.Exec(ExecutionInfo(..),ScriptImage(..),evalSimple,runEval,scriptImage,setupSimple,initStateSimple,frameInfo)
 import Language.Lsl.Internal.TestResult(TestResult(..))
 import Lsl.UnitTest(EntryPoint(..),LSLUnitTest(..),ExpectationMode(..),FuncCallExpectations(..),expectedReturns,removeExpectation)
-import Lsl.Util(findM,ctx)
+import Language.Lsl.Internal.Util(findM,ctx)
 
 --trace1 v = trace ("->>" ++ (show v)) v
 

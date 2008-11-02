@@ -42,7 +42,7 @@ import Language.Lsl.Syntax(Ctx(..),FuncDec(..),predefFuncs)
 import Lsl.Type(LSLValue(..),LSLType(..),defaultValue,isIVal,isLVal,isSVal,
                 lslShowVal,lslTypeString,lslValString,rVal2Rot,rot2RVal,typeOfLSLValue,vVal2Vec,vec2VVal)
 import Lsl.UnitTestWorld(simFunc,hasFunc)
-import Lsl.Util(add3d,angleBetween,diff3d,dist3d2,fac,findM,fromInt,generatePermutation,ilookup,lookupByIndex,
+import Language.Lsl.Internal.Util(add3d,angleBetween,diff3d,dist3d2,fac,findM,fromInt,generatePermutation,ilookup,lookupByIndex,
                 mag3d,mlookup,neg3d,norm3d,quaternionMultiply,quaternionToMatrix,rot3d,rotationBetween,scale3d,tuplify)
 import Lsl.WorldDef(Attachment(..),Avatar(..),AvatarControlListener(..),Email(..),Flexibility(..),InventoryInfo(..),
                     InventoryItem(..),InventoryItemData(..),InventoryItemIdentification(..),LightInfo(..),LSLObject(..),

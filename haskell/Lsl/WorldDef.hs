@@ -70,7 +70,7 @@ import Lsl.Evaluation(Event(..))
 import Lsl.Exec(ScriptImage,initLSLScript)
 import Language.Lsl.Internal.Key(mkKey,nullKey)
 import Lsl.Type(LSLValue(..))
-import Lsl.Util(mlookup,readM,Permutation3(..),rotationsToQuaternion)
+import Language.Lsl.Internal.Util(mlookup,readM,Permutation3(..),rotationsToQuaternion)
 
 type KeyManagerM = ErrorT String (SM.State (M.Map String String,Integer))
 

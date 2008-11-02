@@ -25,7 +25,7 @@ module Lsl.DOMProcessing(ElemAcceptor(..),
 
 import Control.Monad(MonadPlus(..),liftM2)
 import Control.Monad.Error(MonadError(..))
-import Lsl.Util(readM)
+import Language.Lsl.Internal.Util(readM)
 import Text.XML.HaXml(AttValue(..),Document(..),Element(..),Content(..),Reference(..),xmlParse)
 import Text.XML.HaXml.Posn(Posn(..))
 

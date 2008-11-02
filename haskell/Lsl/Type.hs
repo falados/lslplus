@@ -40,7 +40,7 @@ import Data.Data(Data,Typeable)
 import Data.List(intersperse)
 import Language.Lsl.Internal.NumberParsing(readInt,readHexFloat)
 import Language.Lsl.Internal.Key(nullKey)
-import Lsl.Util(lookupM,readM,cross,quaternionMultiply,quaternionToMatrix,fromInt)
+import Language.Lsl.Internal.Util(lookupM,readM,cross,quaternionMultiply,quaternionToMatrix,fromInt)
 import Lsl.DOMProcessing(Element(..),ElemAcceptor(..),findValue,elementsOnly,simple,attrString,acceptList)
 
 import Text.Printf(printf)

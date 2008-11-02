@@ -13,7 +13,7 @@ import Language.Lsl.Syntax(libFromAugLib)
 import Language.Lsl.Internal.TestResult(emitTestResult)
 import Lsl.UnitTest(LSLUnitTest(..))
 import Lsl.UnitTestWorld(ExecCommand(..),TestEvent(..),simStep)
-import Lsl.Util(unescape,processLinesS)
+import Language.Lsl.Internal.Util(unescape,processLinesS)
 import Lsl.XmlCreate(emit)
 import Text.XML.HaXml(Element(..),Content(..),Document(..),xmlParse)
 -- import Debug.Trace

@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -fwarn-unused-binds -XNoMonomorphismRestriction #-}
-module Lsl.Util (
+module Language.Lsl.Internal.Util (
     mlookup,
     ilookup,
     throwStrError,
