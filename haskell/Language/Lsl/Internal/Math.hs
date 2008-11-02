@@ -1,4 +1,4 @@
-module Lsl.Math(
+module Language.Lsl.Internal.Math(
     dist3d2,
     dist3d,
     mag3d2,

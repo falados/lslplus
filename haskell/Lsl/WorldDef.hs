@@ -68,7 +68,7 @@ import Lsl.DOMProcessing(ElemAcceptor(..),Element(..),findOrDefault,findValueOrD
                          findSimpleOrDefault,valueAcceptor,elementListWith,matchChoice)
 import Lsl.Evaluation(Event(..))
 import Lsl.Exec(ScriptImage,initLSLScript)
-import Lsl.Key(mkKey,nullKey)
+import Language.Lsl.Internal.Key(mkKey,nullKey)
 import Lsl.Type(LSLValue(..))
 import Lsl.Util(mlookup,readM,Permutation3(..),rotationsToQuaternion)
 

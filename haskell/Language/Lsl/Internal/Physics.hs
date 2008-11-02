@@ -13,7 +13,7 @@ module Language.Lsl.Internal.Physics(
                    gravC
                    )where
 
-import Lsl.Math(add3d,axisAngleFromRotation,axisAngleToRotation,diff3d,
+import Language.Lsl.Internal.Math(add3d,axisAngleFromRotation,axisAngleToRotation,diff3d,
                 invertQuaternion,mag3d,norm3d,quaternionMultiply,scale3d)
 import Lsl.WorldDef(Prim(..),PrimType(..))
 import Language.Lsl.Internal.Constants(cPrimTypeBox,cPrimTypeCylinder,cPrimTypeSculpt,cPrimTypeSphere)

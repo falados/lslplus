@@ -21,7 +21,7 @@ module Lsl.Util (
     processLinesS,
     generatePermutation,
     fac,
-    module Lsl.Math
+    module Language.Lsl.Internal.Math
     ) where
 
 import Control.Monad(liftM,when)
@@ -32,7 +32,7 @@ import qualified Data.IntMap as IntMap
 
 -- import Debug.Trace
 
-import Lsl.Math
+import Language.Lsl.Internal.Math
 
 import IO(hFlush,stdout)
 import Network.URI(escapeURIString,isUnescapedInURI,unEscapeString)

@@ -51,7 +51,7 @@ import Language.Lsl.Syntax(Expr(..),
 import Lsl.Type(LSLType(..),LSLValue(..),typeOfLSLComponent,typeOfLSLValue,toFloat,toSVal,
                 lslShowVal,replaceLslValueComponent,vecMulScalar,rotMulVec,
                 parseInt,parseFloat,invRot,rotMul,vcross,Component(..),lslValueComponent)
-import Lsl.Key(nullKey,nextKey)
+import Language.Lsl.Internal.Key(nullKey,nextKey)
 import Lsl.Evaluation(EvalResult(..),Event(..),ScriptInfo(..))
 import Language.Lsl.Internal.Constants(findConstVal,llcZeroRotation,llcZeroVector)
 import Control.Monad(foldM_,when,mplus,msum,join,zipWithM)

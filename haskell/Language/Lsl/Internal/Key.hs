@@ -1,4 +1,4 @@
-module Lsl.Key (nextKey, nullKey, mkKey) where
+module Language.Lsl.Internal.Key (nextKey, nullKey, mkKey) where
 import Data.List(elemIndex)
 import Text.Printf(printf)
 nullKey = "00000000-0000-0000-0000-000000000000"
