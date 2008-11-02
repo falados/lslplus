@@ -2,7 +2,7 @@
 module Language.Lsl.Internal.BreakpointsDeserialize(breakpointsElement, module Language.Lsl.Internal.Breakpoint) where
 
 import Control.Monad.Error(MonadError)
-import Lsl.DOMProcessing(ElemAcceptor(..),elementList,findElement,simple)
+import Language.Lsl.Internal.DOMProcessing(ElemAcceptor(..),elementList,findElement,simple)
 import Language.Lsl.Internal.Breakpoint(Breakpoint(..),mkBreakpoint)
 import Text.XML.HaXml(Content(..),Element(..))
 

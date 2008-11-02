@@ -6,13 +6,13 @@ import Data.Bits
 import IO
 
 import Language.Lsl.Internal.Constants
-import Lsl.DOMProcessing
+import Language.Lsl.Internal.DOMProcessing
 import Lsl.Parse
 import Language.Lsl.Syntax
 import Language.Lsl.Internal.Type
 import Language.Lsl.Internal.Util
-import Lsl.XmlCreate hiding (emit)
-import qualified Lsl.XmlCreate as E
+import Language.Lsl.Internal.XmlCreate hiding (emit)
+import qualified Language.Lsl.Internal.XmlCreate as E
 
 emit s = E.emit s []
 

@@ -3,7 +3,7 @@ module Language.Lsl.Internal.DOMUnitTestDescriptor(testsElement) where
 
 import Control.Monad.Error(MonadError(..))
 import Data.List(find,isSuffixOf)
-import Lsl.DOMProcessing(ElemAcceptor(..),Element(..),
+import Language.Lsl.Internal.DOMProcessing(ElemAcceptor(..),Element(..),
                          attValueString,elementList,elementsOnly,findElement,findOptionalElement,matchChoice,simple)
 import Lsl.ExpressionHandler(evaluateExpression)
 import Language.Lsl.Internal.Type(LSLType(..),LSLValue(..))

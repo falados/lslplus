@@ -1,4 +1,4 @@
-module Lsl.DOMProcessing(ElemAcceptor(..),
+module Language.Lsl.Internal.DOMProcessing(ElemAcceptor(..),
                          findElement,
                          findOptionalElement,
                          findOrDefault,

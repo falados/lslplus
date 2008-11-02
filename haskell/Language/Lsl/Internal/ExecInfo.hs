@@ -3,7 +3,7 @@ module Language.Lsl.Internal.ExecInfo(emitExecutionInfo) where
 import Lsl.Exec(ExecutionInfo(..),FrameInfo(..))
 import Language.Lsl.Syntax(SourceContext(..))
 import Language.Lsl.Internal.Type(LSLValue(..))
-import Lsl.XmlCreate(emit,emitSimple)
+import Language.Lsl.Internal.XmlCreate(emit,emitSimple)
 
 emitExecutionInfo (ExecutionInfo name line threadInfo) =
     emit "script-state" [] [emitSimple "sourceElement" [] name,

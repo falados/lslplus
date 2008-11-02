@@ -2,7 +2,7 @@
 module Lsl.DOMSourceDescriptor(sourceFiles,sourceFilesElement) where
 
 import Control.Monad.Error(MonadError(..))
-import Lsl.DOMProcessing(ElemAcceptor(..),elementList,findElement,match,simple)
+import Language.Lsl.Internal.DOMProcessing(ElemAcceptor(..),elementList,findElement,match,simple)
 import Text.XML.HaXml(Element(..),Content(..))
 
 sourceFiles e = match sourceFilesElement e

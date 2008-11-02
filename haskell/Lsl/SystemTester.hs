@@ -8,7 +8,7 @@ import qualified Data.Map as M
 import IO
 import Language.Lsl.Internal.BreakpointsDeserialize(breakpointsElement)
 import Lsl.Compiler(compile)
-import Lsl.DOMProcessing(Content(..),Document(..),Element(..),ElemAcceptor(..),
+import Language.Lsl.Internal.DOMProcessing(Content(..),Document(..),Element(..),ElemAcceptor(..),
                          elementList,simple,findElement,findOptionalElement,match,xmlParse)
 import Lsl.DOMSourceDescriptor(sourceFilesElement)
 import Language.Lsl.Internal.ExecInfo(emitExecutionInfo)
@@ -17,7 +17,7 @@ import Language.Lsl.Syntax(libFromAugLib)
 import Language.Lsl.Internal.Util(unescape,processLinesS)
 import Lsl.World1(SimCommand(..),SimEvent(..),SimEventArg(..),SimStatus(..),SimStateInfo(..),simStep)
 import Lsl.WorldDef(worldElement)
-import Lsl.XmlCreate(emit,emitList,emitSimple)
+import Language.Lsl.Internal.XmlCreate(emit,emitList,emitSimple)
 
 initializationFromXML xml = let doc = xmlParse "" xml in parseInitialization doc
 

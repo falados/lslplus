@@ -63,7 +63,7 @@ import qualified Data.Map as M
 import qualified Data.IntMap as IM
 import Data.Maybe(isNothing)
 
-import Lsl.DOMProcessing(ElemAcceptor(..),Element(..),findOrDefault,findValueOrDefault,elementList,
+import Language.Lsl.Internal.DOMProcessing(ElemAcceptor(..),Element(..),findOrDefault,findValueOrDefault,elementList,
                          findOptionalElement,elementsOnly,findValue,findElement,findSimple,simpleElement,
                          findSimpleOrDefault,valueAcceptor,elementListWith,matchChoice)
 import Lsl.Evaluation(Event(..))

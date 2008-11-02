@@ -19,8 +19,8 @@ import System.Time(calendarTimeToString,getClockTime,toCalendarTime)
 import Text.XML.HaXml(Document(..),xmlParse) --hiding (when,xmlEscape)
 import Text.XML.HaXml.Posn(Posn(..))
 import Language.Lsl.Internal.Optimize(optimizeScript) 
-import Lsl.XmlCreate hiding (emit)
-import qualified Lsl.XmlCreate as E
+import Language.Lsl.Internal.XmlCreate hiding (emit)
+import qualified Language.Lsl.Internal.XmlCreate as E
 
 emit s = E.emit s []
 

@@ -1,4 +1,4 @@
-module Lsl.XmlCreate(emit,emitSimple,xmlEscape,emitList) where
+module Language.Lsl.Internal.XmlCreate(emit,emitSimple,xmlEscape,emitList) where
 
 emit :: String -> [(String,String)] -> [(String -> String)] -> String -> String
 emit name attrs body = 

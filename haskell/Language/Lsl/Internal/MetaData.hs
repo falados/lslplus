@@ -7,7 +7,7 @@ import Language.Lsl.Internal.EventSigs(lslEventDescriptors)
 import Language.Lsl.Internal.FuncSigs(funcMeta)
 import Language.Lsl.Internal.InternalLLFuncs(internalLLFuncNames)
 import Language.Lsl.Internal.Type(LSLValue(..),LSLType(..),lslTypeString,lslValString,typeOfLSLValue)
-import qualified Lsl.XmlCreate as X
+import qualified Language.Lsl.Internal.XmlCreate as X
 
 emit t = X.emit t []
 emitSimple t s = X.emitSimple t [] s
