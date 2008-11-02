@@ -5,7 +5,7 @@ import Control.Monad.Error(MonadError(..))
 import Data.List(find,isSuffixOf)
 import Language.Lsl.Internal.DOMProcessing(ElemAcceptor(..),Element(..),
                          attValueString,elementList,elementsOnly,findElement,findOptionalElement,matchChoice,simple)
-import Lsl.ExpressionHandler(evaluateExpression)
+import Language.Lsl.Internal.ExpressionHandler(evaluateExpression)
 import Language.Lsl.Internal.Type(LSLType(..),LSLValue(..))
 import Lsl.UnitTest(LSLUnitTest(..),EntryPoint(..),FuncCallExpectations(..),ExpectationMode(..))
 

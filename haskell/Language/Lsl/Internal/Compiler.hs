@@ -2,7 +2,7 @@
 --   issue a report on all the errors it has found
 --   generate LSL scripts for those LSL+ scripts that successfully 'compiled'
 
-module Lsl.Compiler(compile,main0) where
+module Language.Lsl.Internal.Compiler(compile,main0) where
 
 import Control.Monad(when)
 import IO(Handle,hGetContents,stdin)

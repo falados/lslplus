@@ -9,7 +9,7 @@ module Lsl.UnitTest(
 import Control.Monad(liftM2)
 import Data.List(maximumBy)
 import Language.Lsl.Internal.Type(LSLValue(..))
-import Lsl.Exec(Binding(..))
+import Language.Lsl.Internal.Exec(Binding(..))
 import Language.Lsl.Internal.Util(removeLookup)
    
 data FuncCallExpectations = FuncCallExpectations {

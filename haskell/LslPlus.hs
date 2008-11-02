@@ -1,11 +1,11 @@
 module Main where
 
 import qualified Language.Lsl.Internal.MetaData as MetaData
-import qualified Lsl.Compiler as Compiler
-import qualified Lsl.ExpressionHandler as ExpressionHandler
+import qualified Language.Lsl.Internal.Compiler as Compiler
+import qualified Language.Lsl.Internal.ExpressionHandler as ExpressionHandler
 import qualified Language.Lsl.Internal.SimMetaData as SimMetaData
-import qualified Lsl.SystemTester as SystemTester
-import qualified Lsl.UnitTester as UnitTester
+import qualified Language.Lsl.Internal.SystemTester as SystemTester
+import qualified Language.Lsl.Internal.UnitTester as UnitTester
 
 import Control.Monad
 import IO

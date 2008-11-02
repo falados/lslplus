@@ -171,7 +171,7 @@ import qualified Data.Set as S
 import qualified Language.Lsl.Internal.AvEvents as AvEvent
 import Language.Lsl.Internal.Breakpoint(BreakpointManager(..))
 import Language.Lsl.Internal.Evaluation(Event(..),ScriptInfo(..),EvalResult(..))
-import Lsl.Exec(hasActiveHandler)
+import Language.Lsl.Internal.Exec(hasActiveHandler)
 import Language.Lsl.Internal.Key(mkKey)
 import Language.Lsl.Internal.Log(LogMessage(..),LogLevel(..))
 import Language.Lsl.Syntax(Validity,LModule(..),CompiledLSLScript(..))

@@ -1,10 +1,10 @@
 {-# OPTIONS_GHC -XFlexibleContexts #-}
-module Lsl.UnitTester(main2) where
+module Language.Lsl.Internal.UnitTester(main2) where
 
 import Control.Monad(MonadPlus(..))
 import Control.Monad.Error(MonadError(..))
 import Language.Lsl.Internal.BreakpointsDeserialize(breakpointsElement)
-import Lsl.Compiler(compile)
+import Language.Lsl.Internal.Compiler(compile)
 import Language.Lsl.Internal.DOMProcessing(ElemAcceptor(..),findElement,findOptionalElement,match)
 import Language.Lsl.Internal.DOMSourceDescriptor(sourceFilesElement)
 import Language.Lsl.Internal.DOMUnitTestDescriptor(testsElement)

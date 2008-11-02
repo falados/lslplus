@@ -1,4 +1,4 @@
-module Lsl.Exec(
+module Language.Lsl.Internal.Exec(
     ScriptImage(..),
     EvalState,
     ExecutionInfo(..),

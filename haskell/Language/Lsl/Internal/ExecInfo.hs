@@ -1,6 +1,6 @@
 module Language.Lsl.Internal.ExecInfo(emitExecutionInfo) where
 
-import Lsl.Exec(ExecutionInfo(..),FrameInfo(..))
+import Language.Lsl.Internal.Exec(ExecutionInfo(..),FrameInfo(..))
 import Language.Lsl.Syntax(SourceContext(..))
 import Language.Lsl.Internal.Type(LSLValue(..))
 import Language.Lsl.Internal.XmlCreate(emit,emitSimple)

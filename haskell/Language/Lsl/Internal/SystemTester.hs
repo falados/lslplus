@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -XFlexibleContexts #-}
-module Lsl.SystemTester where
+module Language.Lsl.Internal.SystemTester where
 
 import Control.Monad(MonadPlus(..))
 import Control.Monad.Error(MonadError(..),ErrorT(..))
@@ -7,7 +7,7 @@ import Control.Monad.State(evalState)
 import qualified Data.Map as M
 import IO
 import Language.Lsl.Internal.BreakpointsDeserialize(breakpointsElement)
-import Lsl.Compiler(compile)
+import Language.Lsl.Internal.Compiler(compile)
 import Language.Lsl.Internal.DOMProcessing(Content(..),Document(..),Element(..),ElemAcceptor(..),
                          elementList,simple,findElement,findOptionalElement,match,xmlParse)
 import Language.Lsl.Internal.DOMSourceDescriptor(sourceFilesElement)
