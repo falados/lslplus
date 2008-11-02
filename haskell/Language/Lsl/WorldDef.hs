@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -XFlexibleContexts #-}
-module Lsl.WorldDef(Avatar(..),
+module Language.Lsl.WorldDef(Avatar(..),
                     AvatarControlListener(..),
                     Prim(..),
                     PrimFace(..),

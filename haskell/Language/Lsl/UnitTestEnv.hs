@@ -1,4 +1,4 @@
-module Lsl.UnitTestWorld(
+module Language.Lsl.UnitTestEnv(
     simStep,
     simFunc,
     hasFunc,

@@ -41,10 +41,10 @@ import Language.Lsl.Internal.Physics(calcAccel,checkIntersections,dampForce,damp
 import Language.Lsl.Syntax(Ctx(..),FuncDec(..),predefFuncs)
 import Language.Lsl.Internal.Type(LSLValue(..),LSLType(..),defaultValue,isIVal,isLVal,isSVal,
                 lslShowVal,lslTypeString,lslValString,rVal2Rot,rot2RVal,typeOfLSLValue,vVal2Vec,vec2VVal)
-import Lsl.UnitTestWorld(simFunc,hasFunc)
+import Language.Lsl.UnitTestEnv(simFunc,hasFunc)
 import Language.Lsl.Internal.Util(add3d,angleBetween,diff3d,dist3d2,fac,findM,fromInt,generatePermutation,ilookup,lookupByIndex,
                 mag3d,mlookup,neg3d,norm3d,quaternionMultiply,quaternionToMatrix,rot3d,rotationBetween,scale3d,tuplify)
-import Lsl.WorldDef(Attachment(..),Avatar(..),AvatarControlListener(..),Email(..),Flexibility(..),InventoryInfo(..),
+import Language.Lsl.WorldDef(Attachment(..),Avatar(..),AvatarControlListener(..),Email(..),Flexibility(..),InventoryInfo(..),
                     InventoryItem(..),InventoryItemData(..),InventoryItemIdentification(..),LightInfo(..),LSLObject(..),
                     ObjectDynamics(..),Parcel(..),Prim(..),PrimFace(..),PrimType(..),PositionTarget(..),Region(..),RotationTarget(..),
                     Script(..),TextureInfo(..),WebHandling(..),

@@ -15,7 +15,7 @@ module Language.Lsl.Internal.Physics(
 
 import Language.Lsl.Internal.Math(add3d,axisAngleFromRotation,axisAngleToRotation,diff3d,
                 invertQuaternion,mag3d,norm3d,quaternionMultiply,scale3d)
-import Lsl.WorldDef(Prim(..),PrimType(..))
+import Language.Lsl.WorldDef(Prim(..),PrimType(..))
 import Language.Lsl.Internal.Constants(cPrimTypeBox,cPrimTypeCylinder,cPrimTypeSculpt,cPrimTypeSphere)
 
 rangeOverlap (mn0,mx0) (mn1,mx1) = mn0 >= mn1 && mn0 <= mx1 || mx0 >= mn1 && mx0 <= mx1 || mn0 <= mn1 && mx0 >= mx1

@@ -177,7 +177,7 @@ import Language.Lsl.Internal.Log(LogMessage(..),LogLevel(..))
 import Language.Lsl.Syntax(Validity,LModule(..),CompiledLSLScript(..))
 import Language.Lsl.Internal.Type(LSLValue(..),LSLType(..))
 import Language.Lsl.Internal.Util(mlookup,lookupByIndex)
-import Lsl.WorldDef(Prim(..),PrimFace(..),InventoryItem(..),InventoryItemIdentification(..),
+import Language.Lsl.WorldDef(Prim(..),PrimFace(..),InventoryItem(..),InventoryItemIdentification(..),
                     LSLObject(..),Script(..),Avatar(..),Region(..),
                     WebHandling(..),isInvNotecardItem,isInvLandmarkItem,isInvClothingItem,
                     isInvBodyPartItem,isInvGestureItem,isInvSoundItem,isInvAnimationItem,
