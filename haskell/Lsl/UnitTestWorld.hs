@@ -21,7 +21,7 @@ import Language.Lsl.Internal.InternalLLFuncs(internalLLFuncs)
 import Language.Lsl.Syntax hiding (State)
 import qualified Language.Lsl.Syntax as L
 import Language.Lsl.Internal.Type(LSLValue,lslValString,lslShowVal,defaultValue)
-import Lsl.Evaluation(EvalResult(..))
+import Language.Lsl.Internal.Evaluation(EvalResult(..))
 import Lsl.Exec(ExecutionInfo(..),ScriptImage(..),evalSimple,runEval,scriptImage,setupSimple,initStateSimple,frameInfo)
 import Language.Lsl.Internal.TestResult(TestResult(..))
 import Lsl.UnitTest(EntryPoint(..),LSLUnitTest(..),ExpectationMode(..),FuncCallExpectations(..),expectedReturns,removeExpectation)

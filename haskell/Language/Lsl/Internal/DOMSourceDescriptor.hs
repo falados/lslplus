@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -XFlexibleContexts #-}
-module Lsl.DOMSourceDescriptor(sourceFiles,sourceFilesElement) where
+module Language.Lsl.Internal.DOMSourceDescriptor(sourceFiles,sourceFilesElement) where
 
 import Control.Monad.Error(MonadError(..))
 import Language.Lsl.Internal.DOMProcessing(ElemAcceptor(..),elementList,findElement,match,simple)

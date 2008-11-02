@@ -112,7 +112,7 @@ import Language.Lsl.Internal.Util(Permutation3(..),axisAngleToRotation,cut,dist3
                filtMap,fromInt,indexOf,mag3d,mag3d2,matrixToQuaternion,quaternionToMatrix,
                quaternionToRotations,rotationBetween,rotationsToQuaternion)
 import Language.Lsl.Internal.Type(LSLType(..),LSLValue(..),lslValString,parseFloat,parseInt,rot2RVal,toSVal,typeOfLSLValue,vVal2Vec)
-import Lsl.Evaluation(EvalResult(..))
+import Language.Lsl.Internal.Evaluation(EvalResult(..))
 import Language.Lsl.Internal.Constants(findConstVal)
 import Data.List(elemIndex,find,foldl',intersperse,isPrefixOf,sort)
 import Data.Char(toLower,toUpper)

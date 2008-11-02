@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -XFlexibleInstances #-}
-module Lsl.WorldState(
+module Language.Lsl.Internal.WorldState(
     DeferredScriptEventTarget(..),
     Listener(..),
     PredefFunc(..),
@@ -170,7 +170,7 @@ import qualified Data.Set as S
 
 import qualified Language.Lsl.Internal.AvEvents as AvEvent
 import Language.Lsl.Internal.Breakpoint(BreakpointManager(..))
-import Lsl.Evaluation(Event(..),ScriptInfo(..),EvalResult(..))
+import Language.Lsl.Internal.Evaluation(Event(..),ScriptInfo(..),EvalResult(..))
 import Lsl.Exec(hasActiveHandler)
 import Language.Lsl.Internal.Key(mkKey)
 import Language.Lsl.Internal.Log(LogMessage(..),LogLevel(..))

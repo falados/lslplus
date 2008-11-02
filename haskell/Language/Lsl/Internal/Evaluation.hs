@@ -1,4 +1,4 @@
-module Lsl.Evaluation(
+module Language.Lsl.Internal.Evaluation(
     ScriptInfo(..),
     EvalResult(..),
     Event(..)) where

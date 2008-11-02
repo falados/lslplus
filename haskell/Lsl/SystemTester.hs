@@ -10,7 +10,7 @@ import Language.Lsl.Internal.BreakpointsDeserialize(breakpointsElement)
 import Lsl.Compiler(compile)
 import Language.Lsl.Internal.DOMProcessing(Content(..),Document(..),Element(..),ElemAcceptor(..),
                          elementList,simple,findElement,findOptionalElement,match,xmlParse)
-import Lsl.DOMSourceDescriptor(sourceFilesElement)
+import Language.Lsl.Internal.DOMSourceDescriptor(sourceFilesElement)
 import Language.Lsl.Internal.ExecInfo(emitExecutionInfo)
 import Language.Lsl.Internal.Log(LogMessage(..),logLevelToName)
 import Language.Lsl.Syntax(libFromAugLib)

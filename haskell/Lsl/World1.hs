@@ -8,7 +8,7 @@ module Lsl.World1(SimStatus(..),
                   eventDescriptors,
                   simStep,
                   unimplementedFuncs,
-                  module Lsl.WorldState) where
+                  module Language.Lsl.Internal.WorldState) where
 
 import Control.Monad(MonadPlus(..),(>=>),filterM,foldM,forM_,liftM,liftM2,unless,when)
 import Control.Monad.State(StateT(..),lift)
@@ -29,7 +29,7 @@ import Language.Lsl.Internal.Breakpoint(Breakpoint,emptyBreakpointManager,setSte
                       setStepBreakpoint,breakpointFile,breakpointLine,checkBreakpoint)
 import Language.Lsl.Internal.CodeHelper(renderCall)
 import Language.Lsl.Internal.Constants
-import Lsl.Evaluation(ScriptInfo(..),Event(..),EvalResult(..))
+import Language.Lsl.Internal.Evaluation(ScriptInfo(..),Event(..),EvalResult(..))
 import Language.Lsl.Internal.EventSigs(EventAdditionalData(..),EventDelivery(..),lslEventDescriptors)
 import Lsl.Exec(ExecutionState(..),ExecutionInfo(ExecutionInfo),ScriptImage(..),executeLsl,frameInfo,hardReset,hasActiveHandler,initLSLScript)
 import Lsl.ExpressionHandler(evaluateExpression)
@@ -53,7 +53,7 @@ import Lsl.WorldDef(Attachment(..),Avatar(..),AvatarControlListener(..),Email(..
                     isInvAnimationItem,isInvBodyPartItem,isInvClothingItem,isInvGestureItem,isInvNotecardItem,
                     isInvObjectItem,isInvScriptItem,isInvSoundItem,isInvTextureItem,
                     primPhantomBit,primPhysicsBit,scriptInventoryItem,worldFromFullWorldDef)
-import Lsl.WorldState
+import Language.Lsl.Internal.WorldState
 
 import System.Random(mkStdGen)
 import System.Time(ClockTime(..),CalendarTime(..),TimeDiff(..),addToClockTime,toUTCTime)

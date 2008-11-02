@@ -66,7 +66,7 @@ import Data.Maybe(isNothing)
 import Language.Lsl.Internal.DOMProcessing(ElemAcceptor(..),Element(..),findOrDefault,findValueOrDefault,elementList,
                          findOptionalElement,elementsOnly,findValue,findElement,findSimple,simpleElement,
                          findSimpleOrDefault,valueAcceptor,elementListWith,matchChoice)
-import Lsl.Evaluation(Event(..))
+import Language.Lsl.Internal.Evaluation(Event(..))
 import Lsl.Exec(ScriptImage,initLSLScript)
 import Language.Lsl.Internal.Key(mkKey,nullKey)
 import Language.Lsl.Internal.Type(LSLValue(..))
