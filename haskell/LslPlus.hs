@@ -12,7 +12,8 @@ import IO
 import System
 import System.Exit
 
-usage progName = "Usage: " ++ progName ++ " [MetaData|Compiler|ExpressionHandler|SimMetaData|SystemTester|UnitTester]"
+version="0.1.0"
+usage progName = "Usage: " ++ progName ++ " [Version|MetaData|Compiler|ExpressionHandler|SimMetaData|SystemTester|UnitTester]"
 main = do
     progName <- getProgName
     args <- getArgs
@@ -21,6 +22,7 @@ main = do
         hPutStrLn stderr (usage progName)
         exitFailure
     case head args of
+        "Version" -> putStrLn version
         "MetaData" -> MetaData.printMeta
         "Compiler" -> Compiler.main0
         "ExpressionHandler" -> ExpressionHandler.validateExpression stdin stdout

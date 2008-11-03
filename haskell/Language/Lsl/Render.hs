@@ -1,17 +1,15 @@
-module Language.Lsl.Render(renderLSLScript,renderCompiledScript) where
+module Language.Lsl.Render(renderCompiledScript) where
 
 import Data.List(foldl',intersperse)
 import Language.Lsl.Syntax(Expr(..),Func(..),FuncDec(..),Global(..),Handler(..),State(..),Statement(..),
-                  Ctx(..),Var(..),LSLType(..),Component(..),ctxItems,validLSLScript)
+                  Ctx(..),Var(..),LSLType(..),Component(..),ctxItems,validLSLScript,CompiledLSLScript(..))
 
-renderLSLScript library lslScript = 
-    case validLSLScript library lslScript of
-        Left s -> Left s
-        Right x -> Right $ renderCompiledScript "" x
-        
-renderCompiledScript stamp (globals,funcs,states) =
-   renderString "// LSL script generated: " . renderString stamp . renderString "\n" .
-   renderGlobals globals . renderFuncs funcs . renderStates states
+-- | Generate a string representing an LSL script from a timestamp (string) 
+-- and a compiled (i.e. validated, with referenced modules included) LSL script.
+renderCompiledScript :: String -> CompiledLSLScript -> String
+renderCompiledScript stamp (CompiledLSLScript globals funcs states) =
+   (renderString "// LSL script generated: " . renderString stamp . renderString "\n" .
+    renderGlobals globals . renderFuncs funcs . renderStates states) ""
 
 renderSequence r = (foldl' (.) blank) . (map r)
 

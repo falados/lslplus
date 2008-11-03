@@ -5,8 +5,8 @@ import Data.Generics.Aliases(extQ)
 import qualified Language.Haskell.TH as TH
 import Language.Haskell.TH.Quote(QuasiQuoter(..),dataToPatQ,dataToExpQ)
 import Language.Lsl.Syntax(Expr(..))
-import Language.Lsl.Parse(parseModuleFromString1,parseScriptFromString1)
-import Text.ParserCombinators.Parsec.Error
+import Language.Lsl.Parse(parseModuleFromStringAQ,parseScriptFromStringAQ)
+import Text.ParserCombinators.Parsec.Error(errorPos,errorMessages,showErrorMessages)
 import Text.ParserCombinators.Parsec.Pos
 
 aqe (AQString v) = Just $ TH.appE (TH.conE 'StringLit) $ TH.varE $ TH.mkName v
@@ -22,7 +22,7 @@ aqp _ = Nothing
 
 lslModulePat :: String -> TH.Q TH.Pat
 lslModulePat s = 
-    case parseModuleFromString1 s of 
+    case parseModuleFromStringAQ s of 
         Left err -> let (pos,msgs) = (errorPos err, errorMessages err) in do
             l <- TH.location
             let (line,col) = TH.loc_start l
@@ -32,7 +32,7 @@ lslModulePat s =
         Right x -> dataToPatQ (const Nothing `extQ` aqp) x
 lslModuleExp :: String -> TH.Q TH.Exp
 lslModuleExp s = 
-    case parseModuleFromString1 s of 
+    case parseModuleFromStringAQ s of 
         Left err -> let (pos,msgs) = (errorPos err, errorMessages err) in do
             l <- TH.location
             let (line,col) = TH.loc_start l
@@ -41,11 +41,13 @@ lslModuleExp s =
                    showErrorMessages "or" "unknown" "expecting" "unexpected" "end of input" msgs
         Right x -> dataToExpQ (const Nothing `extQ` aqe) x
 
+-- | A quasi-quoter for an LSL (Plus) module.
+lslm :: QuasiQuoter
 lslm = QuasiQuoter lslModuleExp lslModulePat
 
 lslScriptPat :: String -> TH.Q TH.Pat
 lslScriptPat s = 
-    case parseScriptFromString1 s of 
+    case parseScriptFromStringAQ s of 
         Left err -> let (pos,msgs) = (errorPos err, errorMessages err) in do
             l <- TH.location
             let (line,col) = TH.loc_start l
@@ -55,7 +57,7 @@ lslScriptPat s =
         Right x -> dataToPatQ (const Nothing `extQ` aqp) x
 lslScriptExp :: String -> TH.Q TH.Exp
 lslScriptExp s = 
-    case parseScriptFromString1 s of 
+    case parseScriptFromStringAQ s of 
         Left err -> let (pos,msgs) = (errorPos err, errorMessages err) in do
             l <- TH.location
             let (line,col) = TH.loc_start l
@@ -64,4 +66,6 @@ lslScriptExp s =
                    showErrorMessages "or" "unknown" "expecting" "unexpected" "end of input" msgs
         Right x -> dataToExpQ (const Nothing `extQ` aqe) x
 
+-- | A quasi-quoter for an LSL script.
+lsl :: QuasiQuoter
 lsl = QuasiQuoter lslScriptExp lslScriptPat

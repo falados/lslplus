@@ -1,4 +1,3 @@
-{-# OPTIONS_GHC -fwarn-unused-binds #-}
 module Language.Lsl.Parse(
         parseScript,
         parseModule,
@@ -6,8 +5,8 @@ module Language.Lsl.Parse(
         parseType,
         parseScriptFromString,
         parseModuleFromString,
-        parseScriptFromString1,
-        parseModuleFromString1
+        parseScriptFromStringAQ,
+        parseModuleFromStringAQ
     ) where
 
 import Data.Char(digitToInt)
@@ -19,6 +18,7 @@ import qualified Text.ParserCombinators.Parsec.Token as P
 import Text.ParserCombinators.Parsec.Language( javaStyle )
 import Text.ParserCombinators.Parsec.Error
 import Control.Monad.Error(liftIO)
+import Control.Monad.Trans(MonadIO)
 
 -- define basic rules for lexical analysis
 lslStyle = javaStyle
@@ -349,6 +349,7 @@ expr =
     do r <- choice [try assignment, expr1]
        mtrace "expr: " r
 
+exprParser :: String -> Either ParseError (Ctx Expr)
 exprParser text = runParser expr False "" text
 
 ------------------------------------------------------------------------------
@@ -562,14 +563,24 @@ moduleParser = do whiteSpace
 
 parseFromString parser string =
     case runParser parser False "" string of
-        Left err -> fail (snd (fromParseError err))
-        Right x -> return x
+        Left err -> Left (snd (fromParseError err))
+        Right x -> Right x
+
+-- | Parse an LSL script into its syntax tree.
+parseScriptFromString :: String -> Either String LSLScript
 parseScriptFromString s = parseFromString lslParser s
+-- | Parse an LSL (Plus) module into its syntax tree.
+parseModuleFromString :: String -> Either String LModule
 parseModuleFromString s = parseFromString moduleParser s
 
-parseScriptFromString1 s = runParser lslParser True "" s
-parseModuleFromString1 s = runParser moduleParser True "" s
+-- | Parse an LSL script, with possible antiquotations, into its syntax tree.
+parseScriptFromStringAQ :: String -> Either ParseError LSLScript
+parseScriptFromStringAQ s = runParser lslParser True "" s
+-- | Parse an LSL (Plus) module, with possible antiquotations, into its syntax tree.
+parseModuleFromStringAQ :: String -> Either ParseError LModule
+parseModuleFromStringAQ s = runParser moduleParser True "" s
 
+parseModule :: (MonadIO m) => SourceName -> m (Either (SourceContext,String) LModule)
 parseModule file = parseFile moduleParser file
 parseScript file = parseFile lslParser file
 

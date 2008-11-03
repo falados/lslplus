@@ -17,7 +17,7 @@ module Language.Lsl.Syntax (
     Global(..),
     SourceContext(..),
     Ctx(..),
-    CompiledLSLScript,
+    CompiledLSLScript(..),
     Library,
     AugmentedLibrary,
     CodeErr,
@@ -222,7 +222,11 @@ noDupGlobs forceCtx prefix usedNames library ((GI (Ctx ctx moduleName) _ prefix'
         usedNames' <- noDupGlobs (forceCtx `mplus` Just ctx) (prefix ++ prefix') usedNames library globs
         noDupGlobs forceCtx prefix usedNames' library gs
         
-type CompiledLSLScript = ([Global],[Func],[State])
+data CompiledLSLScript = CompiledLSLScript {
+    scriptGlobals :: ![Global],
+    scriptFuncs :: ![Func],
+    scriptStates :: ![State]}
+    deriving (Show)
 
 validLSLScript :: Library -> LSLScript -> Validity CompiledLSLScript
 validLSLScript library (LSLScript globs states) = 
@@ -232,7 +236,7 @@ validLSLScript library (LSLScript globs states) =
         let funcDecs = typedFuncs ++ predefFuncs
         (globvars,funcs,_,_) <- foldM (validGlob library vars funcDecs) ([],[],[],[]) globs
         validStates snames [] vars funcDecs states
-        return (reverse globvars,funcs,states)
+        return (CompiledLSLScript (reverse globvars) funcs states)
     where snames = let sname (State cn _) = ctxItem cn in map sname states
 validGlob _ vars funcDecs (globvars,funcs,imports,namesUsed) (GV v mexpr) =
     do when (isConstant $ varName v') $ throwError (srcCtx v, varName v' ++ " is a predefined constant")
@@ -758,7 +762,7 @@ validHandlers snames used funcs vars (h:hs) =
 
 -- Validating a library of modules
 
--- ********
+-- 
 validModule library m@(LModule globs freevars) = 
     do --used <- noDupGlobs Nothing "" [] library globs
        (typedVars, typedFuncs) <- typeGlobs library globs

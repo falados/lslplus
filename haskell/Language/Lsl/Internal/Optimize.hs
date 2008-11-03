@@ -1,10 +1,10 @@
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 module Language.Lsl.Internal.Optimize(optimizeScript) where
 
-import Language.Lsl.Syntax(Expr(..),Statement(..),Global(..),Func(..),FuncDec(..),State(..),Ctx(..),Handler(..))
+import Language.Lsl.Syntax(CompiledLSLScript(..),Expr(..),Statement(..),Global(..),Func(..),FuncDec(..),State(..),Ctx(..),Handler(..))
 
-optimizeScript :: ([Global],[Func],[State]) -> ([Global],[Func],[State])
-optimizeScript (gs,fs,ss) = (gs, fs', ss)
+optimizeScript :: CompiledLSLScript -> CompiledLSLScript
+optimizeScript (CompiledLSLScript gs fs ss) = (CompiledLSLScript gs fs' ss)
     where usedFuncs = concatMap stateUsesFuncs ss ++ concatMap funcUsesFuncs fs
           fs' = [ f | f@(Func fd _) <- fs, (ctxItem . funcName) fd `elem` usedFuncs ]
 

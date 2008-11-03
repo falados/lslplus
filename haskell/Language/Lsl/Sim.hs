@@ -3462,7 +3462,7 @@ linkThis = -4::Int
 -- etrace val = trace val $ return ()
 -- trace1 s val = trace (s ++ ": " ++ show val) val
 
--- ***************************************************************************
+-- --------------------------------------------------------------------------------------------
 
 data SimCommand = SimContinue { simCmdBreakpoints :: [Breakpoint], simCmdEvents :: [SimEvent] }
                 | SimStep { simCmdBreakpoints :: [Breakpoint], simCmdEvents :: [SimEvent] }

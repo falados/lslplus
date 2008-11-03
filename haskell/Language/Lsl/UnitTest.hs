@@ -68,4 +68,5 @@ expectedReturns n a (FuncCallExpectations mode callList) =
             (Nothing,_) -> matchFail
             (_,e) -> return e
 
+removeExpectation :: (String,[Maybe LSLValue]) -> FuncCallExpectations -> FuncCallExpectations
 removeExpectation m fce = fce { callList = removeLookup m (callList fce) }

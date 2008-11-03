@@ -30,7 +30,7 @@ import Language.Lsl.Internal.CodeHelper(renderCall)
 import Language.Lsl.Internal.FuncSigs(funcSigs)
 import Language.Lsl.Internal.Util(fromInt,lookupM,ctx,findM)
 import Language.Lsl.Syntax(Expr(..),
-                  CompiledLSLScript,
+                  CompiledLSLScript(..),
                   Statement(..),
                   Func(..),
                   FuncDec(..),
@@ -60,7 +60,7 @@ import Control.Monad.Error(ErrorT(..))
 
 -- initialize a script for execution
 initLSLScript :: CompiledLSLScript -> ScriptImage
-initLSLScript (globals,fs,ss)  =
+initLSLScript (CompiledLSLScript globals fs ss)  =
     ScriptImage {
         scriptImageName = "",
         curState = "default",

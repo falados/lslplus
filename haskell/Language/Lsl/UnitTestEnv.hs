@@ -22,7 +22,8 @@ import Language.Lsl.Syntax hiding (State)
 import qualified Language.Lsl.Syntax as L
 import Language.Lsl.Internal.Type(LSLValue,lslValString,lslShowVal,defaultValue)
 import Language.Lsl.Internal.Evaluation(EvalResult(..))
-import Language.Lsl.Internal.Exec(ExecutionInfo(..),ScriptImage(..),evalSimple,runEval,scriptImage,setupSimple,initStateSimple,frameInfo)
+import Language.Lsl.Internal.Exec(
+    EvalState,ExecutionInfo(..),ScriptImage(..),evalSimple,runEval,scriptImage,setupSimple,initStateSimple,frameInfo)
 import Language.Lsl.Internal.TestResult(TestResult(..))
 import Language.Lsl.UnitTest(EntryPoint(..),LSLUnitTest(..),ExpectationMode(..),FuncCallExpectations(..),expectedReturns,removeExpectation)
 import Language.Lsl.Internal.Util(findM,ctx)
@@ -176,7 +177,7 @@ hasFunc lib (moduleName,functionName) =
         case converted of
            Left s -> Left ("no such module: " ++ moduleName)
            Right (Left s) -> Left ("no such module: " ++ moduleName)
-           Right (Right ((_,funcs,_),path)) -> Right $ isJust (findFunc functionName funcs)
+           Right (Right (script,path)) -> Right $ isJust (findFunc functionName $ scriptFuncs script)
     where converted = evalState (runErrorT (convertEntryPoint ep)) world
           ep = ModuleFunc moduleName functionName
           world = SimpleWorld { maxTick = 10000, tick = 0, msgLog = [], wScripts = [], wLibrary = lib, 

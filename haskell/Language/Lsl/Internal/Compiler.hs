@@ -50,7 +50,7 @@ formatScriptCompilationSummary (name,result) =
         ([emit "name" [showString name]] ++ 
         case result of
             Left err -> [formatErr err]
-            Right (globals,funcs,states) ->
+            Right (CompiledLSLScript globals funcs states) ->
                 [emit "status" [emit "ok" [showString "true"]],
                 emit "entryPoints" (map emitFunc funcs ++ concatMap stateEntryPointEmitters states),
                 emit "globals" (map emitGlobal globals)])
@@ -131,7 +131,7 @@ renderScriptsToFiles compiledScripts pathTable =
 
 renderScriptToFile stamp path script =
    let newPath = replaceExtension path ".lsl"
-       text = renderCompiledScript stamp (optimizeScript script) "" in writeFile newPath text
+       text = renderCompiledScript stamp (optimizeScript script) in writeFile newPath text
        
 removeOutputScript path = 
     do exists <- doesFileExist outpath
