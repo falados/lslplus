@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -XDeriveDataTypeable -XTypeSynonymInstances -XFlexibleContexts #-}
+-- | Defines the abstract syntax tree for LSL (and LSL Plus extensions).
 module Language.Lsl.Syntax (
     -- Types
     Expr(..),
@@ -49,20 +50,27 @@ import Control.Monad.Error(MonadError(..),Error(..))
 
 type CtxVar = Ctx Var
 
+-- | An LSL variable (a name, and a type).
 data Var = Var { varName :: String, varType :: LSLType } deriving (Show,Typeable,Data)
 
 type CtxName = Ctx String
 
+-- | An LSL function declaration (the function name and type information, without associated
+-- statements.
 data FuncDec = FuncDec { funcName :: CtxName, funcType :: LSLType, funcParms :: [CtxVar] }
     deriving (Show,Typeable,Data)
 
 type CtxStmt = Ctx Statement
+-- | An LSL function definition (return type, parameters and statements.
 data Func = Func FuncDec [CtxStmt] deriving (Show,Typeable,Data)
 
+-- | An LSL Plus module, which is a separately 'compiled' unit that can contain
+-- both global variables and functions, but not states or handlers.
 data LModule = LModule [GlobDef] [CtxVar]
     deriving (Show,Typeable,Data)
 
 type CtxExpr = Ctx Expr
+-- | An LSL expression.
 data Expr = IntLit Int
           | FloatLit Float
           | StringLit String
@@ -110,7 +118,7 @@ data Expr = IntLit Int
           | AQFloat String
             deriving (Show,Typeable,Data)
 
-                          
+-- | An LSL statement.
 data Statement = Compound [CtxStmt]
                | While CtxExpr Statement
                | DoWhile Statement CtxExpr
@@ -127,26 +135,34 @@ data Statement = Compound [CtxStmt]
 
 isLabel (Label _) = True
 isLabel _ = False
-               
+
+-- | An LSL global variable (this is actually not a source level/syntactic entity -- the set of globals
+-- for a script is derived after analyzing all included modules.
 data Global = GDecl Var (Maybe Expr)
     deriving (Show,Typeable,Data)
 
+-- | A global definition (a function, a variable, or a module import statement).
 data GlobDef = GV CtxVar (Maybe CtxExpr) | GF Func | GI CtxName [(String,String)] String
     deriving (Show,Typeable,Data)
-
+-- | An LSL event handler definition.
 data Handler = Handler CtxName [CtxVar] [CtxStmt]
     deriving (Show,Typeable,Data)
     
+-- | The set of valid handlers supported by LSL.
 goodHandlers :: [(String,[LSLType])]
 goodHandlers = simpleLslEventDescriptors
-    
+
+-- | An LSL state definition.
 data State = State CtxName [Handler]
     deriving (Show,Typeable,Data)
 
+-- | An LSL script.
 data LSLScript = LSLScript [GlobDef] [State] deriving (Show,Typeable,Data)
 
 type ModuleInfo = ([Global],[Func])
+-- | A collection of modules.
 type Library = [(String,Validity LModule)]
+-- | A collection of mouldes, augmented with additional derived information.
 type AugmentedLibrary = [(String,Validity (LModule,ModuleInfo))]
 
 lslFunc (name,t,ts) =
@@ -167,8 +183,10 @@ lookupModule name lib =
         Just (Left (_,s)) -> throwStrError ("invalid library (" ++ s ++ ")")
         Just (Right m) -> return m
 
+-- A description of an error and where to find it in the source.
 type CodeErr = (SourceContext,String)
 
+-- | An error monad for representing validation errors with respect to LSL code.
 type Validity a = Either CodeErr a
 
 instance Error CodeErr where
@@ -924,17 +942,20 @@ data SourceContext = TextLocation { textLine0 :: Int, textColumn0 :: Int, textLi
 isTextLocation (TextLocation _ _ _ _ _) = True
 isTextLocation _ = False
 
+-- | A wrapper that can associate a source code context with a value (e.g. a syntax value).
 data Ctx a = Ctx { srcCtx :: SourceContext, ctxItem :: a } deriving (Show,Typeable,Data)
 instance Functor Ctx where
     fmap f (Ctx c v) = (Ctx c $ f v)
 
 ctxItems = map ctxItem
 
-fromMCtx Nothing = Nothing
-fromMCtx (Just m) = Just $ ctxItem m
+fromMCtx :: Maybe (Ctx a) -> Maybe a
+fromMCtx = fmap ctxItem
 
+nullCtx :: a -> Ctx a
 nullCtx = Ctx UnknownSourceContext
 
 funcNames = map (ctxItem.funcName)
 
+ctxVr2Vr :: (Ctx a,b) -> (a,b)
 ctxVr2Vr (Ctx _ name,c) = (name,c)
