@@ -1,0 +1,83 @@
+<html>
+<head>
+<link rel="stylesheet" type="text/css" href="book.css"/>
+</head>
+<body>
+<a name="installation"/>
+<h1>Installation</h2>
+<div class="content">
+<p>
+If you are reading this Help material, it is likely that you have already
+installed the LSL Plus Eclipse plugin.  However, LSL Plus will not work 
+properly unless the LSL Plus native executable (a.k.a. the Haskell Core)
+is also installed.  If you are running on Windows, your
+distribution of the plugin probably had the native executable embedded in it.  On
+other platforms, you must install it separately.
+<p>
+Installing the native executable on Unix based platforms, such as Linux
+or Mac, generally requires building the executable, unless a binary distribution
+of the executable is available.  Check the SourceForge download site for binary
+distributions.  If a binary distribution exists, you can drop it anywhere
+on your Unix PATH, and the LslPlus plugin will be able to execute it.
+<p>
+If there is no binary distribution available for your platform, you can build
+it from source.  Building LslPlus requires the installation of the Glasgow
+Haskell Compiler (GHC) version 6.10.1 or later, which is available from the 
+<a href="http://haskell.org/ghc/">GHC website</a>.  You can obtain the source
+distribution from the 
+<a href="http://hackage.haskell.org/packages/archive/pkg-list.html">
+Hackage Repository</a>, on the 
+<a href="http://hackage.haskell.org/cgi-bin/hackage-scripts/package/LslPlus">
+LslPlus page</a>.
+<p>
+Once you have the source distribution, which is a tarball that has been compressed with
+gzip, and have extracted it to some directory,
+from within that directory, execute the following command:
+<pre>
+    runhaskell Setup.hs configure
+</pre>
+
+<p>
+You will probably be told that there are some libraries on which the package depends that
+are not installed.  All of these other
+libraries, which aren't distributed by default with GHC, are available from the 
+<a href="http://hackage.haskell.org/packages/archive/pkg-list.html">
+Hackage Repository</a>.  The following packages are known to be needed:
+
+<ul>
+<li><a href="http://hackage.haskell.org/cgi-bin/hackage-scripts/package/utf8-string">utf8-string</a></li>
+<li><a href="http://hackage.haskell.org/cgi-bin/hackage-scripts/package/polyparse">polyparse</a></li>
+<li><a href="http://hackage.haskell.org/cgi-bin/hackage-scripts/package/HaXml">HaXml</a></li>
+<li><a href="http://hackage.haskell.org/cgi-bin/hackage-scripts/package/binary">binary</a></li>
+<li><a href="http://hackage.haskell.org/cgi-bin/hackage-scripts/package/pureMD5">pureMD5</a></li>
+</ul>
+
+<p>
+Each package is installed using the following sequence of commands:
+<pre>
+    runhaskell Setup.hs configure
+    runhaskell Setup.hs build
+    runhaskell Setup.hs install
+</pre>
+
+<p>
+Note: some packages may have a setup script called 'Setup.lhs' rather than 'Setup.hs'; you can check
+by looking in the directory after extracting the package from the tar file.  Note also that there are
+options that can be set when running the configure step, such as where to install executables.
+
+<p>
+After all dependencies are resolved, LslPlus can be installed the same way:
+<pre>
+    runhaskell Setup.hs configure
+    runhaskell Setup.hs build
+    runhaskell Setup.hs install
+</pre>
+
+<p>
+The final step, 'install', will install the executable in the default location for GHC-built executables
+(e.g. /usr/local/bin).  Wherever you install the executable, it must be on your PATH for the Eclipse plugin
+to find it).  After you have successfully installed it, you can launch Eclipse and use all the features
+of the LSL Plus plugin.
+</div>
+</body>
+</html>

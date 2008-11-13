@@ -34,6 +34,7 @@ import lslplus.util.Util.ArrayMapFunc;
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.runtime.FileLocator;
 import org.eclipse.core.runtime.Path;
+import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.jface.resource.ImageDescriptor;
 import org.eclipse.jface.text.rules.RuleBasedScanner;
 import org.eclipse.swt.graphics.Image;
@@ -44,6 +45,7 @@ import org.eclipse.ui.PartInitException;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.ide.IDE;
 import org.eclipse.ui.plugin.AbstractUIPlugin;
+import org.osgi.framework.BundleContext;
 
 import com.thoughtworks.xstream.XStream;
 import com.thoughtworks.xstream.io.xml.DomDriver;
@@ -54,8 +56,9 @@ import com.thoughtworks.xstream.io.xml.DomDriver;
  *
  */
 public class LslPlusPlugin extends AbstractUIPlugin {
-
+	private static final String LSLPLUS_CORE_VERSION = "0.1.0";
 	private static final String LSL_EXECUTABLE = "LslPlus" + ((File.separatorChar == '\\') ? ".EXE" : "");  //$NON-NLS-1$//$NON-NLS-2$ //$NON-NLS-3$
+	private static final String LSL_COMMAND = "LslPlus";
 	
     private static class ValidationResult {
         public boolean ok;
@@ -140,13 +143,16 @@ public class LslPlusPlugin extends AbstractUIPlugin {
      */
     public static Process launchCoreCommand(String command, boolean redir) {
         try {
+        	String exeName = null;
             File f = findExecutable(LSL_EXECUTABLE);
             if (f == null) {
                 Util.error("Can't find executable (" + LSL_EXECUTABLE + ")");
-                return null;
+                exeName = f.getPath();
+            } else {
+            	exeName = LSL_COMMAND;
             }
             
-            ProcessBuilder builder = new ProcessBuilder(new String[] { f.getPath(), command });
+            ProcessBuilder builder = new ProcessBuilder(new String[] { exeName, command });
             builder.redirectErrorStream(redir);
             Process process = builder.start();
 
@@ -375,4 +381,51 @@ public class LslPlusPlugin extends AbstractUIPlugin {
         return getDefault().getLslMetaData().getFunctions();
     }
 
+    public void start(BundleContext context) throws Exception {
+    	super.start(context);
+    	final String version = runTask("Version", "");
+    	
+    	if (version == null) { // executable not found
+	    	Util.log("LslPlus core not found");
+	    	getWorkbench().getDisplay().asyncExec(new Runnable() {
+	    		public void run() {
+	    			MessageDialog dlg = new MessageDialog(
+	    					getWorkbench().getActiveWorkbenchWindow().getShell(),
+	    					"LSL Plus Core Not Found",
+	    					null,
+	    					"The LSLPlus native executable (version " + LSLPLUS_CORE_VERSION + ")\n" +
+	    					"was not found.\n\n" +
+	    					"The LSLPlus native executable is available from Hackage:\n" +
+	    					"http://hackage.haskell.org/cgi-bin/hackage-scripts/pacakge/LslPlus\n\n" +
+	    					"Please also see the Help documentation for LSL Plus, under 'Installation'",
+	    					MessageDialog.ERROR,
+	    					new String[] { "Ok" },
+	    					0);
+	    			dlg.open();
+	    		}
+	    	});
+    	} else {
+	    	Util.log("LslPlus core version: " + version);
+	    	if (!LSLPLUS_CORE_VERSION.equals(version.trim())) {
+		    	getWorkbench().getDisplay().asyncExec(new Runnable() {
+		    		public void run() {
+		    			MessageDialog dlg = new MessageDialog(
+		    					getWorkbench().getActiveWorkbenchWindow().getShell(),
+		    					"LSL Plus Core Version",
+		    					null,
+		    					"The version of the LSLPlus native executable (" + version.trim() + ")\n" +
+		    					"is incompatible with this version of the LSL Plus Eclipse plugin,\n" +
+		    					"which requires version " + LSLPLUS_CORE_VERSION + ".\n"  +
+		    					"The LSLPlus native executable is available from Hackage:\n" +
+		    					"http://hackage.haskell.org/cgi-bin/hackage-scripts/pacakge/LslPlus\n\n" +
+		    					"Please also see the Help documentation for LSL Plus, under 'Installation'",
+		    					MessageDialog.ERROR,
+		    					new String[] { "Ok" },
+		    					0);
+		    			dlg.open();
+		    		}
+		    	});
+	    	}
+    	}
+    }
 }

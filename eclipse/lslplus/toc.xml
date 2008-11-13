@@ -3,8 +3,9 @@
 
 <toc label="LslPlus Table of Contents">
 	<topic label="Introduction" href="html/intro.html"></topic>
-	<topic label='What Do You Mean "Plus"?'  href="html/plus.html"> 
+	<topic label="What Do You Mean 'Plus?"  href="html/plus.html"> 
 	</topic>
+	<topic label="Installation" href="html/installation.html"/>
 	<topic label="Basic Usage" href="html/basic.html">
 		<topic label="Unit Tests" href="html/unit-test.html"></topic>
 		<topic label="Sim Projects" href="html/sim-project.html"></topic></topic>
