@@ -2,8 +2,8 @@
 <feature
       id="lslplus"
       label="Lslplus"
-      version="0.7.0">
-   <install-handler library="install.jar" handler="lslplus.install.InstallHandler"/>
+      version="0.8.0">
+   <install-handler library="" handler=""/>
 
    <description>
       The LSL Plus Plugin.
