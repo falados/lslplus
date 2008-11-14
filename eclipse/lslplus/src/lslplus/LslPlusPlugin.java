@@ -17,6 +17,8 @@ import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.net.URL;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import lslplus.decorators.ErrorDecorator;
 import lslplus.editor.LslPartitionScanner;
@@ -56,7 +58,8 @@ import com.thoughtworks.xstream.io.xml.DomDriver;
  *
  */
 public class LslPlusPlugin extends AbstractUIPlugin {
-	private static final String LSLPLUS_CORE_VERSION = "0.1.0";
+	private static final Pattern LSLPLUS_CORE_VERSION_PAT = Pattern.compile("^0\\.1(\\..*)?$");
+	private static final String LSLPLUS_CORE_VERSION = "0.1.*";
 	private static final String LSL_EXECUTABLE = "LslPlus" + ((File.separatorChar == '\\') ? ".EXE" : "");  //$NON-NLS-1$//$NON-NLS-2$ //$NON-NLS-3$
 	private static final String LSL_COMMAND = "LslPlus";
 	
@@ -406,7 +409,8 @@ public class LslPlusPlugin extends AbstractUIPlugin {
 	    	});
     	} else {
 	    	Util.log("LslPlus core version: " + version);
-	    	if (!LSLPLUS_CORE_VERSION.equals(version.trim())) {
+	    	Matcher m = LSLPLUS_CORE_VERSION_PAT.matcher(version.trim());
+	    	if (!m.matches()) {
 		    	getWorkbench().getDisplay().asyncExec(new Runnable() {
 		    		public void run() {
 		    			MessageDialog dlg = new MessageDialog(
