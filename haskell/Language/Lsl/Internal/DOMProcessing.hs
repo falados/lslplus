@@ -20,8 +20,13 @@ module Language.Lsl.Internal.DOMProcessing(ElemAcceptor(..),
                          elementListWith,
                          elementsOnly,
                          attrString,
-                         module Text.XML.HaXml,
-                         module Text.XML.HaXml.Posn) where
+                         Content(..),
+                         Document(..),
+                         Element(..),
+                         xmlParse,
+                         --module Text.XML.HaXml,
+                         --module Text.XML.HaXml.Posn
+                         ) where
 
 import Control.Monad(MonadPlus(..),liftM2)
 import Control.Monad.Error(MonadError(..))
