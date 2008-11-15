@@ -16,6 +16,8 @@ module Language.Lsl.Sim(SimStatus(..),
                   AvatarInputEvent(..),
                   SimEvent(..),
                   SimEventArg(..),
+                  WorldM,
+                  World,
                   --
                   eventDescriptors,
                   simStep,
