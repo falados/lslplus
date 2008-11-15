@@ -3,6 +3,7 @@ module Language.Lsl.UnitTest(
         FuncCallExpectations(..),
         ExpectationMode(..),
         EntryPoint(..),
+        Binding,
         expectedReturns,
         removeExpectation) where
     

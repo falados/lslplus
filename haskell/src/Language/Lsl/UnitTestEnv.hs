@@ -5,7 +5,9 @@ module Language.Lsl.UnitTestEnv(
     SimpleWorld,
     TestEvent(..),
     ExecutionInfo(..),
-    ExecCommand(..)) where
+    ExecCommand(..),
+    FrameInfo,
+    TestResult) where
 
 import Control.Monad(liftM2)
 import Control.Monad.State(MonadState(..),State(..),StateT(..),evalState)
@@ -23,7 +25,7 @@ import qualified Language.Lsl.Syntax as L
 import Language.Lsl.Internal.Type(LSLValue,lslValString,lslShowVal,defaultValue)
 import Language.Lsl.Internal.Evaluation(EvalResult(..))
 import Language.Lsl.Internal.Exec(
-    EvalState,ExecutionInfo(..),ScriptImage(..),evalSimple,runEval,scriptImage,setupSimple,initStateSimple,frameInfo)
+    EvalState,ExecutionInfo(..),FrameInfo,ScriptImage(..),evalSimple,runEval,scriptImage,setupSimple,initStateSimple,frameInfo)
 import Language.Lsl.Internal.TestResult(TestResult(..))
 import Language.Lsl.UnitTest(EntryPoint(..),LSLUnitTest(..),ExpectationMode(..),FuncCallExpectations(..),expectedReturns,removeExpectation)
 import Language.Lsl.Internal.Util(findM,ctx)

@@ -5,10 +5,23 @@ module Language.Lsl.Sim(SimStatus(..),
                   SimInputEventDefinition(..),
                   SimParam(..),
                   SimParamType(..),
+                  -- imported types re=exported
+                  LogMessage(..),
+                  LogLevel(..),
+                  Breakpoint,
+                  BreakpointManager,
+                  EvalResult,
+                  ScriptInfo(..),
+                  AvatarOutputEvent(..),
+                  AvatarInputEvent(..),
+                  SimEvent(..),
+                  SimEventArg(..),
+                  --
                   eventDescriptors,
                   simStep,
-                  unimplementedFuncs,
-                  module Language.Lsl.Internal.WorldState) where
+                  unimplementedFuncs
+                  --module Language.Lsl.Internal.WorldState
+                  ) where
 
 import Control.Monad(MonadPlus(..),(>=>),filterM,foldM,forM_,liftM,liftM2,unless,when)
 import Control.Monad.State(StateT(..),lift)
@@ -25,7 +38,7 @@ import qualified Data.IntMap as IM
 
 import Language.Lsl.Internal.Animation(builtInAnimations)
 import Language.Lsl.Internal.AvEvents(AvatarOutputEvent(..),AvatarInputEvent(..))
-import Language.Lsl.Internal.Breakpoint(Breakpoint,emptyBreakpointManager,setStepOverBreakpoint,setStepOutBreakpoint,replaceBreakpoints,
+import Language.Lsl.Internal.Breakpoint(Breakpoint,BreakpointManager,emptyBreakpointManager,setStepOverBreakpoint,setStepOutBreakpoint,replaceBreakpoints,
                       setStepBreakpoint,breakpointFile,breakpointLine,checkBreakpoint)
 import Language.Lsl.Internal.CodeHelper(renderCall)
 import Language.Lsl.Internal.Constants

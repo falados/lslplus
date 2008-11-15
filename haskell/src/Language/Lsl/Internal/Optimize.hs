@@ -1,7 +1,7 @@
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 module Language.Lsl.Internal.Optimize(optimizeScript) where
 
-import Language.Lsl.Syntax(CompiledLSLScript(..),Expr(..),Statement(..),Global(..),Func(..),FuncDec(..),State(..),Ctx(..),Handler(..))
+import Language.Lsl.Syntax(CompiledLSLScript(..),Expr(..),Statement(..),Func(..),FuncDec(..),State(..),Ctx(..),Handler(..))
 
 optimizeScript :: CompiledLSLScript -> CompiledLSLScript
 optimizeScript (CompiledLSLScript gs fs ss) = (CompiledLSLScript gs fs' ss)

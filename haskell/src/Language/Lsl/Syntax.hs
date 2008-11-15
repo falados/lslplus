@@ -22,6 +22,11 @@ module Language.Lsl.Syntax (
     Library,
     AugmentedLibrary,
     CodeErr,
+    CtxVar,
+    CtxName,
+    CtxExpr,
+    CtxStmt,
+    ModuleInfo,
     -- Values
     fromMCtx,
     ctxItems,
