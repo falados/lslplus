@@ -150,9 +150,9 @@ public class LslPlusPlugin extends AbstractUIPlugin {
             File f = findExecutable(LSL_EXECUTABLE);
             if (f == null) {
                 Util.error("Can't find executable (" + LSL_EXECUTABLE + ")");
-                exeName = f.getPath();
-            } else {
             	exeName = LSL_COMMAND;
+            } else {
+                exeName = f.getPath();
             }
             
             ProcessBuilder builder = new ProcessBuilder(new String[] { exeName, command });
