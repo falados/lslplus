@@ -1,4 +1,4 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <site>
-   <feature url="features/lslplus_0.8.1.jar" id="lslplus" version="0.8.1"/>
+   <feature url="features/lslplus_0.8.2.jar" id="lslplus" version="0.8.2"/>
 </site>
