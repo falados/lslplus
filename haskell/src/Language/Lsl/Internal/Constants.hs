@@ -395,6 +395,7 @@ allConstants = [
     Constant "PRIM_COLOR" llcPrimColor,
     Constant "PRIM_FLEXIBLE" llcPrimFlexible,
     Constant "PRIM_FULLBRIGHT" llcPrimFullbright,
+    Constant "PRIM_GLOW" (IVal 25),
     Constant "PRIM_HOLE_CIRCLE" (IVal 0x10),
     Constant "PRIM_HOLE_DEFAULT" (IVal 0x0),
     Constant "PRIM_HOLE_SQUARE" (IVal 0x20),

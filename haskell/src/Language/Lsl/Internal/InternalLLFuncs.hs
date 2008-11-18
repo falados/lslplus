@@ -52,6 +52,7 @@ module Language.Lsl.Internal.InternalLLFuncs(
     llStringTrim,
     llXorBase64Strings,
     llXorBase64StringsCorrect,
+    llSHA1String,
     -- Math functions
     llCos,
     llSin,
@@ -114,6 +115,7 @@ import Language.Lsl.Internal.Util(Permutation3(..),axisAngleToRotation,cut,dist3
 import Language.Lsl.Internal.Type(LSLType(..),LSLValue(..),lslValString,parseFloat,parseInt,rot2RVal,toSVal,typeOfLSLValue,vVal2Vec)
 import Language.Lsl.Internal.Evaluation(EvalResult(..))
 import Language.Lsl.Internal.Constants(findConstVal)
+import Language.Lsl.Internal.SHA1(hashStoHex)
 import Data.List(elemIndex,find,foldl',intersperse,isPrefixOf,sort)
 import Data.Char(toLower,toUpper)
 import Data.Bits((.|.),(.&.),shiftL,shiftR,xor)
@@ -181,6 +183,7 @@ internalLLFuncs = [
     ("llRot2Left",llRot2Left),
     ("llRot2Up",llRot2Up),
     ("llRound",llRound),
+    ("llSHA1String",llSHA1String),
     ("llSin",llSin),
     ("llSqrt",llSqrt),
     ("llStringLength",llStringLength),
@@ -267,6 +270,8 @@ llUnescapeURL _ [SVal string] =
  
 llMD5String _ [SVal string, IVal nonce] =
     continueWith $ SVal $ (show . MD5.md5 . L.pack . B.unpack . UTF8.fromString) (string ++ ":" ++ show nonce)   
+
+llSHA1String _ [SVal string] = continueWith $ SVal (hashStoHex string)
 -- Math functions
 
 unaryToLL :: (Monad m) => (Float -> Float) -> [LSLValue] -> m (EvalResult,LSLValue)
