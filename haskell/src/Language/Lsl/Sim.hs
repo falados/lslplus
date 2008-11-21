@@ -177,8 +177,12 @@ llSensorRemove info@(ScriptInfo _ _ sn pk _) [] =
 
 llRequestAgentData info@(ScriptInfo _ _ sn pk _) [KVal ak, IVal d] =
     do key <- lift newKey
-       av <- (lift getWorldAvatars >>= mlookup ak) <||> (throwError ("no such avatar" ++ ak))
-       dataVal <- case d of
+       av <- (lift getWorldAvatars >>= return . M.lookup ak) -- <||>  (throwError ("no such avatar" ++ ak))
+       dataVal <- case av of
+           Nothing -> do
+               lift $ logFromScript info ("llRequestAgentData: no such avatar - " ++ ak)
+               return "0"
+           Just av -> case d of
                          d | d == cDataBorn -> return "1981-01-01"
                            | d == cDataOnline -> return "1"
                            | d == cDataRating -> return "0,0,0,0,0"
