@@ -20,6 +20,8 @@ import lslplus.util.Util;
 
 import org.eclipse.core.commands.ExecutionException;
 import org.eclipse.core.resources.IFile;
+import org.eclipse.core.resources.IProject;
+import org.eclipse.core.resources.IProjectDescription;
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.IWorkspace;
 import org.eclipse.core.resources.ResourcesPlugin;
@@ -28,6 +30,7 @@ import org.eclipse.core.runtime.IAdaptable;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
+import org.eclipse.core.runtime.NullProgressMonitor;
 import org.eclipse.jface.dialogs.ErrorDialog;
 import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.jface.operation.IRunnableWithProgress;
@@ -184,9 +187,15 @@ abstract public class LslFileCreationWizardPage extends WizardPage implements Li
 		final IFile newFileHandle = createFileHandle(newFilePath);
 		final InputStream initialContents = getInitialContents();
 
+		IProject p = newFileHandle.getProject();
 		IRunnableWithProgress op = new CreateFileRunnable(initialContents, newFileHandle);
 		try {
 			getContainer().run(true, true, op);
+			IProjectDescription description = p.getDescription();
+			String[] natures = description.getNatureIds();
+			String[] newNatures = (String[]) Util.append(natures, new String[] { "lslplus.lslPlusNature" }); //$NON-NLS-1$
+			description.setNatureIds(newNatures);
+			p.setDescription(description, new NullProgressMonitor());
 		} catch (InterruptedException e) {
 			return null;
 		} catch (InvocationTargetException e) {
@@ -199,6 +208,12 @@ abstract public class LslFileCreationWizardPage extends WizardPage implements Li
 					NLS.bind(Messages.getString("LslFileCreationWizardPage.INTERNAL_ERROR"),e.getTargetException().getMessage())); //$NON-NLS-1$
 
 			return null;
+		} catch (CoreException e) {
+			Util.log(e,e.getLocalizedMessage());
+			MessageDialog.openError(
+					getContainer().getShell(),
+					Messages.getString("LslFileCreationWizardPage.CREATION_PROBLEMS"), //$NON-NLS-1$
+					NLS.bind(Messages.getString("LslFileCreationWizardPage.INTERNAL_ERROR"),e.getMessage())); //$NON-NLS-1$
 		}
 
 		newFile = newFileHandle;
