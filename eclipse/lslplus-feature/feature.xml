@@ -2,7 +2,7 @@
 <feature
       id="lslplus"
       label="Lslplus"
-      version="0.8.2">
+      version="0.8.3">
    <install-handler library="" handler=""/>
 
    <description>
@@ -144,6 +144,8 @@ POSSIBILITY OF SUCH DAMAGE.
       <import plugin="org.eclipse.core.expressions"/>
       <import plugin="org.eclipse.ui.ide"/>
       <import plugin="com.ibm.icu"/>
+      <import plugin="org.eclipse.help"/>
+      <import plugin="org.eclipse.update.core"/>
    </requires>
 
    <plugin
