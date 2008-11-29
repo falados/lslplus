@@ -1,6 +1,7 @@
 package lslplus.util;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.UnsupportedEncodingException;
@@ -42,7 +43,7 @@ public class Util {
      * @param lines the line offset
      * @param columns the column offset
      * @param f the file
-     * @return
+     * @return the offsets.
      */
     public static int[] findOffsetsFor(int[] lines, int[] columns, IFile f) {
         BufferedReader reader = null;
@@ -338,5 +339,19 @@ public class Util {
                  (c >= 'A' && c <= 'Z') ||
                  (c >= '0' && c <= '9') ||
                  c == '-' || c == '_' || c == '.' || c == '~');
+    }
+    
+    public static void chmod(File f) throws IOException {
+        ProcessBuilder builder = new ProcessBuilder(new String[] {"chmod", "+x", f.getAbsolutePath()});  //$NON-NLS-1$//$NON-NLS-2$
+        builder.redirectErrorStream(true);
+        Process p = builder.start();
+        
+        InputStreamReader reader = new InputStreamReader(p.getInputStream());
+        int c;
+        
+        while ((c = reader.read()) >= 0) {
+            char cc = (char)c;
+            System.out.print(cc);
+        }
     }
 }

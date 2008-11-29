@@ -12,6 +12,7 @@ package lslplus;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
@@ -35,6 +36,7 @@ import lslplus.util.Util.ArrayMapFunc;
 
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.runtime.FileLocator;
+import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.Path;
 import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.jface.resource.ImageDescriptor;
@@ -58,10 +60,11 @@ import com.thoughtworks.xstream.io.xml.DomDriver;
  *
  */
 public class LslPlusPlugin extends AbstractUIPlugin {
-	private static final Pattern LSLPLUS_CORE_VERSION_PAT = Pattern.compile("^0\\.1(\\..*)?$");
-	private static final String LSLPLUS_CORE_VERSION = "0.1.*";
-	private static final String LSL_EXECUTABLE = "LslPlus" + ((File.separatorChar == '\\') ? ".EXE" : "");  //$NON-NLS-1$//$NON-NLS-2$ //$NON-NLS-3$
-	private static final String LSL_COMMAND = "LslPlus";
+	public static final String LSLPLUS_NATIVE_PATH = "lslplus.native_path"; //$NON-NLS-1$
+    private static final Pattern LSLPLUS_CORE_VERSION_PAT = Pattern.compile("^0\\.1(\\..*)?$"); //$NON-NLS-1$
+	private static final String LSLPLUS_CORE_VERSION = "0.1.*"; //$NON-NLS-1$
+	private static final String LSL_EXECUTABLE = "LslPlus" + ((File.separatorChar == '\\') ? ".exe" : "");  //$NON-NLS-1$//$NON-NLS-2$ //$NON-NLS-3$
+	private static final String LSL_COMMAND = "LslPlus"; //$NON-NLS-1$
 	
     private static class ValidationResult {
         public boolean ok;
@@ -145,16 +148,28 @@ public class LslPlusPlugin extends AbstractUIPlugin {
      * @return the process to monitor
      */
     public static Process launchCoreCommand(String command, boolean redir) {
+        String path = getDefault().getExecutablePath();
+        if (path == null) return null;
+        return execute(command, redir, path);
+    }
+    
+    private static Process executeWithRetry(String command, boolean redir, String exeName) {
+        Process p = execute(command, redir, exeName);
+        
+        if (p != null) return p;
+        if (File.separatorChar == '\\') return null;
+        
+        // only want to do this if normal execution failed...
         try {
-        	String exeName = null;
-            File f = findExecutable(LSL_EXECUTABLE);
-            if (f == null) {
-                Util.error("Can't find executable (" + LSL_EXECUTABLE + ")");
-            	exeName = LSL_COMMAND;
-            } else {
-                exeName = f.getPath();
-            }
-            
+            Util.chmod(new File(exeName));
+        } catch (IOException e) {
+            Util.log(e, "can't change mode of native executable"); //$NON-NLS-1$
+        }
+        return execute(command, redir, exeName);
+    }
+    
+    private static Process execute(String command, boolean redir, String exeName) {
+        try {
             ProcessBuilder builder = new ProcessBuilder(new String[] { exeName, command });
             builder.redirectErrorStream(redir);
             Process process = builder.start();
@@ -166,31 +181,168 @@ public class LslPlusPlugin extends AbstractUIPlugin {
         }
     }
     
-    private static File findExecutable(String executablePath) throws IOException {
-        URL url = FileLocator.find(getDefault().getBundle(), new Path("$os$/" + executablePath), null); //$NON-NLS-1$
-   
-        if (url == null) {
-            Util.error("no such executable: " + executablePath); //$NON-NLS-1$
+    private String executablePath;
+
+    private boolean determineExecutable() {
+        String path = getDefault().getPreferenceStore().getString(LSLPLUS_NATIVE_PATH);
+        String preferredVersion = null;
+        String embeddedVersion = null;
+        String installedVersion = null;
+        if (path != null && !"".equals(path.trim())) { //$NON-NLS-1$
+            preferredVersion = tryTask("Version", path); //$NON-NLS-1$
+            if (checkVersion(preferredVersion)) {
+                setExecutablePath(path);
+                return true;
+            }
+        }
+        
+        URL url = FileLocator.find(getDefault().getBundle(), preferredNativePath(), null);
+        if (url != null) {
+            try {
+                path = FileLocator.toFileURL(url).getFile();
+                embeddedVersion = tryTask("Version", path); //$NON-NLS-1$
+                
+                if (checkVersion(embeddedVersion)) {
+                    setExecutablePath(path);
+                    return true;
+                }
+            } catch (IOException e) {
+                Util.log(e, "can't locate " + url); //$NON-NLS-1$
+            }
+        }
+        
+        url = FileLocator.find(getDefault().getBundle(), alternateNativePath(), null);
+        if (url != null) {
+            try {
+                path = FileLocator.toFileURL(url).getFile();
+                embeddedVersion = tryTask("Version", path); //$NON-NLS-1$
+                
+                if (checkVersion(embeddedVersion)) {
+                    setExecutablePath(path);
+                    return true;
+                }
+            } catch (IOException e) {
+                Util.log(e, "can't locate " + url); //$NON-NLS-1$
+            }
+        }
+        
+        installedVersion = tryTask("Version", LSL_COMMAND); //$NON-NLS-1$
+        if (checkVersion(installedVersion)) {
+            setExecutablePath(LSL_COMMAND);
+            return true;
+        }
+        
+        StringBuilder versions = new StringBuilder();
+        boolean versionFound = false;
+        if (preferredVersion != null) {
+            versions.append(preferredVersion).append(" (version of executable set in LSL Plus Preferences)\n");
+            versionFound = true;
+        }
+        if (embeddedVersion != null) {
+            versions.append(embeddedVersion).append(" (version installed as part of plugin)\n");
+            versionFound = true;
+        }
+        if (installedVersion != null) {
+            versions.append(installedVersion).append(" (version found on PATH)\n");
+            versionFound = true;
+        }
+        
+        final StringBuilder buf = new StringBuilder();
+        if (versionFound) {
+            buf.append("The following versions of the LSL Plus native executable were found:\n");
+            buf.append(versions);
+            buf.append("\nNone of these version are compatible with this plugin, which requires\n");
+            buf.append("version ").append(LSLPLUS_CORE_VERSION).append(".\n");
+        } else {
+            buf.append("The LSL Plus native executable was not found!\n");
+        }
+        buf.append("The LSLPlus native executable is available from Hackage:\n");
+        buf.append("http://hackage.haskell.org/cgi-bin/hackage-scripts/pacakge/LslPlus\n\n");
+        buf.append("Please also see the Help documentation for LSL Plus, under 'Installation'");
+        getWorkbench().getDisplay().asyncExec(new Runnable() {
+            public void run() {
+                MessageDialog dlg = new MessageDialog(
+                        getWorkbench().getActiveWorkbenchWindow().getShell(),
+                        "LSL Plus Native Executable Problem",
+                        null,
+                        buf.toString(),
+                        MessageDialog.ERROR,
+                        new String[] { "Ok" },
+                        0);
+                dlg.open();
+            }
+        });
+        
+        return false;
+    }
+    
+    private String tryTask(String command, String path) {
+        try {
+            Process process = executeWithRetry(command, true, path);
+            if (process == null) return null;
+
+            OutputStream out = process.getOutputStream();
+            OutputStreamWriter writer = new OutputStreamWriter(out);
+
+            writer.close();
+            
+            return readString(process.getInputStream());
+        } catch (IOException e) {
             return null;
         }
-
-        File f = new File(FileLocator.toFileURL(url).getFile());
-
-        if (f == null) {
-            Util.error("couldn't find executable: " + executablePath); //$NON-NLS-1$
+    }
+    
+    private String getExecutablePath() {
+        return executablePath;
+    }
+    
+    private void setExecutablePath(String path) {
+        Util.log("executablePath = " + path);
+        this.executablePath = path;
+    }
+    
+    private static IPath preferredNativePath() {
+        return new Path("os") //$NON-NLS-1$
+            .append(System.getProperty("osgi.os", "os")) //$NON-NLS-1$ //$NON-NLS-2$
+            .append(System.getProperty("osgi.arch", "arch")) //$NON-NLS-1$ //$NON-NLS-2$
+            .append(LSL_EXECUTABLE).removeTrailingSeparator();
+    }
+    
+    private static IPath alternateNativePath() {
+        if ("x86_64".equals(System.getProperty("osgi.arch", "arch"))) { //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+            return new Path("os") //$NON-NLS-1$
+                .append(System.getProperty("osgi.os", "os")) //$NON-NLS-1$ //$NON-NLS-2$
+                .append("x86") //$NON-NLS-1$
+                .append(LSL_EXECUTABLE).removeTrailingSeparator();
+        } else {
             return null;
         }
-        return f;
+    }
+
+    public static String defaultNativePath() {
+        try {
+            URL url = FileLocator.find(getDefault().getBundle(), new Path("os"), null); //$NON-NLS-1$
+            String os = System.getProperty("osgi.os", "os");  //$NON-NLS-1$//$NON-NLS-2$
+            String arch = System.getProperty("osgi.arch", "arch");  //$NON-NLS-1$//$NON-NLS-2$
+            File f = new File(FileLocator.toFileURL(url).getFile() + File.separatorChar + os + File.separatorChar +
+                    arch + File.separatorChar + LSL_EXECUTABLE);
+            
+            return f.getAbsolutePath();
+        } catch (IOException e) {
+            Util.log(e, "can't compute default path"); //$NON-NLS-1$
+            return ""; //$NON-NLS-1$
+        }
     }
     
     public static String runTask(String command, String input) {
         Process p = runCommand(command, input, true);
-        
         if (p == null) return null;
-        
+        return readString(p.getInputStream());
+    }
+    
+    private static String readString(InputStream in) {
+        InputStreamReader reader = new InputStreamReader(in);
         StringBuilder buf = new StringBuilder();
-        InputStreamReader reader = new InputStreamReader(p.getInputStream());
-        
         char[] chars = new char[512];
         int count = 0;
         
@@ -248,8 +400,6 @@ public class LslPlusPlugin extends AbstractUIPlugin {
      */
     public LslPlusPlugin() {
         instance = this;
-        testManager = new TestManager();
-        simManager  = new SimManager();
     }
 
     private LslMetaData buildMetaData() {
@@ -386,50 +536,18 @@ public class LslPlusPlugin extends AbstractUIPlugin {
 
     public void start(BundleContext context) throws Exception {
     	super.start(context);
-    	final String version = runTask("Version", "");
-    	
-    	if (version == null) { // executable not found
-	    	Util.log("LslPlus core not found");
-	    	getWorkbench().getDisplay().asyncExec(new Runnable() {
-	    		public void run() {
-	    			MessageDialog dlg = new MessageDialog(
-	    					getWorkbench().getActiveWorkbenchWindow().getShell(),
-	    					"LSL Plus Core Not Found",
-	    					null,
-	    					"The LSLPlus native executable (version " + LSLPLUS_CORE_VERSION + ")\n" +
-	    					"was not found.\n\n" +
-	    					"The LSLPlus native executable is available from Hackage:\n" +
-	    					"http://hackage.haskell.org/cgi-bin/hackage-scripts/pacakge/LslPlus\n\n" +
-	    					"Please also see the Help documentation for LSL Plus, under 'Installation'",
-	    					MessageDialog.ERROR,
-	    					new String[] { "Ok" },
-	    					0);
-	    			dlg.open();
-	    		}
-	    	});
-    	} else {
-	    	Util.log("LslPlus core version: " + version);
-	    	Matcher m = LSLPLUS_CORE_VERSION_PAT.matcher(version.trim());
-	    	if (!m.matches()) {
-		    	getWorkbench().getDisplay().asyncExec(new Runnable() {
-		    		public void run() {
-		    			MessageDialog dlg = new MessageDialog(
-		    					getWorkbench().getActiveWorkbenchWindow().getShell(),
-		    					"LSL Plus Core Version",
-		    					null,
-		    					"The version of the LSLPlus native executable (" + version.trim() + ")\n" +
-		    					"is incompatible with this version of the LSL Plus Eclipse plugin,\n" +
-		    					"which requires version " + LSLPLUS_CORE_VERSION + ".\n"  +
-		    					"The LSLPlus native executable is available from Hackage:\n" +
-		    					"http://hackage.haskell.org/cgi-bin/hackage-scripts/pacakge/LslPlus\n\n" +
-		    					"Please also see the Help documentation for LSL Plus, under 'Installation'",
-		    					MessageDialog.ERROR,
-		    					new String[] { "Ok" },
-		    					0);
-		    			dlg.open();
-		    		}
-		    	});
-	    	}
-    	}
+        getPreferenceStore().setDefault(LSLPLUS_NATIVE_PATH, ""); //$NON-NLS-1$
+    	//checkVersion();
+        if (determineExecutable()) {
+            testManager = new TestManager();
+            simManager  = new SimManager();
+        }
+    }
+    
+    private boolean checkVersion(final String version) {
+        if (version == null) return false;
+        Matcher m = LSLPLUS_CORE_VERSION_PAT.matcher(version.trim());
+        boolean matches = m.matches();
+        return matches;
     }
 }

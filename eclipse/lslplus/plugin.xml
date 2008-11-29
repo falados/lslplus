@@ -419,5 +419,13 @@
             file="helpcontexts.xml">
       </contexts>
    </extension>
+   <extension
+         point="org.eclipse.ui.preferencePages">
+      <page
+            class="lslplus.preferences.LslPlusPreferencePage"
+            id="lslplus.preferences.page1"
+            name="LSL Plus">
+      </page>
+   </extension>
 
 </plugin>

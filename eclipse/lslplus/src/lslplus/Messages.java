@@ -16,6 +16,8 @@ public class Messages extends NLS {
     public static String ProjectNature_OK;
     public static String ProjectNature_REFRESH;
     public static String ProjectNature_REFRESHED_OK;
+    public static String SimManager_Cant_Get_Simulator_Information;
+    public static String SimManager_OK;
 	static {
 		// initialize resource bundle
 		NLS.initializeMessages(BUNDLE_NAME, Messages.class);

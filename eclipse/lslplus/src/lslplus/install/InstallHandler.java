@@ -2,8 +2,9 @@ package lslplus.install;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.net.URL;
+
+import lslplus.util.Util;
 
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.FileLocator;
@@ -42,20 +43,9 @@ public class InstallHandler extends BaseInstallHandler {
                 doit(files[i]);
             }
         } else if ("LslPlus".equals(f.getName())) {
-            ProcessBuilder builder = new ProcessBuilder(new String[] {"chmod", "+x", f.getAbsolutePath()});
             try {
-                builder.redirectErrorStream(true);
-                Process p = builder.start();
-                
-                InputStreamReader reader = new InputStreamReader(p.getInputStream());
-                int c;
-                
-                while ((c = reader.read()) >= 0) {
-                    char cc = (char)c;
-                    System.out.print(cc);
-                }
+                Util.chmod(f);
             } catch (IOException e) {
-                // TODO Auto-generated catch block
                 e.printStackTrace();
             }
             System.out.println("doit to: " + f.getAbsolutePath());

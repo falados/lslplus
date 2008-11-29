@@ -27,6 +27,8 @@ import com.thoughtworks.xstream.XStream;
 import com.thoughtworks.xstream.io.xml.DomDriver;
 
 public class SimManager implements SimEventListener {
+    private static final String SIM_META_DATA = "SimMetaData"; //$NON-NLS-1$
+
     private static class SimMetaData {
         private static XStream xstream;
         
@@ -220,10 +222,10 @@ public class SimManager implements SimEventListener {
         Job job = new Job("BuildSimMetaData") { //$NON-NLS-1$
 
             protected IStatus run(IProgressMonitor monitor) {
-                String metaDataString = LslPlusPlugin.runTask("SimMetaData", "");  //$NON-NLS-2$
-                Util.log("metaDataString = " + metaDataString);
+                String metaDataString = LslPlusPlugin.runTask(SIM_META_DATA, ""); //$NON-NLS-1$
+                Util.log("metaDataString = " + metaDataString); //$NON-NLS-1$
                 if (metaDataString == null) return new Status(IStatus.ERROR, LslPlusPlugin.PLUGIN_ID,
-                        "Can't get simulator information.  Possible plugin misconfiguration or incompatibility with host platform");
+                        Messages.SimManager_Cant_Get_Simulator_Information);
                 SimMetaData metaData = SimMetaData.fromXML(metaDataString);
                 
                 HashMap map = new HashMap();
@@ -234,7 +236,7 @@ public class SimManager implements SimEventListener {
                 
                 eventDescriptors = map;
                 fireSimMetaDataReady();
-                return new Status(IStatus.OK,LslPlusPlugin.PLUGIN_ID, "OK");
+                return new Status(IStatus.OK,LslPlusPlugin.PLUGIN_ID, Messages.SimManager_OK);
             }
             
         };
