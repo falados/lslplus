@@ -13,6 +13,9 @@
     <xslt in="content.xml" out="${dist}/${version}/${site}/content.xml" style="xform-content.xsl">
         <param name="desc" expression="LSL Plus Update Site - ${desc}"/>
     </xslt>
+    <xslt in="index.html" out="${dist}/${version}/${site}/index.html" style="xform-index.xsl">
+        <param name="siteName" expression="${desc}"/>
+    </xslt>
     <copy todir="${dist}/${version}/archives">
         <mapper type="regexp" from="^(.*)_${version}.jar$" to="\1_plugin_${version}.jar"/>
         <fileset dir="plugins"/>
@@ -21,5 +24,9 @@
         <mapper type="regexp" from="^(.*)_${version}.jar$" to="\1_feature_${version}.jar"/>
         <fileset dir="features"/>
     </copy>
+</target>
+	
+<target name="clean">
+	<delete dir="${dist}"/>
 </target>
 </project>
