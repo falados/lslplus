@@ -1832,8 +1832,7 @@ llCollisionSprite info@(ScriptInfo _ _ _ pk _) [SVal impactSprite] =
 llGetKey (ScriptInfo _ _ _ pk _) [] = continueWith $ KVal pk
 
 llGetOwnerKey info@(ScriptInfo _ _ _ pk _) [KVal k] = 
-   (do  throwError "you suck!!!"
-        regionIndex <- getPrimRegion pk
+   (do  regionIndex <- getPrimRegion pk
         mRegionIndex  <- fromErrorT Nothing (getPrimRegion k >>= return . Just)
         key <- case mRegionIndex of 
             Nothing -> (lift $ logFromScript info "llGetOwnerKey: object key not found") >> return k
