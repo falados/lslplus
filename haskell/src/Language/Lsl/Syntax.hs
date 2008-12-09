@@ -27,6 +27,7 @@ module Language.Lsl.Syntax (
     CtxExpr,
     CtxStmt,
     ModuleInfo,
+    Codebase(..),
     -- Values
     fromMCtx,
     ctxItems,
@@ -35,6 +36,7 @@ module Language.Lsl.Syntax (
     findFunc,
     validLSLScript,
     validLibrary,
+    moduleFromScript,
     findState,
     predefFuncs,
     findFuncDec,
@@ -169,6 +171,8 @@ type ModuleInfo = ([Global],[Func])
 type Library = [(String,Validity LModule)]
 -- | A collection of mouldes, augmented with additional derived information.
 type AugmentedLibrary = [(String,Validity (LModule,ModuleInfo))]
+
+data Codebase = Codebase { codebaseLib :: AugmentedLibrary, codebaseScripts :: [(String,Validity CompiledLSLScript)] }
 
 lslFunc (name,t,ts) =
     FuncDec (nullCtx name) t (zipWith (\ x y -> nullCtx $ Var [y] x) ts ['a'..])
@@ -855,7 +859,38 @@ tstLib = [
     ("lambda", LModule [GI (nullCtx "kappa") [] [], GI (nullCtx "sigma") [] []] []),
     ("kappa", LModule [] []),
     ("sigma", LModule [] [])]
-    
+
+-- | Transform a script into a module, generating function names for each handler, using the 
+-- pattern <state-name>_state_<handler-name>.
+-- The script following script:
+--  
+--  default {
+--      state_entry() {
+--          llSay(0,"Hello Avatar");
+--      }
+--  }
+-- 
+--  would be transformed into a module equivalent to:
+-- 
+--  $module
+--  
+--  default_state_state_entry() {
+--      llSay(0,"Hello Avatar");
+--  }
+moduleFromScript :: CompiledLSLScript -> LModule
+moduleFromScript script = LModule globDefs []
+    where globDefs = globDefsFromGlobs (scriptGlobals script) ++
+                     globDefsFromFuncs (scriptFuncs script) ++
+                     funcDefsFromStates (scriptStates script)
+          globDefsFromGlobs = map globDefFromGlob
+          globDefsFromFuncs = map GF
+          funcDefsFromStates = concatMap funcDefsFromState
+          
+globDefFromGlob (GDecl v me) = GV (nullCtx v) (fmap nullCtx me)
+funcDefsFromState (State ctxnm handlers) = map (funcDefFromHandler (ctxItem ctxnm)) handlers
+funcDefFromHandler stateName (Handler ctxnm params stmts) = GF $ Func (FuncDec combinedName LLVoid params) stmts
+    where combinedName = nullCtx $ stateName ++ "$$" ++ (ctxItem ctxnm)
+
 rewriteName renames (Ctx ctx name) =
     case lookup name renames of
         Nothing -> Ctx ctx name

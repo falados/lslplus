@@ -1832,13 +1832,18 @@ llCollisionSprite info@(ScriptInfo _ _ _ pk _) [SVal impactSprite] =
 llGetKey (ScriptInfo _ _ _ pk _) [] = continueWith $ KVal pk
 
 llGetOwnerKey info@(ScriptInfo _ _ _ pk _) [KVal k] = 
-    do  regionIndex <- getPrimRegion pk
+   (do  throwError "you suck!!!"
+        regionIndex <- getPrimRegion pk
         mRegionIndex  <- fromErrorT Nothing (getPrimRegion k >>= return . Just)
         key <- case mRegionIndex of 
             Nothing -> (lift $ logFromScript info "llGetOwnerKey: object key not found") >> return k
             Just regionIndex' | regionIndex /= regionIndex' -> (lift $ logFromScript info "llGetOwnerKey: object in different simulator") >> return k
                               | otherwise -> getPrimOwner k
-        continueWith (KVal key)
+        continueWith (KVal key)) <||>
+   (do avatars <- lift $ getWorldAvatars
+       case M.lookup k avatars of
+           Nothing -> throwError "no such key"
+           Just _ -> continueWith (KVal k))
     
 llGetLinkNumber (ScriptInfo oid pid _ pk _) [] =
      if pid /= 0 then continueWith (IVal $ pid + 1) else
