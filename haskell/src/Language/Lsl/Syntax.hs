@@ -48,6 +48,7 @@ import Language.Lsl.Internal.Type(Component(..),LSLType(..),lslTypeString)
 import Language.Lsl.Internal.Constants(isConstant,findConstType)
 import Language.Lsl.Internal.EventSigs(simpleLslEventDescriptors)
 import Language.Lsl.Internal.FuncSigs(funcSigs)
+import Data.Generics
 import Data.Data(Data,Typeable)
 import Data.List(find,sort,sortBy,nub)
 import Language.Lsl.Internal.Util(ctx,findM,lookupM,filtMap,throwStrError)
@@ -891,6 +892,10 @@ funcDefsFromState (State ctxnm handlers) = map (funcDefFromHandler (ctxItem ctxn
 funcDefFromHandler stateName (Handler ctxnm params stmts) = GF $ Func (FuncDec combinedName LLVoid params) stmts
     where combinedName = nullCtx $ stateName ++ "$$" ++ (ctxItem ctxnm)
 
+rewriteCtxExpr :: [(String,String)] -> Ctx Expr -> Ctx Expr
+rewriteCtxExpr renames = everywhere (mkT (rewriteName renames))
+
+rewriteName :: [(String,String)] -> Ctx String -> Ctx String
 rewriteName renames (Ctx ctx name) =
     case lookup name renames of
         Nothing -> Ctx ctx name
@@ -926,53 +931,8 @@ rewriteStatement n bindings (Return (Just expr)) = (n, bindings, Return $ Just $
 rewriteStatement n bindings (Do expr) = (n, bindings, Do $ rewriteCtxExpr bindings expr)
 rewriteStatement n bindings s = (n, bindings, s)
 
---rewriteExpressions bindings es = map (rewriteExpression bindings) es
-
-rewriteCtxExpr bindings (Ctx ctx expr) = Ctx ctx $ rewriteExpression bindings expr
 rewriteCtxExprs bindings ctxExprs = map (rewriteCtxExpr bindings) ctxExprs
 
-rewriteExpression _ (IntLit i) = IntLit i
-rewriteExpression _ (FloatLit f) = FloatLit f
-rewriteExpression _ (StringLit s) = StringLit s
-rewriteExpression _ (KeyLit k) = KeyLit k
-rewriteExpression bindings (ListExpr l) = ListExpr $ rewriteCtxExprs bindings l
-rewriteExpression bindings (VecExpr e1 e2 e3) = VecExpr (rewriteCtxExpr bindings e1) (rewriteCtxExpr bindings e2) (rewriteCtxExpr bindings e3)
-rewriteExpression bindings (RotExpr e1 e2 e3 e4) = RotExpr (rewriteCtxExpr bindings e1) (rewriteCtxExpr bindings e2) (rewriteCtxExpr bindings e3) (rewriteCtxExpr bindings e4)
-rewriteExpression bindings (Add expr1 expr2) = Add (rewriteCtxExpr bindings expr1) (rewriteCtxExpr bindings expr2)
-rewriteExpression bindings (Sub expr1 expr2) = Sub (rewriteCtxExpr bindings expr1) (rewriteCtxExpr bindings expr2)
-rewriteExpression bindings (Mul expr1 expr2) = Mul (rewriteCtxExpr bindings expr1) (rewriteCtxExpr bindings expr2)
-rewriteExpression bindings (Div expr1 expr2) = Div (rewriteCtxExpr bindings expr1) (rewriteCtxExpr bindings expr2)
-rewriteExpression bindings (Mod expr1 expr2) = Mod (rewriteCtxExpr bindings expr1) (rewriteCtxExpr bindings expr2)
-rewriteExpression bindings (BAnd expr1 expr2) = BAnd (rewriteCtxExpr bindings expr1) (rewriteCtxExpr bindings expr2)
-rewriteExpression bindings (Xor expr1 expr2) = Xor (rewriteCtxExpr bindings expr1) (rewriteCtxExpr bindings expr2)
-rewriteExpression bindings (BOr expr1 expr2) = BOr (rewriteCtxExpr bindings expr1) (rewriteCtxExpr bindings expr2)
-rewriteExpression bindings (Lt expr1 expr2) = Lt (rewriteCtxExpr bindings expr1) (rewriteCtxExpr bindings expr2)
-rewriteExpression bindings (Gt expr1 expr2) = Gt (rewriteCtxExpr bindings expr1) (rewriteCtxExpr bindings expr2)
-rewriteExpression bindings (Le expr1 expr2) = Le (rewriteCtxExpr bindings expr1) (rewriteCtxExpr bindings expr2)
-rewriteExpression bindings (Ge expr1 expr2) = Ge (rewriteCtxExpr bindings expr1) (rewriteCtxExpr bindings expr2)
-rewriteExpression bindings (And expr1 expr2) = And (rewriteCtxExpr bindings expr1) (rewriteCtxExpr bindings expr2)
-rewriteExpression bindings (Or expr1 expr2) = Or (rewriteCtxExpr bindings expr1) (rewriteCtxExpr bindings expr2)
-rewriteExpression bindings (ShiftL expr1 expr2) = ShiftL (rewriteCtxExpr bindings expr1) (rewriteCtxExpr bindings expr2)
-rewriteExpression bindings (ShiftR expr1 expr2) = ShiftR (rewriteCtxExpr bindings expr1) (rewriteCtxExpr bindings expr2)
-rewriteExpression bindings (Equal expr1 expr2) = Equal (rewriteCtxExpr bindings expr1) (rewriteCtxExpr bindings expr2)
-rewriteExpression bindings (NotEqual expr1 expr2) = NotEqual (rewriteCtxExpr bindings expr1) (rewriteCtxExpr bindings expr2)
-rewriteExpression bindings (Inv expr) = Inv $ rewriteCtxExpr bindings expr
-rewriteExpression bindings (Not expr) = Not $ rewriteCtxExpr bindings expr
-rewriteExpression bindings (Neg expr) = Neg $ rewriteCtxExpr bindings expr
-rewriteExpression bindings (Call name exprs) = Call (rewriteName bindings name) $ rewriteCtxExprs bindings exprs
-rewriteExpression bindings (Cast t expr) = Cast t $ rewriteCtxExpr bindings expr
-rewriteExpression bindings (Get (name,component)) = Get (rewriteName bindings name,component)
---rewriteExpression bindings c@(Const _) = c
-rewriteExpression bindings (Set (name,component) expr) =  Set (rewriteName bindings name,component) (rewriteCtxExpr bindings expr)
-rewriteExpression bindings (IncBy (name,component) expr) = IncBy (rewriteName bindings name,component) (rewriteCtxExpr bindings expr)
-rewriteExpression bindings (DecBy (name,component) expr) = DecBy (rewriteName bindings name,component) (rewriteCtxExpr bindings expr)
-rewriteExpression bindings (MulBy (name,component) expr) = MulBy (rewriteName bindings name,component) (rewriteCtxExpr bindings expr)
-rewriteExpression bindings (DivBy (name,component) expr) = DivBy (rewriteName bindings name,component) (rewriteCtxExpr bindings expr)
-rewriteExpression bindings (ModBy (name,component) expr) = ModBy (rewriteName bindings name,component) (rewriteCtxExpr bindings expr)
-rewriteExpression bindings e@(PostInc _) = e
-rewriteExpression bindings e@(PostDec _) = e
-rewriteExpression bindings e@(PreInc _) = e
-rewriteExpression bindings e@(PreDec _) = e
 rewriteMExpression bindings = fmap (rewriteCtxExpr bindings)
 
 data SourceContext = TextLocation { textLine0 :: Int, textColumn0 :: Int, textLine1 :: Int, textColumn1 :: Int, textName :: String } |
