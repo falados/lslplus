@@ -2,12 +2,12 @@
 --   issue a report on all the errors it has found
 --   generate LSL scripts for those LSL+ scripts that successfully 'compiled'
 
-module Language.Lsl.Internal.Compiler(compile,main0) where
+module Language.Lsl.Internal.Compiler(compile,main0,compile') where
 
 import Control.Monad(when)
 import IO(Handle,hGetContents,stdin)
 import Language.Lsl.Internal.DOMSourceDescriptor(sourceFiles)
-import Language.Lsl.Internal.Load(loadModules,loadScripts)
+import Language.Lsl.Internal.Load(loadModules,loadScripts,loadModules',loadScripts')
 import Language.Lsl.Render(renderCompiledScript)
 import Language.Lsl.Syntax(AugmentedLibrary(..),CompiledLSLScript(..),Ctx(..),Func(..),Global(..),
                      GlobDef(..),Handler(..),LModule(..),SourceContext(..),State(..),Validity,Var(..),
@@ -37,6 +37,11 @@ compile :: ([(String,String)],[(String,String)]) -> IO (AugmentedLibrary,[(Strin
 compile (moduleInfo,scriptInfo) =
     do augLib <- loadModules moduleInfo
        scripts <- loadScripts (libFromAugLib augLib) scriptInfo
+       return (augLib,scripts)
+compile' :: ([(String,String)],[(String,String)]) -> IO (AugmentedLibrary,[(String,Validity CompiledLSLScript)])
+compile' (moduleInfo,scriptInfo) =
+    do augLib <- loadModules' moduleInfo
+       scripts <- loadScripts' (libFromAugLib augLib) scriptInfo
        return (augLib,scripts)
        
 formatCompilationSummary :: (AugmentedLibrary,[(String,Validity CompiledLSLScript)]) -> String

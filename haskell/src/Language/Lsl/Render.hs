@@ -160,7 +160,8 @@ renderExpression (Call name exprs) = renderCtxName name . renderChar '(' . rende
 renderExpression (Cast t expr) = renderString "((" . renderType t . renderChar ')' . renderCtxExpr expr . renderChar ')'
 renderExpression (Get var) = renderVarAccess var
 --renderExpression (Const var) = renderVarAccess var
-renderExpression (Set var expr) = renderVarAccess var . renderString " = " . renderCtxExpr expr
+--renderExpression (Set var expr) = renderChar '(' . renderVarAccess var . renderString " = " . renderCtxExpr expr . renderChar ')'
+renderExpression (Set va expr) = renderAssignment va "=" expr
 renderExpression (IncBy va expr) = renderAssignment va "+=" expr
 renderExpression (DecBy va expr) = renderAssignment va "-=" expr
 renderExpression (MulBy va expr) = renderAssignment va "*=" expr
@@ -175,7 +176,8 @@ renderExpression (PreDec va) = renderString "--" . renderVarAccess va
 
 renderBinExpr op expr1 expr2 = renderChar '(' . renderCtxExpr expr1 . renderChar ' ' .
                                renderString op . renderChar ' ' . renderCtxExpr expr2 . renderChar ')'
-renderAssignment va op expr = renderVarAccess va . renderChar ' ' . renderString op . renderChar ' ' . renderCtxExpr expr
+renderAssignment va op expr = 
+    renderChar '(' . renderVarAccess va . renderChar ' ' . renderString op . renderChar ' ' . renderCtxExpr expr . renderChar ')'
 renderComponent All = blank
 renderComponent X = renderString ".x"
 renderComponent Y = renderString ".y"

@@ -1,11 +1,13 @@
 module Language.Lsl.Internal.Load(
     loadScripts,
-    loadModules) where
+    loadModules,
+    loadScripts',
+    loadModules') where
 
 import Control.Exception(SomeException(..),tryJust)
 import Control.Monad.Error(liftIO)
 import Language.Lsl.Internal.BuiltInModules(avEventGen)
-import Language.Lsl.Syntax(validLSLScript,validLibrary,SourceContext(..))
+import Language.Lsl.Syntax(validLSLScript,validLibrary,SourceContext(..),compileLSLScript',compileLibrary)
 import Language.Lsl.Parse(parseModule, parseScript)
 
 parseFiles p files =
@@ -17,6 +19,12 @@ parseFiles p files =
                    Right (Right m) -> return (name,Right m)
     in liftIO $ mapM parseFile files
 
+loadModules' files =
+    do parseResults <- parseFiles parseModule files
+       let (bad,ok) = splitResults parseResults
+       let augLib = compileLibrary (avEventGen:ok)
+       return (augLib ++ (map (\ (n,err) -> (n,Left err)) bad))
+
 loadModules files =
     do parseResults <- parseFiles parseModule files
        let (bad,ok) = splitResults parseResults
@@ -24,6 +32,12 @@ loadModules files =
        return (augLib ++ (map (\ (n,err) -> (n,Left err)) bad))
        --return (validated ++ (map (\ (n,err) -> (n,Left err)) bad))
 
+loadScripts' library files =
+    do parseResults <- parseFiles parseScript files
+       let (bad,ok) = splitResults parseResults
+       return $ (map (\ (n,script) -> (n,compileLSLScript' library script)) ok) ++ 
+           (map (\ (n,err) -> (n,Left err)) bad)
+           
 loadScripts library files =
     do parseResults <- parseFiles parseScript files
        let (bad,ok) = splitResults parseResults
