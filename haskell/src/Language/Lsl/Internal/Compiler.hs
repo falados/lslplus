@@ -54,7 +54,7 @@ formatScriptCompilationSummary (name,result) =
     emit "item" 
         ([emit "name" [showString name]] ++ 
         case result of
-            Left err -> [formatErr err]
+            Left errs -> [emit "status" [emit "ok" [showString "false"], emit "errs" (map formatErr errs)]]
             Right (CompiledLSLScript globals funcs states) ->
                 [emit "status" [emit "ok" [showString "true"]],
                 emit "entryPoints" (map emitFunc funcs ++ concatMap stateEntryPointEmitters states),
@@ -66,7 +66,7 @@ formatModuleCompilationSummary (name,result) =
     emit "item"
         ([emit "name" [showString name]] ++
         case result of
-            Left err -> [formatErr err]
+            Left errs -> [emit "status" [emit "ok" [showString "false"], emit "errs" (map formatErr errs)]]
             Right (LModule globdefs freevars,(globals,_)) ->
                 [emit "status" [emit "ok" [showString "true"]],
                 emit "entryPoints" (map emitFunc (funcs globdefs)),
@@ -99,7 +99,7 @@ emitParams = map emitParam
 emitParam var = emit "param" [emit "name" [showString $ varName var], emit "type" [showString $ lslTypeString $ varType var]]
 
 formatErr (ctx,msg) = 
-    emit "status" [emit "ok" [showString "false"] , formatCtx ctx , emit "msg" [showString (xmlEscape msg)]]
+    emit "itemError" [formatCtx ctx , emit "msg" [showString (xmlEscape msg)]]
 
 formatCtx UnknownSourceContext = id
 formatCtx (TextLocation { textLine0 = l0, textColumn0 = c0, textLine1 = l1, textColumn1 = c1, textName = n }) =

@@ -515,8 +515,8 @@ activateScript scripts primMap (k@(primKey,invName),(scriptID)) =
         prim <- (lift . fctx ("looking up prim " ++ primKey ++ " failed")) (mlookup primKey primMap)
         when (isNothing (findByInvName invName (primInventory prim))) $ fail (invName ++ " doesn't exist in prim " ++ primKey)
         case script of
-            Left (_,s) -> tell [("script \"" ++ invName ++ "\" in prim " ++ primKey ++ " failed to activate because of error: " ++ s)] 
-                             >> return Nothing
+            Left ((_,s):_) -> tell [("script \"" ++ invName ++ "\" in prim " ++ primKey ++ " failed to activate because of error: " ++ s)] 
+                              >> return Nothing
             Right code -> return $ Just (k,mkScript $ initLSLScript code)
 
 newKey xref = do
