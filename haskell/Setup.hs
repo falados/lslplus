@@ -1,7 +1,8 @@
 import Distribution.Simple
-import Distribution.Simple.Haddock (haddock, hscolour)
-import Distribution.PackageDescription
+-- import Distribution.Simple.Haddock (haddock, hscolour)
+-- import Distribution.PackageDescription
 
-main = defaultMainWithHooks (simpleUserHooks {
-    preHaddock = \_ _ -> return (Just $ emptyBuildInfo { hsSourceDirs = ["noqqsrc"]},[]) })
+main = defaultMain
+-- main = defaultMainWithHooks (simpleUserHooks {
+--    preHaddock = \_ _ -> return (Just $ emptyBuildInfo { hsSourceDirs = ["noqqsrc"]},[]) })
 

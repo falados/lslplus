@@ -892,6 +892,8 @@ eval' =
                     (FVal f1,FVal f2) -> FVal (f1 * f2)
                     (v@(VVal _ _ _),IVal i) -> let f = fromInt i in vecMulScalar v f
                     (v@(VVal _ _ _),FVal f) -> vecMulScalar v f
+                    (IVal i,v@(VVal _ _ _)) -> let f = fromInt i in vecMulScalar v f
+                    (FVal f,v@(VVal _ _ _)) -> vecMulScalar v f
                     ((VVal x1 y1 z1),(VVal x2 y2 z2)) -> FVal $ x1 * x2 + y1 * y2 + z1 * z2
                     (v@(VVal _ _ _),r@(RVal _ _ _ _)) -> rotMulVec r v
                     (r1@(RVal _ _ _ _),r2@(RVal _ _ _ _)) -> rotMul r1 r2

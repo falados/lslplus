@@ -142,12 +142,23 @@ mtrace s v =
 combineExprs e [] = e
 combineExprs e0 ((p0,p1,op,e1):rest) = combineExprs (op p0 p1 e0 e1) rest
 
+isFollowedBy p = do
+    lookAhead p
+    return ()
+    
+reservedOp' name = 
+    lexeme $ try $
+    do{ string name
+      ; ( (isFollowedBy (char '-')) <|> notFollowedBy (P.opLetter lslStyle)) <?> ("end of " ++ show name)
+      }
+
 opmatch s f = (reservedOp s >> return f)
-op0 = ((opmatch "*" mulop) <|> (opmatch "/" divop) <|> (opmatch "%" modop)) <?> "operator"
-op1 = ((opmatch "+" addop) <|> (opmatch "-" subop)) <?> "operator"
-op2 = ((opmatch "<<" shiftlop) <|> (opmatch ">>" shiftrop)) <?> "operator"
-op3 = (choice [opmatch "<" ltop, opmatch "<=" leop, opmatch ">" gtop, opmatch ">=" geop]) <?> "operator"
-op4 = ((opmatch "==" eqop) <|> (opmatch "!=" neop)) <?> "operator"
+opmatch' s f = (reservedOp' s >> return f)
+op0 = ((opmatch' "*" mulop) <|> (opmatch' "/" divop) <|> (opmatch' "%" modop)) <?> "operator"
+op1 = ((opmatch' "+" addop) <|> (opmatch "-" subop)) <?> "operator"
+op2 = ((opmatch' "<<" shiftlop) <|> (opmatch' ">>" shiftrop)) <?> "operator"
+op3 = (choice [opmatch' "<" ltop, opmatch' "<=" leop, opmatch' ">" gtop, opmatch' ">=" geop]) <?> "operator"
+op4 = ((opmatch' "==" eqop) <|> (opmatch' "!=" neop)) <?> "operator"
 
 opAndExpr opf ef = do pos0 <- getPosition
                       op <- opf
@@ -166,11 +177,11 @@ relExpr = do e0 <- shiftExpr
              rest <- (try (many (try (opAndExpr op3 shiftExpr))) <|> return [])
              return $ combineExprs e0 rest
 eqExpr = exprChain op4 relExpr
-bandExpr = exprChain (opmatch "&" bandop <?> "operator") eqExpr
-xorExpr = exprChain (opmatch "^" xorop <?> "operator") bandExpr
-borExpr = exprChain (opmatch "|" borop <?> "operator") xorExpr
-andExpr = exprChain (opmatch "&&" andop <?> "operator") borExpr
-orExpr = exprChain (opmatch "||" orop <?> "operator") andExpr
+bandExpr = exprChain (opmatch' "&" bandop <?> "operator") eqExpr
+xorExpr = exprChain (opmatch' "^" xorop <?> "operator") bandExpr
+borExpr = exprChain (opmatch' "|" borop <?> "operator") xorExpr
+andExpr = exprChain (opmatch' "&&" andop <?> "operator") borExpr
+orExpr = exprChain (opmatch' "||" orop <?> "operator") andExpr
 
 bop op pos0 pos1 e0 e1 = 
     let ctx = combineContexts (srcCtx e0, pos0, pos1, srcCtx e1) in Ctx ctx $ op e0 e1 
@@ -207,12 +218,12 @@ var = try structAccess
 
 assignment = ctxify $ 
              do v <- var
-                op <- choice [reservedOp "+=" >> (return $ IncBy),
-                              reservedOp "-=" >> (return $ DecBy),
-                              reservedOp "*=" >> (return $ MulBy),
-                              reservedOp "/=" >> (return $ DivBy),
-                              reservedOp "%=" >> (return $ ModBy),
-                              reservedOp "="  >> (return $ Set)] <?> "assignment operator"
+                op <- choice [reservedOp' "+=" >> (return $ IncBy),
+                              reservedOp' "-=" >> (return $ DecBy),
+                              reservedOp' "*=" >> (return $ MulBy),
+                              reservedOp' "/=" >> (return $ DivBy),
+                              reservedOp' "%=" >> (return $ ModBy),
+                              reservedOp' "="  >> (return $ Set)] <?> "assignment operator"
                 e <- expr
                 return $ op v e
 
@@ -328,8 +339,8 @@ atomicExpr = do
 
 postfixExpr = ctxify $
               do v <- var
-                 f <- choice [reservedOp "++" >> return PostInc,
-                              reservedOp "--" >> return PostDec] <?> "postfix operator"
+                 f <- choice [reservedOp' "++" >> return PostInc,
+                              reservedOp' "--" >> return PostDec] <?> "postfix operator"
                  return $ f v
 prefixExpr = ctxify $
              do f <- choice [reservedOp "--" >> return (PreDec),
@@ -373,7 +384,7 @@ statement = declStatement
 
 declStatement = do t <- typeName
                    id <- identifier
-                   rest <- (option Nothing (reservedOp "=" >> expr >>= return . Just))
+                   rest <- (option Nothing (reservedOp' "=" >> expr >>= return . Just))
                    semi
                    return $ Decl (Var id t) rest
 
@@ -497,7 +508,7 @@ varOrFunc =   do (Ctx ctx (t,id)) <- ctxify $ do
 func t id = do ps <- parens params
                stmts <- braces statements
                return $ GF $ Func (FuncDec id t ps) stmts
-gvar ctx t (Ctx _ id) = do mexpr <- option Nothing (reservedOp "=" >> expr >>= return . Just)
+gvar ctx t (Ctx _ id) = do mexpr <- option Nothing (reservedOp' "=" >> expr >>= return . Just)
                            semi
                            return $ GV (Ctx ctx (Var id t)) mexpr
 --------------------------------------------------------------

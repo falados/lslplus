@@ -3037,6 +3037,7 @@ processAvatarOutputEvent k (AvatarControl { avatarNewControlBits = newBits }) = 
 --processAvatarOutputEvent _ _ = error "not yet implemented(1)"
 
 avChat range msg key chan = runAndLogIfErr "problem processing chat" () $ do
+    lift $ logAMessage LogInfo ("av:" ++ key) ("chat! chan: " ++ show chan ++ ", range: " ++ show range ++ ", message: " ++ show msg)
     av <- getWorldAvatar key
     lift $ putWorldEvent 0 $ Chat chan (avatarName av) key msg (avatarRegion av,avatarPosition av) (Just range)
 

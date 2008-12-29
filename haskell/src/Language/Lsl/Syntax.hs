@@ -35,8 +35,8 @@ module Language.Lsl.Syntax (
     nullCtx,
     ctxVr2Vr,
     findFunc,
-    validLSLScript,
-    validLibrary,
+    --validLSLScript,
+    --validLibrary,
     moduleFromScript,
     findState,
     predefFuncs,
@@ -405,6 +405,8 @@ vsmAddLocal ctx v@(Var name _) = do
                     put'vsLocalVars ((v:top):rest)
                     vsmRegisterLocalName name ctx
             
+vsmAddImport imp = get'vsImports >>= put'vsImports . (imp:)
+
 vsmAddToNamesUsed :: String -> VState ()
 vsmAddToNamesUsed name = get'vsNamesUsed >>= put'vsNamesUsed . (name :)
 
@@ -504,7 +506,7 @@ compileLSLScript (LSLScript globs states) = do
            globals <- get'vsGlobals
            funcs <- get'vsFuncs
            states <- get'vsStates
-           return $ Right $ CompiledLSLScript globals funcs states
+           return $ Right $ CompiledLSLScript (reverse globals) (reverse funcs) (reverse states)
         _ -> return $ Left $ reverse err
 
 preprocessStates states = let snames = map (\ (State cn _) -> ctxItem cn) states in put'vsStateNames snames
@@ -536,8 +538,8 @@ compileGlob (GV v mexpr) = do
     gvs <- get'vsGVs
     when (varName v' `elem` namesUsed) (vsmAddErr (srcCtx v, varName v' ++ " is already defined"))
     whenJust mexpr $ \ expr -> do
-       let (gvs',_) = break (\ var -> varName var == varName v') gvs
-       mt <- compileCtxSimple gvs' expr
+       let (_,gvs') = break (\ var -> varName var == varName v') gvs
+       mt <- compileCtxSimple (drop 1 gvs') expr
        whenJust mt $ \ t -> when (not (varType v' `matchTypes` t)) (vsmAddErr (srcCtx v, "expression not of the correct type"))
     vsmRegisterGlobal v
     vsmAddToNamesUsed (varName v')
@@ -567,6 +569,7 @@ compileGlob (GI (Ctx ctx name) bindings prefix) =
                        Right () -> do
                            let (vars',funcDecs') = evalState (preprocessGlobDefs "" globs) (emptyValidationState { vsLib = library })
                            let renames = bindings ++ (map (\ x -> (x,prefix ++ x)) ((map varName vars') ++ (funcNames funcDecs')))
+                           vsmAddImport imp
                            vsmWithContext ctx $ mapM_ (rewriteGlob' prefix renames (map ctxItem freevars ++ vars')) globs
 
 rewriteGlob' prefix renames vars (GF (Func (FuncDec name t params) statements)) =
@@ -605,6 +608,7 @@ rewriteGlob' prefix0 renames vars (GI (Ctx ctx mName) bindings prefix) =
                       when (not (imp `elem` imports)) $ do
                           let (vars',funcDecs') = evalState (preprocessGlobDefs "" globs) (emptyValidationState { vsLib = lib })
                           let renames = bindings' ++ map (\ x -> (x,prefix0 ++ prefix ++ x)) (map varName vars' ++ map (ctxItem . funcName) funcDecs')
+                          vsmAddImport imp
                           mapM_ (rewriteGlob' (prefix0 ++ prefix) renames vars') globs
     where rewriteBinding (fv,rn) = case lookup rn renames of
                                        Nothing -> vsmAddErr (ctx, rn ++ ": not found") >> return (fv,rn)
@@ -1696,6 +1700,7 @@ validHandlers snames used funcs vars (h:hs) =
 
 compileModule :: LModule -> VState (Validity ([Global],[Func]))
 compileModule m@(LModule globs freevars) = do
+    mapM_ (vsmAddGV . ctxItem) freevars
     preprocessGlobDefs_ "" globs
     mapM_ vsmAddGF predefFuncs
     mapM_ compileGlob globs

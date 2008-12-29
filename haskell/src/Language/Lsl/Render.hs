@@ -2,7 +2,7 @@ module Language.Lsl.Render(renderCompiledScript) where
 
 import Data.List(foldl',intersperse)
 import Language.Lsl.Syntax(Expr(..),Func(..),FuncDec(..),Global(..),Handler(..),State(..),Statement(..),
-                  Ctx(..),Var(..),LSLType(..),Component(..),ctxItems,validLSLScript,CompiledLSLScript(..))
+                  Ctx(..),Var(..),LSLType(..),Component(..),ctxItems,CompiledLSLScript(..))
 
 -- | Generate a string representing an LSL script from a timestamp (string) 
 -- and a compiled (i.e. validated, with referenced modules included) LSL script.

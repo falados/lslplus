@@ -121,7 +121,7 @@ convertEntryPoint (ModuleFunc moduleName funcName) =
             Nothing -> return (Left $ "No such module: " ++ moduleName)
             Just (Left s) -> return (Left $ "Invalid module: " ++ moduleName)
             Just (Right lmodule) -> 
-                case validLSLScript lib (mkScript lmodule) of
+                case compileLSLScript' lib (mkScript lmodule) of
                     Left _ -> return $ Left "Invalid entry point (internal error?)"
                     Right script -> return $ Right (script,[funcName])
 
@@ -203,7 +203,7 @@ simFunc lib (moduleName,functionName) globs args =
     in case init of
         (Left s, world') -> Left s
         (Right exec,world') ->
-            case (runState $ runErrorT $ (runStateT $ runErrorT $ evalSimple 1000) exec) world of
+            case (runState $ runErrorT $ (runStateT $ runErrorT $ evalSimple 10000) exec) world of
                 (Left s,_) -> Left s
                 (Right r, _) ->
                     case r of
