@@ -41,7 +41,7 @@ import org.eclipse.ui.texteditor.TextOperationAction;
 /**
  * LSL (plus) text editor.
  */
-public class LslPlusEditor extends TextEditor {
+public class LslPlusEditor extends TextEditor implements SourceViewerConfigurationListener {
     public static final String ID = "lslplus.editor.LslPlusEditor"; //$NON-NLS-1$
     // borrowed from the Java editor example... should setup folding
     // regions for states, functions and handlers (instead).
@@ -156,9 +156,12 @@ public class LslPlusEditor extends TextEditor {
         return super.getAdapter(required);
     }
 
+    
     protected void initializeEditor() {
         super.initializeEditor();
-        setSourceViewerConfiguration(new LslSourceViewerConfiguration());
+        LslSourceViewerConfiguration config = new LslSourceViewerConfiguration();
+        setSourceViewerConfiguration(config);
+        config.addListener(this);
     }
 
     protected ISourceViewer createSourceViewer(Composite parent, IVerticalRuler ruler, int styles) {
@@ -174,6 +177,11 @@ public class LslPlusEditor extends TextEditor {
         return viewer;
     }
 
+    public void dispose() {
+        ((LslSourceViewerConfiguration)this.getSourceViewerConfiguration()).dispose();
+        super.dispose();
+    }
+    
     public void createPartControl(Composite parent) {
         super.createPartControl(parent);
         ProjectionViewer viewer = (ProjectionViewer) getSourceViewer();
@@ -256,5 +264,9 @@ public class LslPlusEditor extends TextEditor {
             ITextViewerExtension5 extension = (ITextViewerExtension5) viewer;
             extension.exposeModelRange(new Region(offset, length));
         }
+    }
+
+    public void configurationChanged() {
+        this.getSourceViewer().invalidateTextPresentation();
     }
 }

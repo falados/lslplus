@@ -12,11 +12,16 @@
  *******************************************************************************/
 package lslplus.editor;
 
+import java.util.HashSet;
+import java.util.Iterator;
+
 import lslplus.LslPlusPlugin;
 import lslplus.editor.imported.HTMLTextPresenter;
+import lslplus.editor.lsl.LslCodeScanner;
 import lslplus.editor.lsl.LslCompletionProcessor;
 import lslplus.editor.lsl.LslPlusAutoIndentStrategy;
 import lslplus.editor.lsl.LslPlusDoubleClickSelector;
+import lslplus.editor.lsl.ScannerChangeListener;
 import lslplus.util.LslColorProvider;
 
 import org.eclipse.jface.text.DefaultIndentLineAutoEditStrategy;
@@ -38,15 +43,18 @@ import org.eclipse.jface.text.rules.Token;
 import org.eclipse.jface.text.source.IAnnotationHover;
 import org.eclipse.jface.text.source.ISourceViewer;
 import org.eclipse.jface.text.source.SourceViewerConfiguration;
-import org.eclipse.swt.SWT;
 import org.eclipse.swt.graphics.RGB;
 import org.eclipse.swt.widgets.Shell;
 
 /**
  * Configuration for an Lsl (+) source viewer.
  */
-public class LslSourceViewerConfiguration extends SourceViewerConfiguration {
+public class LslSourceViewerConfiguration extends SourceViewerConfiguration 
+implements ScannerChangeListener {
 
+    private HashSet listeners = new HashSet();
+    private LslCodeScanner scanner;
+    
     static class SingleTokenScanner extends BufferedRuleBasedScanner {
         public SingleTokenScanner(TextAttribute attribute) {
             setDefaultReturnToken(new Token(attribute));
@@ -57,8 +65,19 @@ public class LslSourceViewerConfiguration extends SourceViewerConfiguration {
      * Default constructor.
      */
     public LslSourceViewerConfiguration() {
+        this.scanner = LslPlusPlugin.getDefault().getLslCodeScanner();
+        scanner.addListener(this);
+        
+    }
+    
+    public void addListener(SourceViewerConfigurationListener listener) {
+        listeners.add(listener);
     }
 
+    public void removeListener(SourceViewerConfigurationListener listener) {
+        listeners.remove(listener);
+    }
+    
     /*
      * (non-Javadoc) Method declared on SourceViewerConfiguration
      */
@@ -108,10 +127,10 @@ public class LslSourceViewerConfiguration extends SourceViewerConfiguration {
                 .getColor(new RGB(224, 224, 224)));
         assistant.setContextInformationPopupOrientation(IContentAssistant.CONTEXT_INFO_ABOVE);
         assistant.setContextInformationPopupBackground(LslPlusPlugin.getDefault()
-                .getLslColorProvider().getColor(new RGB(150, 150, 0)));
+                .getLslColorProvider().getColor(new RGB(255, 255, 50)));
         assistant.setInformationControlCreator(new IInformationControlCreator() {
             public IInformationControl createInformationControl(Shell parent) {
-                return new DefaultInformationControl(parent, SWT.NONE, new HTMLTextPresenter(true));
+                return new DefaultInformationControl(parent, new HTMLTextPresenter(true));
             }
         });
         return assistant;
@@ -154,7 +173,7 @@ public class LslSourceViewerConfiguration extends SourceViewerConfiguration {
         reconciler.setRepairer(dr, IDocument.DEFAULT_CONTENT_TYPE);
 
         dr = new DefaultDamagerRepairer(new SingleTokenScanner(new TextAttribute(provider
-                .getColor(LslColorProvider.MULTI_LINE_COMMENT))));
+                .getColor(LslColorProvider.MULTI_LINE_COMMENT_COLOR))));
         reconciler.setDamager(dr, LslPartitionScanner.LSL_MULTILINE_COMMENT);
         reconciler.setRepairer(dr, LslPartitionScanner.LSL_MULTILINE_COMMENT);
 
@@ -173,5 +192,18 @@ public class LslSourceViewerConfiguration extends SourceViewerConfiguration {
      */
     public ITextHover getTextHover(ISourceViewer sourceViewer, String contentType) {
         return new LslTextHover();
+    }
+
+    public void dispose() {
+        listeners.clear();
+        scanner.removeListener(this);
+    }
+
+    public void scannerChanged() {
+        Iterator i = listeners.iterator();
+        
+        while (i.hasNext()) {
+            ((SourceViewerConfigurationListener)i.next()).configurationChanged();
+        }
     }
 }

@@ -1,12 +1,17 @@
 package lslplus.editor.lsl;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 
+import lslplus.util.ColorProviderListener;
 import lslplus.util.LslColorProvider;
 import lslplus.util.LslWhitespaceDetector;
 import lslplus.util.LslWordDetector;
 
+import org.eclipse.jface.preference.IPreferenceStore;
 import org.eclipse.jface.text.TextAttribute;
 import org.eclipse.jface.text.rules.EndOfLineRule;
 import org.eclipse.jface.text.rules.IRule;
@@ -16,19 +21,89 @@ import org.eclipse.jface.text.rules.SingleLineRule;
 import org.eclipse.jface.text.rules.Token;
 import org.eclipse.jface.text.rules.WhitespaceRule;
 import org.eclipse.jface.text.rules.WordRule;
+import org.eclipse.jface.util.IPropertyChangeListener;
+import org.eclipse.jface.util.PropertyChangeEvent;
 import org.eclipse.swt.SWT;
 
 /**
  *  An LSL Plus rule-based code scanner.
  */
-public class LslCodeScanner extends RuleBasedScanner {
-
+public class LslCodeScanner extends RuleBasedScanner implements ColorProviderListener, IPropertyChangeListener {
+    public static final int DEFAULT_STYLE_INDEX = 0;
+    public static final int HANDLER_STYLE_INDEX = 1;
+    public static final int KEYWORD_STYLE_INDEX = 2;
+    public static final int MULTILINE_COMMENT_STYLE_INDEX = 3;
+    public static final int SINGLE_LINE_COMMENT_STYLE_INDEX = 4;
+    public static final int PREDEF_CONST_STYLE_INDEX = 5;
+    public static final int PREDEF_FUNC_STYLE_INDEX = 6;
+    public static final int STRING_STYLE_INDEX = 7;
+    public static final int TYPE_STYLE_INDEX = 8;
+    
+    public static final String DEFAULT_STYLE = "default";
+    public static final String HANDLER_STYLE = "handler";
+    public static final String KEYWORD_STYLE = "keyword";
+    public static final String MULTILINE_COMMENT_STYLE = "multi_line_comment";
+    public static final String SINGLE_LINE_COMMENT_STYLE = "single_line_comment";
+    public static final String PREDEF_CONST_STYLE = "predef_cont";
+    public static final String PREDEF_FUNC_STYLE = "predef_func";
+    public static final String STRING_STYLE = "string";
+    public static final String TYPE_STYLE = "type";
+    
+    public static final String[] STYLE_KINDS = 
+    { DEFAULT_STYLE, HANDLER_STYLE, KEYWORD_STYLE, MULTILINE_COMMENT_STYLE, 
+      SINGLE_LINE_COMMENT_STYLE, PREDEF_CONST_STYLE, PREDEF_FUNC_STYLE,
+      STRING_STYLE, TYPE_STYLE
+    };
+    
+    public static final String[] KIND_NAMES = {
+        "Default",
+        "Handler",
+        "Keyword",
+        "Multi-line comment",
+        "Single line comment",
+        "Predefined constant",
+        "Predefined function",
+        "String",
+        "Type"        
+    };
+    public static final String BOLD_STYLE = "bold";
+    public static final String ITALIC_STYLE = "italic";
+    public static final String UL_STYLE = "underline";
+    
+    public static final String[] STYLES = { BOLD_STYLE, ITALIC_STYLE, UL_STYLE };
+    
+    private static final HashMap STYLE_TO_CONST = new HashMap();
+    
     private static String[] lslPlusKeywords = {
             "$module", "jump", "default", "do", "else", "for", "if", "$import", "state", "return", "while" }; //$NON-NLS-11$ //$NON-NLS-10$ //$NON-NLS-9$ //$NON-NLS-8$ //$NON-NLS-7$ //$NON-NLS-6$ //$NON-NLS-5$ //$NON-NLS-4$ //$NON-NLS-3$ //$NON-NLS-2$ //$NON-NLS-1$
 
     private static String[] lslPlusTypes = {
             "integer", "string", "float", "list", "vector", "rotation", "key", "quaternion" }; //$NON-NLS-1$ //$NON-NLS-5$ //$NON-NLS-7$ //$NON-NLS-8$ //$NON-NLS-6$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-2$
 
+    static {
+        STYLE_TO_CONST.put(BOLD_STYLE, new Integer(SWT.BOLD));
+        STYLE_TO_CONST.put(ITALIC_STYLE, new Integer(SWT.ITALIC));
+        STYLE_TO_CONST.put(UL_STYLE, new Integer(SWT.UNDERLINE_SINGLE));
+    }
+    
+    private String[] handlerNames;
+    private String[] predefFuncNames;
+    private String[] predefConstNames;
+
+    private HashSet listeners = new HashSet();
+
+    private IPreferenceStore store;
+
+    private LslColorProvider provider;
+    
+    private static int computeBit(boolean pred, int bitConst) {
+        return pred ? bitConst : 0;
+    }
+
+    private static String mkId(String s0, String s1) {
+        return s0 + '.' + s1;
+    }
+    
     /**
      * Creates an LslPlus code scanner.
      * 
@@ -36,24 +111,57 @@ public class LslCodeScanner extends RuleBasedScanner {
      * @param handlerNames
      * @param predefFuncNames
      * @param predefConstNames
+     * @param store 
      */
     public LslCodeScanner(LslColorProvider provider, String[] handlerNames,
-            String[] predefFuncNames, String[] predefConstNames) {
+            String[] predefFuncNames, String[] predefConstNames, IPreferenceStore store) {
+        this.provider = provider;
+        this.handlerNames = handlerNames;
+        this.predefFuncNames = predefFuncNames;
+        this.predefConstNames = predefConstNames;
+        this.store = store;
+        provider.addListener(this);
+        store.addPropertyChangeListener(this);
+        
+        for (int i = 0; i < STYLE_KINDS.length; i++) {
+            for (int j = 0; j < STYLES.length; j++) {
+                store.setDefault(STYLE_KINDS[i] + '.' + STYLES[j], false);
+            }
+        }
+        
+        store.setDefault(KEYWORD_STYLE + '.' + BOLD_STYLE, true);
+        store.setDefault(HANDLER_STYLE + '.' + BOLD_STYLE, true);
+        store.setDefault(TYPE_STYLE + '.' + BOLD_STYLE, true);
+        initRules(provider, handlerNames, predefFuncNames, predefConstNames);
+    }
 
-        IToken keyword = new Token(new TextAttribute(provider.getColor(LslColorProvider.KEYWORD),
-                null, SWT.BOLD));
-        IToken type = new Token(new TextAttribute(provider.getColor(LslColorProvider.TYPE), null,
-                SWT.BOLD));
-        IToken string = new Token(new TextAttribute(provider.getColor(LslColorProvider.STRING)));
+    private int computeBits(String s0) {
+        int x = 0;
+        for (int i = 0; i < STYLES.length; i++) {
+            x |= computeBit(store.getBoolean(mkId(s0,STYLES[i])), ((Integer)STYLE_TO_CONST.get(STYLES[i])).intValue());
+        }
+        return x;
+    }
+    
+    private void initRules(LslColorProvider provider, String[] handlerNames,
+            String[] predefFuncNames, String[] predefConstNames) {
+        IToken keyword = new Token(new TextAttribute(provider.getColor(LslColorProvider.KEYWORD_COLOR),
+                null, computeBits(KEYWORD_STYLE)));
+        IToken type = new Token(new TextAttribute(provider.getColor(LslColorProvider.TYPE_COLOR), null,
+                computeBits(TYPE_STYLE)));
+        IToken string = new Token(new TextAttribute(provider.getColor(LslColorProvider.STRING_COLOR), null,
+                computeBits(STRING_STYLE)));
         IToken comment = new Token(new TextAttribute(provider
-                .getColor(LslColorProvider.SINGLE_LINE_COMMENT)));
-        IToken other = new Token(new TextAttribute(provider.getColor(LslColorProvider.DEFAULT)));
-        IToken handler = new Token(new TextAttribute(provider.getColor(LslColorProvider.HANDLER),
-                null, SWT.BOLD));
+                .getColor(LslColorProvider.SINGLE_LINE_COMMENT_COLOR), null,
+                computeBits(SINGLE_LINE_COMMENT_STYLE)));
+        IToken other = new Token(new TextAttribute(provider.getColor(LslColorProvider.DEFAULT_COLOR), null,
+                computeBits(DEFAULT_STYLE)));
+        IToken handler = new Token(new TextAttribute(provider.getColor(LslColorProvider.HANDLER_COLOR),
+                null, computeBits(HANDLER_STYLE)));
         IToken predefFunc = new Token(new TextAttribute(provider
-                .getColor(LslColorProvider.PREDEF_FUNC)));
+                .getColor(LslColorProvider.PREDEF_FUNC_COLOR), null, computeBits(PREDEF_FUNC_STYLE)));
         IToken predefConst = new Token(new TextAttribute(provider
-                .getColor(LslColorProvider.PREDEF_CONST)));
+                .getColor(LslColorProvider.PREDEF_CONST_COLOR), null, computeBits(PREDEF_CONST_STYLE)));
         List rules = new ArrayList();
 
         // Add rule for single line comments.
@@ -84,5 +192,32 @@ public class LslCodeScanner extends RuleBasedScanner {
         for (int i = 0; i < words.length; i++) {
             rule.addWord(words[i], t);
         }
+    }
+
+    public synchronized void onColorChange() {
+        onChange();
+    }
+
+    private void onChange() {
+        initRules(provider, handlerNames, predefFuncNames, predefConstNames);
+
+        Iterator i = listeners.iterator();
+        
+        while (i.hasNext()) {
+            ((ScannerChangeListener)i.next()).scannerChanged();
+        }
+    }
+    
+    public synchronized void addListener(ScannerChangeListener listener) {
+        this.listeners.add(listener);
+        
+    }
+    
+    public synchronized void removeListener(ScannerChangeListener listener) {
+        this.listeners.remove(listener);
+    }
+
+    public void propertyChange(PropertyChangeEvent event) {
+        onChange();
     }
 }

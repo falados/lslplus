@@ -1,0 +1,37 @@
+// Sample Avatar Event Handler
+$module
+
+$import $avEventGen (); // module contains the mk... functions for generating events...
+// i.e.
+// string mkTouch(string primKey, float duration) Create an event string representing the avatar touching a particular prim for a duration (in seconds). 
+// string mkWhisper(integer channel, string message) Create an even representing the avatar whispering on a particular channel. 
+// string mkSay(integer channel, string message) Create an even representing the avatar speaking on a particular channel. 
+// string mkShout(integer channel, string message) Create an even representing the avatar shouting on a particular channel. 
+// string mkPay(string primKey, integer amount) Create an even representing the avatar paying an amount to a particular prim. 
+// string mkControl(integer newControlBits) Create an even representing the avatar/agent's control bits changing. 
+
+// Leave this one in your event handler (and edit it) to react to llOwnerSay messages
+list onOwnerSay(string primKey, string message) {
+   return []; // e.g. return [mkTouch(primKey,2.0),mkPay(primKey,50)];
+}
+
+// Leave this one in your event handler (and edit it) to react to llSay/llWhisper/llShout messages 
+// on channel 0.
+list onChat(string name, string primKey, string message) {
+    return [];
+} 
+
+// Leave this one in your event handler (and edit it) to react to llLoadURL events.
+list onLoadURL(string message, string url) {
+    return [];
+} 
+
+// Leave this one in your event handler (and edit it) to react to llDialog events
+list onDialog(string message, list buttons, integer chan, string source) {
+    return [];
+}
+
+// Leave this one in your event handler (and edit it) to react to llMapDestination events
+list onMapDestination(string simName, vector position) {
+    return [];
+}

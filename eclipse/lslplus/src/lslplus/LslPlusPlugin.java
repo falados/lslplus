@@ -40,7 +40,6 @@ import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.Path;
 import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.jface.resource.ImageDescriptor;
-import org.eclipse.jface.text.rules.RuleBasedScanner;
 import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Shell;
@@ -61,8 +60,8 @@ import com.thoughtworks.xstream.io.xml.DomDriver;
  */
 public class LslPlusPlugin extends AbstractUIPlugin {
 	public static final String LSLPLUS_NATIVE_PATH = "lslplus.native_path"; //$NON-NLS-1$
-    private static final Pattern LSLPLUS_CORE_VERSION_PAT = Pattern.compile("^0\\.1(\\..*)?$"); //$NON-NLS-1$
-	private static final String LSLPLUS_CORE_VERSION = "0.1.*"; //$NON-NLS-1$
+    private static final Pattern LSLPLUS_CORE_VERSION_PAT = Pattern.compile("^0\\.2(\\..*)?$"); //$NON-NLS-1$
+	private static final String LSLPLUS_CORE_VERSION = "0.2.*"; //$NON-NLS-1$
 	private static final String LSL_EXECUTABLE = "LslPlus" + ((File.separatorChar == '\\') ? ".exe" : "");  //$NON-NLS-1$//$NON-NLS-2$ //$NON-NLS-3$
 	private static final String LSL_COMMAND = "LslPlus"; //$NON-NLS-1$
 	
@@ -441,7 +440,7 @@ public class LslPlusPlugin extends AbstractUIPlugin {
      * 
      * @return the singleton LSL code scanner
      */
-    public RuleBasedScanner getLslCodeScanner() {
+    public LslCodeScanner getLslCodeScanner() {
         if (fCodeScanner == null) {
             String[] handlerNames = (String[]) Util.arrayMap(new Util.ArrayMapFunc() {
                 public Class elementType() {
@@ -471,7 +470,7 @@ public class LslPlusPlugin extends AbstractUIPlugin {
                 }
             }, getLslMetaData().getConstants());
             fCodeScanner = new LslCodeScanner(getLslColorProvider(), handlerNames, predefFuncs,
-                    predefConsts);
+                    predefConsts, this.getPreferenceStore());
         }
         return fCodeScanner;
     }
@@ -483,7 +482,7 @@ public class LslPlusPlugin extends AbstractUIPlugin {
      */
     public LslColorProvider getLslColorProvider() {
         if (fColorProvider == null)
-            fColorProvider = new LslColorProvider();
+            fColorProvider = new LslColorProvider(this.getPreferenceStore());
         return fColorProvider;
     }
     

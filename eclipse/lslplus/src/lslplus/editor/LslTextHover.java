@@ -26,6 +26,12 @@ public class LslTextHover implements ITextHover {
 	private static LslWordDetector detector = new LslWordDetector();
 	private static HashMap hoverInfo = null;
 
+	/**
+     * @param textViewer 
+	 * @param hoverRegion 
+	 * @return hover info string
+	 * @deprecated
+     */
 	public String getHoverInfo(ITextViewer textViewer, IRegion hoverRegion) {
 		if (hoverRegion != null) {
 			try {

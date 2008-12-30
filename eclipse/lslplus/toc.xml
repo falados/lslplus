@@ -8,7 +8,11 @@
 	<topic label="Installation" href="html/installation.html"/>
 	<topic label="Basic Usage" href="html/basic.html">
 		<topic label="Unit Tests" href="html/unit-test.html"></topic>
-		<topic label="Sim Projects" href="html/sim-project.html"></topic></topic>
+		<topic label="Sim Projects" href="html/sim-project.html">
+     <topic href="html/avEventHandler.html" label="Avatar Event Handler">
+     </topic>
+     <topic href="html/avEventGen.html" label="Avatar Event Generator Utility">
+     </topic></topic></topic>
 	<topic label="Launching LSL Code" href="html/launching.html"></topic>
 	<topic label="Debugging" href="html/debug.html"></topic>
 	<topic label="Sim Watcher View" href="html/sim-watcher.html"></topic>

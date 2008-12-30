@@ -25,27 +25,37 @@ public class LaunchLslSimShortcut implements ILaunchShortcut {
 		if (selection instanceof IStructuredSelection &&
 		    ((IStructuredSelection)selection).size() == 1) {
 		    Object o = ((IStructuredSelection)selection).getFirstElement();
-		    if (o instanceof IAdaptable) {
-	            LslPlusScript s = null;
-	            SimProject.WorldNode w = null;
-	            IResource r = null;
-		        if ((s = (LslPlusScript)((IAdaptable)o).getAdapter(LslPlusScript.class)) != null) {
-		            r = s.getResource();
-		        } else if ((w = (SimProject.WorldNode)((IAdaptable)o).getAdapter(SimProject.WorldNode.class)) != null) {
-		            r = w.getResource();
-		        }
-                if (r != null) {
-                    try {
-                        ILaunchConfiguration config = findConfig(r);
-                        DebugUITools.launch(config, mode);
-                    } catch (CoreException e) {
-                        Util.log(e, e.getLocalizedMessage());
-                    }
-                }
-		    }
+		    adaptAndLaunch(mode, o);
 		}
 	}
 
+    private void adaptAndLaunch(String mode, Object o) {
+        if (o instanceof IAdaptable) {
+            LslPlusScript s = null;
+            SimProject.WorldNode w = null;
+            IResource r = null;
+            if ((s = (LslPlusScript)((IAdaptable)o).getAdapter(LslPlusScript.class)) != null) {
+                r = s.getResource();
+            } else if ((w = (SimProject.WorldNode)((IAdaptable)o).getAdapter(SimProject.WorldNode.class)) != null) {
+                r = w.getResource();
+            }
+            if (r != null) {
+                try {
+                    ILaunchConfiguration config = findConfig(r);
+                    DebugUITools.launch(config, mode);
+                } catch (CoreException e) {
+                    Util.log(e, e.getLocalizedMessage());
+                }
+            }
+        }
+    }
+
+    public void launch(IEditorPart editor, String mode) {
+        if (editor.getEditorInput() != null) {
+            adaptAndLaunch(mode, editor.getEditorInput());
+        }
+    }
+    
 	private ILaunchConfiguration findConfig(IResource r) throws CoreException {
 		ILaunchConfiguration[] configs = debugPlugin().getLaunchManager().getLaunchConfigurations(getConfigurationType());
 		
@@ -67,8 +77,6 @@ public class LaunchLslSimShortcut implements ILaunchShortcut {
 		return config;
 	}
 	
-	public void launch(IEditorPart editor, String mode) {
-	}
 	private ILaunchConfigurationType getConfigurationType() {
 		return DebugPlugin.getDefault().getLaunchManager().getLaunchConfigurationType("lslplus.simLaunch");		 //$NON-NLS-1$
 	}

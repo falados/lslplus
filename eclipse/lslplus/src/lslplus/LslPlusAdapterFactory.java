@@ -3,6 +3,7 @@ package lslplus;
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.runtime.IAdapterFactory;
+import org.eclipse.ui.part.FileEditorInput;
 
 /**
  * An adapter factory that can create adapters for LslPlusElement objects.
@@ -30,6 +31,10 @@ public class LslPlusAdapterFactory implements IAdapterFactory {
 		} else if (adaptableObject instanceof LslPlusScript &&
 		           LslPlusElement.class.equals(adapterType)) {
 		    return new LslPlusScript((IFile)((LslPlusScript)adaptableObject).getResource());
+		} else if (adaptableObject instanceof FileEditorInput && 
+		        LslPlusScript.class.equals(adapterType)) {
+		    FileEditorInput inp = (FileEditorInput) adaptableObject;
+		    return new LslPlusScript(inp.getFile());
 		}
 		return null;
 	}

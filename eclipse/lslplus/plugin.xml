@@ -78,23 +78,28 @@
             modes="run, debug">
          <contextualLaunch>
             <enablement>
-               <with
-                     variable="selection">
-                  <count
-                        value="1">
-                  </count>
-                  <iterate
-                        ifEmpty="false">
-                     <or>
-                        <adapt
-                              type="lslplus.LslPlusScript">
-                        </adapt>
-                        <adapt
-                              type="lslplus.sim.SimProject$WorldNode">
-                        </adapt>
-                     </or>
-                  </iterate>
-               </with>
+               <or>
+                  <with
+                        variable="selection">
+                     <count
+                           value="1">
+                     </count>
+                     <iterate
+                           ifEmpty="false">
+                        <or>
+                           <adapt
+                                 type="lslplus.LslPlusScript">
+                           </adapt>
+                           <adapt
+                                 type="lslplus.sim.SimProject$WorldNode">
+                           </adapt>
+                        </or>
+                     </iterate>
+                  </with>
+                  <instanceof
+                        value="lslplus.editor.LslPlusEditor">
+                  </instanceof>
+               </or>
             </enablement>
          </contextualLaunch>
       </shortcut>
@@ -159,6 +164,13 @@
             class="lslplus.sim.SimProjectAdapterFactory">
          <adapter
                type="org.eclipse.core.resources.IResource">
+         </adapter>
+      </factory>
+      <factory
+            adaptableType="org.eclipse.ui.part.FileEditorInput"
+            class="lslplus.LslPlusAdapterFactory">
+         <adapter
+               type="lslplus.LslPlusScript">
          </adapter>
       </factory>
    </extension>
@@ -242,6 +254,14 @@
             icon="icons/obj16/lslplus.gif"
             id="lslplus.newSimEventHandlerWizard"
             name="Sim Event Handler"
+            preferredPerspectives="lslplus.LslPlusPerspective">
+      </wizard>
+      <wizard
+            category="lslplus.lslplus"
+            class="lslplus.wizards.NewAvEventHandler"
+            icon="icons/obj16/lslplus.gif"
+            id="lslplus.newAvEventHandlerWizard"
+            name="Avatar Event Handler"
             preferredPerspectives="lslplus.LslPlusPerspective">
       </wizard>
       <wizard
@@ -425,6 +445,12 @@
             class="lslplus.preferences.LslPlusPreferencePage"
             id="lslplus.preferences.page1"
             name="LSL Plus">
+      </page>
+      <page
+            category="lslplus.preferences.page1"
+            class="lslplus.preferences.LslPlusEditorPreferencePage"
+            id="lslplus.preferences.editor_colors"
+            name="Editor Appearance">
       </page>
    </extension>
 

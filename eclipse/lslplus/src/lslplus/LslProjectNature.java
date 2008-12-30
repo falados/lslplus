@@ -118,9 +118,15 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 	}
 	
 	public static class ItemStatus {
-		public ErrorLocation errLoc = null;
-		public String msg = null;
+		//public ErrorLocation errLoc = null;
+		//public String msg = null;
+	    public ItemError[] errs = null;
 		public boolean ok = true;
+	}
+	
+	public static class ItemError {
+	    public ErrorLocation errLoc = null;
+	    public String msg = null;
 	}
 	
 	private class SourceListBuilder implements IResourceVisitor {
@@ -246,6 +252,7 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 			xstream.alias("entryPoint", EntryPointDefinition.class); //$NON-NLS-1$
 			xstream.alias("param", LslParam.class); //$NON-NLS-1$
 			xstream.alias("global", NameTypePair.class); //$NON-NLS-1$
+			xstream.alias("itemError", ItemError.class); //$NON-NLS-1$
 			summary = (Summary) xstream.fromXML(result);
 			final HashMap map = new HashMap();
 			synchronized (this) {
@@ -400,24 +407,34 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 					
 					ItemStatus status = (ItemStatus) summary.get(key);
 					if (status != null && !status.ok) {
-						IMarker i =resource.createMarker(LSLPLUS_PROBLEM);
-						i.setAttribute(IMarker.MESSAGE, status.msg);
-						i.setAttribute(IMarker.SEVERITY, IMarker.SEVERITY_ERROR);
-						if (status.errLoc != null) {
-						    int lineOffset0 = status.errLoc.lineStart - 1;
-						    int lineOffset1 = status.errLoc.lineEnd - 1;
-						    i.setAttribute(IMarker.LINE_NUMBER, status.errLoc.lineStart);
-						    int[] offsets = Util.findOffsetsFor(new int[] { lineOffset0, lineOffset1},
-						            new int[] {status.errLoc.columnStart - 1, 
-						            status.errLoc.columnEnd - 1}, f);
-						    if (offsets != null) {
-						        if (offsets[0] == offsets[1]) offsets[1]++;
-						        i.setAttribute(IMarker.CHAR_START, offsets[0]);
-						        i.setAttribute(IMarker.CHAR_END, offsets[1]);
-						    }
-						}
-						
-						Util.log("Marked " + key);
+					    for (int j = 0; j < status.errs.length; j++) {
+                            ItemError err = status.errs[j];
+                            IMarker i = resource.createMarker(LSLPLUS_PROBLEM);
+                            i.setAttribute(IMarker.MESSAGE, err.msg);
+                            i.setAttribute(IMarker.SEVERITY,
+                                    IMarker.SEVERITY_ERROR);
+                            if (err.errLoc != null) {
+                                int lineOffset0 = err.errLoc.lineStart - 1;
+                                int lineOffset1 = err.errLoc.lineEnd - 1;
+                                i.setAttribute(IMarker.LINE_NUMBER,
+                                        err.errLoc.lineStart);
+                                int[] offsets = Util.findOffsetsFor(new int[] {
+                                        lineOffset0, lineOffset1 }, new int[] {
+                                        err.errLoc.columnStart - 1,
+                                        err.errLoc.columnEnd - 1 }, f);
+                                if (offsets != null) {
+                                    if (offsets[0] == offsets[1])
+                                        offsets[1]++;
+                                    i.setAttribute(IMarker.CHAR_START,
+                                            offsets[0]);
+                                    i
+                                            .setAttribute(IMarker.CHAR_END,
+                                                    offsets[1]);
+                                }
+                            }
+                        }
+					    
+                        Util.log("Marked " + key);
 					}
 				} catch (CoreException e) {
 					Util.log(e, "error reading file"); //$NON-NLS-1$

@@ -23,12 +23,12 @@ prim has taken the controls of a particular avatar and the avatar changes its co
 <tr><th>Event</th><th>Event Handler Entry Point</th><th>Notes</th></tr>
 <tr>
 <td>&quot;Owner Say&quot;</td>
-<td>list <em>onOwnerSay</em>(string key, string message)</td>
+<td>list <em>onOwnerSay</em>(string primKey, string message)</td>
 <td>Triggered when a script in a prim owned by the avatar calls <em>llOwnerSay</em></td>
 </tr>
 <tr>
 <td>&quot;Chat&quot;</td>
-<td>list <em>onChat</em>(string name, string key, string message)</td>
+<td>list <em>onChat</em>(string name, string chatterKey, string message)</td>
 <td>Triggered when any public (channel 0) chat occurs within range of the avatar.</td>
 </tr>
 <tr>
