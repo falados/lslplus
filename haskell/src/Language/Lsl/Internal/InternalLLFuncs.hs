@@ -436,7 +436,7 @@ convertIndex length index = if index < 0 then length + index else index
 llCSV2List _ [SVal s] =
     continueWith $ LVal $ map SVal (lslCsvToList [] s)
 llList2CSV _ [LVal l] =
-    continueWith $ SVal $ concat (intersperse "," (map lslValToString l))
+    continueWith $ SVal $ concat (intersperse ", " (map lslValToString l))
 
 lslValToString (VVal x y z) = "<" ++ (show x) ++ "," ++ (show y) ++ "," ++ (show z) ++ ">"
 lslValToString (RVal x y z s) = "<" ++ (show x) ++ "," ++ (show y) ++ "," ++ (show z) ++ "," ++ (show s) ++ ">"
