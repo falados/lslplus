@@ -106,9 +106,9 @@ decimalOrFloat =
     do wholeDigits <- many1 digit <?> "number"
        let w = foldl (\ b d -> b * 10 + d) 0 $ map digitToInt wholeDigits
        mf <- option Nothing (char '.' >> option (fromIntegral w) (fracPart False (fromIntegral w)) >>= return . Just)
-       return $ case mf of
-           Nothing -> Left w
-           Just f -> Right f
+       case mf of
+           Nothing -> try ( expon >>= \ p -> return $ Right (fromIntegral w * p) ) <|> (return $ Left w)
+           Just f -> return $ Right f
 
 stringLiteral   = lexeme (
                       do{ str <- between (char '"')                   
