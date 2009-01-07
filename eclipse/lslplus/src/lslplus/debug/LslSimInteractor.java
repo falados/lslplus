@@ -121,7 +121,7 @@ public class LslSimInteractor implements Runnable, Interactor, SimEventListener 
         }
         
         static {
-            xstream.alias("exec-step-out", StepOutCommand.class); //$NON-NLS-1$
+            xstream.alias("sim-step-out", StepOutCommand.class); //$NON-NLS-1$
             BreakpointData.configureXStream(xstream);
         }
         
