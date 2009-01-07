@@ -14,8 +14,8 @@ import Data.List(intersperse)
 import Language.Lsl.Syntax(Expr(..),Statement(..),Func(..),FuncDec(..),Handler(..),State(..),Ctx(..),SourceContext(..),LSLType(..),
                   Component(..),Var(..),LModule(..),LSLScript(..),GlobDef(..),goodHandlers)
 import Text.ParserCombinators.Parsec hiding (State)
-import qualified Text.ParserCombinators.Parsec.Token as P
-import Text.ParserCombinators.Parsec.Language( javaStyle )
+import qualified Text.ParserCombinators.ParsecExtras.Token as P
+import Text.ParserCombinators.ParsecExtras.Language( javaStyle )
 import Text.ParserCombinators.Parsec.Error
 import Control.Monad.Error(liftIO)
 import Control.Monad.Trans(MonadIO)
