@@ -65,8 +65,9 @@ renderVarList (v:vars) =
         let render' [] = blank
             render' (v:vars) = renderChar ',' . renderVar v . render' vars in render' vars
 
-renderFuncs = renderSequence renderFunc
+renderFuncs = renderSequence renderCtxFunc
 
+renderCtxFunc (Ctx _ func) = renderFunc func
 renderFunc (Func dec stmts) = 
     renderFuncDec dec . renderString "{\n" . renderStatements 0 stmts . renderString "}\n"
 
@@ -103,7 +104,7 @@ renderStatement' n (Decl var val) =
         case val of 
             Nothing -> renderString ";\n"
             Just expr -> renderString " = " . renderCtxExpr expr . renderString ";\n"
-renderStatement' n (NullStmt) = blank
+renderStatement' n (NullStmt) = blank . renderString "\n"
 renderStatement' n (Return Nothing) = renderString "return;\n"
 renderStatement' n (Return (Just expr)) = renderString "return " . renderCtxExpr expr . renderString ";\n";
 renderStatement' n (StateChange name) = renderString "state " . renderString name . renderString ";\n";

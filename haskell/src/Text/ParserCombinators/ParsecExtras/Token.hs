@@ -26,7 +26,6 @@ import Data.List (nub,sort)
 import Data.Maybe (isJust,fromJust)
 import Text.ParserCombinators.Parsec
 
-
 -----------------------------------------------------------
 -- Language Definition
 -----------------------------------------------------------
@@ -43,7 +42,7 @@ data LanguageDef st
     , reservedNames  :: [String]
     , reservedOpNames:: [String]
     , caseSensitive  :: Bool
-    , custWhiteSpace :: Maybe (CharParser st ())
+    , custWhiteSpace :: Maybe (CharParser st String -> CharParser st String -> CharParser st String -> CharParser st ())
     }                           
            
 -----------------------------------------------------------
@@ -68,7 +67,9 @@ data TokenParser st
                  , symbol           :: String -> CharParser st String
                  , lexeme           :: forall a. CharParser st a -> CharParser st a
                  , whiteSpace       :: CharParser st ()     
-             
+                 , simpleSpace      :: CharParser st String
+                 , multiLineComment :: CharParser st String
+                 , oneLineComment   :: CharParser st String
                  , parens           :: forall a. CharParser st a -> CharParser st a 
                  , braces           :: forall a. CharParser st a -> CharParser st a
                  , angles           :: forall a. CharParser st a -> CharParser st a
@@ -109,7 +110,10 @@ makeTokenParser languageDef
                  , symbol = symbol
                  , lexeme = lexeme
                  , whiteSpace = whiteSpace
-             
+                 , simpleSpace = simpleSpace
+                 , multiLineComment = multiLineComment
+                 , oneLineComment = oneLineComment
+                 
                  , parens = parens
                  , braces = braces
                  , angles = angles
@@ -432,7 +436,7 @@ makeTokenParser languageDef
       
     --whiteSpace    
     whiteSpace 
-        | isJust (custWhiteSpace languageDef) = fromJust (custWhiteSpace languageDef)
+        | isJust (custWhiteSpace languageDef) = (fromJust (custWhiteSpace languageDef))  simpleSpace oneLineComment multiLineComment
         | noLine && noMulti  = skipMany (simpleSpace <?> "")
         | noLine             = skipMany (simpleSpace <|> multiLineComment <?> "")
         | noMulti            = skipMany (simpleSpace <|> oneLineComment <?> "")
@@ -442,13 +446,11 @@ makeTokenParser languageDef
           noMulti = null (commentStart languageDef)   
           
           
-    simpleSpace =
-        skipMany1 (satisfy isSpace)    
+    simpleSpace = many1 (satisfy isSpace)    
         
     oneLineComment =
         do{ try (string (commentLine languageDef))
-          ; skipMany (satisfy (/= '\n'))
-          ; return ()
+          ; many (satisfy (/= '\n'))
           }
 
     multiLineComment =
@@ -461,18 +463,18 @@ makeTokenParser languageDef
         | otherwise                = inCommentSingle
         
     inCommentMulti 
-        =   do{ try (string (commentEnd languageDef)) ; return () }
-        <|> do{ multiLineComment                     ; inCommentMulti }
-        <|> do{ skipMany1 (noneOf startEnd)          ; inCommentMulti }
-        <|> do{ oneOf startEnd                       ; inCommentMulti }
+        =   do{ try (string (commentEnd languageDef)) ; return "" }
+        <|> do{ cmt <- multiLineComment                     ; rest <- inCommentMulti; return (cmt ++ rest) }
+        <|> do{ txt <- many1 (noneOf startEnd)              ; rest <- inCommentMulti; return (txt ++ rest) }
+        <|> do{ ch <- oneOf startEnd                       ; rest <- inCommentMulti; return (ch:rest) }
         <?> "end of comment"  
         where
           startEnd   = nub (commentEnd languageDef ++ commentStart languageDef)
 
     inCommentSingle
-        =   do{ try (string (commentEnd languageDef)); return () }
-        <|> do{ skipMany1 (noneOf startEnd)         ; inCommentSingle }
-        <|> do{ oneOf startEnd                      ; inCommentSingle }
+        =   do{ try (string (commentEnd languageDef)); return (commentEnd languageDef) }
+        <|> do{ txt <- many1 (noneOf startEnd)         ; rest <- inCommentSingle; return (txt ++ rest) }
+        <|> do{ c <- oneOf startEnd                      ; rest <- inCommentSingle; return (c:rest) }
         <?> "end of comment"
         where
           startEnd   = nub (commentEnd languageDef ++ commentStart languageDef)

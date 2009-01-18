@@ -12,7 +12,7 @@ parseFiles p files =
     let parseFile (name,path) =
             do result <- tryJust (\ e@(SomeException x) -> Just (show e)) $ p path
                case result of
-                   Left msg -> return (name,Left (UnknownSourceContext,msg))
+                   Left msg -> return (name,Left (Nothing,msg))
                    Right (Left err) -> return (name,Left err)
                    Right (Right m) -> return (name,Right m)
     in liftIO $ mapM parseFile files

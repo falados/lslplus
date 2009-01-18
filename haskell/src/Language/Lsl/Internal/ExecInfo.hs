@@ -1,7 +1,7 @@
 module Language.Lsl.Internal.ExecInfo(emitExecutionInfo) where
 
 import Language.Lsl.Internal.Exec(ExecutionInfo(..),FrameInfo(..))
-import Language.Lsl.Syntax(SourceContext(..))
+import Language.Lsl.Syntax(SourceContext(..),TextLocation(..))
 import Language.Lsl.Internal.Type(LSLValue(..))
 import Language.Lsl.Internal.XmlCreate(emit,emitSimple)
 
@@ -22,8 +22,8 @@ emitFrame (name,ctx,line,bindings) =
                      emitCtx ctx,
                      emitLine line, 
                      emit "bindings" [] (map emitBinding bindings)]
-    where emitCtx UnknownSourceContext = id
-          emitCtx ctx = emitSimple "file" [] ( textName ctx )
+    where emitCtx Nothing = id
+          emitCtx (Just (SourceContext { srcTextLocation = txtl })) = emitSimple "file" [] ( textName txtl )
           emitLine Nothing = id
           emitLine (Just i) = emitSimple "line" [] (show i)
           

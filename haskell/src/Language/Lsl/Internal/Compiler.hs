@@ -11,14 +11,14 @@ import Language.Lsl.Internal.Load(loadModules,loadScripts)
 import Language.Lsl.Render(renderCompiledScript)
 import Language.Lsl.Syntax(AugmentedLibrary(..),CompiledLSLScript(..),Ctx(..),Func(..),Global(..),
                      GlobDef(..),Handler(..),LModule(..),SourceContext(..),State(..),Validity,Var(..),
-                     funcName,funcParms,funcType,libFromAugLib)
+                     TextLocation(..),funcName,funcParms,funcType,libFromAugLib)
 import Language.Lsl.Internal.Type(lslTypeString)
 import System.Directory(doesFileExist,removeFile)
 import System.FilePath(replaceExtension)
 import System.Time(calendarTimeToString,getClockTime,toCalendarTime)
 import Text.XML.HaXml(Document(..),xmlParse) --hiding (when,xmlEscape)
 import Text.XML.HaXml.Posn(Posn(..))
-import Language.Lsl.Internal.Optimize(optimizeScript) 
+import Language.Lsl.Internal.Optimize(optimizeScript,OptimizerOption(..)) 
 import Language.Lsl.Internal.XmlCreate hiding (emit)
 import qualified Language.Lsl.Internal.XmlCreate as E
 
@@ -73,7 +73,7 @@ formatModuleCompilationSummary (name,result) =
                 emit "globals" (map emitGlobal globals ++ map emitFreeVar freevars)])
     where funcs globdefs = [ f | GF f <- globdefs]
 
-emitFunc (Func fd _) =
+emitFunc (Ctx _ (Func fd _)) =
     emit "entryPoint" [
         emit "name" [showString (ctxItem $ funcName fd)],
         emit "returnType" [showString (lslTypeString $ funcType fd)],
@@ -101,8 +101,8 @@ emitParam var = emit "param" [emit "name" [showString $ varName var], emit "type
 formatErr (ctx,msg) = 
     emit "itemError" [formatCtx ctx , emit "msg" [showString (xmlEscape msg)]]
 
-formatCtx UnknownSourceContext = id
-formatCtx (TextLocation { textLine0 = l0, textColumn0 = c0, textLine1 = l1, textColumn1 = c1, textName = n }) =
+formatCtx Nothing = id
+formatCtx (Just (SourceContext { srcTextLocation = TextLocation { textLine0 = l0, textColumn0 = c0, textLine1 = l1, textColumn1 = c1, textName = n }})) =
     emit "errLoc" (map (\ (x,y) -> emit x [showString y]) 
                    [("lineStart",show l0),
                    ("columnStart",show c0),
@@ -136,7 +136,7 @@ renderScriptsToFiles compiledScripts pathTable =
 
 renderScriptToFile stamp path script =
    let newPath = replaceExtension path ".lsl"
-       text = renderCompiledScript stamp (optimizeScript script) in writeFile newPath text
+       text = renderCompiledScript stamp (optimizeScript [] script) in writeFile newPath text
        
 removeOutputScript path = 
     do exists <- doesFileExist outpath

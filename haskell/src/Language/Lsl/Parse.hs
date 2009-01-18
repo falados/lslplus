@@ -11,15 +11,75 @@ module Language.Lsl.Parse(
 
 import Data.Char(digitToInt)
 import Data.List(intersperse)
-import Language.Lsl.Syntax(Expr(..),Statement(..),Func(..),FuncDec(..),Handler(..),State(..),Ctx(..),SourceContext(..),LSLType(..),
+import Language.Lsl.Internal.Pragmas(Pragma(..))
+import Language.Lsl.Syntax(Expr(..),Statement(..),Func(..),FuncDec(..),Handler(Handler),State(..),Ctx(..),TextLocation(..),SourceContext(..),LSLType(..),
                   Component(..),Var(..),LModule(..),LSLScript(..),GlobDef(..),goodHandlers)
 import Text.ParserCombinators.Parsec hiding (State)
 import qualified Text.ParserCombinators.ParsecExtras.Token as P
-import Text.ParserCombinators.ParsecExtras.Language( javaStyle )
+import Text.ParserCombinators.ParsecExtras.Language( javaStyle, emptyDef )
 import Text.ParserCombinators.Parsec.Error
 import Control.Monad.Error(liftIO)
 import Control.Monad.Trans(MonadIO)
 
+import Debug.Trace
+
+data ParseState = ParseState {
+        atStart :: !Bool,
+        parseAntiQuotations :: !Bool,
+        pendingPragmas :: ![Pragma],
+        trailingWS :: !String,
+        leadingWS :: !String
+    }
+    
+getAQState = getState >>= return . parseAntiQuotations
+
+newAQState = ParseState { atStart = True, parseAntiQuotations = True, pendingPragmas = [], trailingWS = "", leadingWS = "" }
+newNoAQState = ParseState { atStart = True, parseAntiQuotations = False, pendingPragmas = [], trailingWS = "", leadingWS = "" }
+
+data WS = WSSimple { wsText :: String } | WSSingle { wsText :: String } | WSMulti { wsText :: String }
+    deriving Show
+custWS simpleSpace oneLineComment multiLineComment = do
+         st <- getState
+         ws <- many ((simpleSpace >>= return . WSSimple) <|> 
+                     (oneLineComment >>= return . WSSingle) <|> 
+                     (multiLineComment >>= return . WSMulti) <?> "")
+         let (trailing,leading) = if atStart st then ([],ws) else extractTrailing ws
+         let pragmas = foldl extractPragma [] leading
+         setState st { atStart = False,
+                       pendingPragmas = pragmas, 
+                       trailingWS = wsCat trailing,
+                       leadingWS = wsCat leading }
+     where wsCat = concatMap wsText
+           extractTrailing [] = ([],[])
+           extractTrailing (WSSimple txt:rest) =
+               case break (=='\n') txt of
+                   (ttxt,[]) -> let (t,rest') = extractTrailing rest in (WSSimple ttxt:t,rest')
+                   ([],mtxt) -> ([],WSSimple mtxt:rest)
+                   (ttxt,mtxt) -> ([WSSimple ttxt],WSSimple mtxt:rest)
+           extractTrailing (ws@(WSSingle txt):rest) = ([ws],rest)
+           extractTrailing (ws@(WSMulti txt):rest) | '\n' `elem` txt = ([ws],rest)
+                                                   | otherwise       = let (t,rest') = extractTrailing rest in (ws:t,rest')
+           extractPragma ps (WSSingle txt) = maybe ps (:ps) (parsePragma txt)
+           extractPragma ps _ = ps
+                 
+parsePragma :: String -> Maybe Pragma
+parsePragma txt =
+      case parse parser "" txt of
+          Left _ -> Nothing
+          Right p -> Just p
+   where 
+       pragmaStyle = emptyDef { P.reservedNames = ["pragma","inline","noinlining"], P.commentLine = "--" }
+       lexer :: P.TokenParser ()
+       lexer = P.makeTokenParser pragmaStyle
+       reserved = P.reserved lexer
+       ws = P.whiteSpace lexer
+       parser = do
+           ws
+           reserved "pragma"
+           pragma <- (reserved "inline" >> return PragmaInline) <|> (reserved "noinlining" >> return PragmaNoInline)
+           eof
+           return pragma
+           
 -- define basic rules for lexical analysis
 lslStyle = javaStyle
              { P.reservedOpNames= ["*","/","+","++","-","--","^","&","&&",
@@ -30,8 +90,9 @@ lslStyle = javaStyle
                P.caseSensitive = True,
                P.identStart = letter <|> char '_',
                P.opLetter = oneOf "*/+:!#$%&*+./=?@\\^|-~",
-               P.opStart = oneOf ":!#$%&*+./<=>?@\\^|-~" }
-lexer :: P.TokenParser Bool
+               P.opStart = oneOf ":!#$%&*+./<=>?@\\^|-~",
+               P.custWhiteSpace = Just custWS }
+lexer :: P.TokenParser ParseState
 lexer  = P.makeTokenParser lslStyle
 
 identLetter = P.identLetter lslStyle
@@ -308,17 +369,18 @@ castExpr = ctxify $
               return $ Cast t e
 
 ctxify f = do
+    pragmas <- getState >>= return . pendingPragmas
     pos0 <- getPosition
     v <- f
     pos1 <- getPosition
-    return $ Ctx (pos2Loc (pos0,pos1)) v
+    return $ Ctx (pos2Ctx (pos0,pos1) pragmas) v
 
 notExpr = ctxify ((char '!' <?> "prefix operator") >> whiteSpace >> expr2 >>= return.Not)
 invExpr = ctxify ((char '~' <?> "prefix operator") >> whiteSpace >> expr2 >>= return.Inv)
 negExpr = ctxify ((char '-' <?> "prefix operator") >> whiteSpace >> expr2 >>= return.Neg)
 
 atomicExpr = do
-    aq <- getState
+    aq <- getAQState
     (ctxify $
               try ( do m <- option 1 (reservedOp "-" >> return (-1))
                        n <- naturalOrFloat
@@ -350,18 +412,18 @@ prefixExpr = ctxify $
                             
 unaryExpr = choice [try prefixExpr,notExpr,invExpr, negExpr,try castExpr,atomicExpr]
 
-expr2 :: GenParser Char Bool (Ctx Expr)
+expr2 :: GenParser Char ParseState (Ctx Expr)
 expr2 = choice [try assignment, try postfixExpr, unaryExpr]
 
 expr1 = orExpr
 
-expr :: GenParser Char Bool (Ctx Expr)
+expr :: GenParser Char ParseState (Ctx Expr)
 expr = 
     do r <- choice [try assignment, expr1]
        mtrace "expr: " r
 
 exprParser :: String -> Either ParseError (Ctx Expr)
-exprParser text = runParser expr False "" text
+exprParser text = runParser (whiteSpace>>expr) newNoAQState "" text
 
 ------------------------------------------------------------------------------
 -- STATEMENT PARSING
@@ -451,9 +513,10 @@ doWhileStatement = do reserved "do"
                       stmt <- statement
                       reserved "while"
                       e <- parens expr
+                      semi
                       return $ DoWhile stmt e
 
-parseType text = runParser typeName False "" text
+parseType text = runParser typeName newNoAQState "" text
 ------------------------------------------------------------
 -- HANDLER Parsing
 
@@ -498,16 +561,21 @@ stateDecl = do name <- ctxify stateName
 stateDecls = many stateDecl
 
 --------------------------------------------------------------
-varOrFunc =   do (Ctx ctx (t,id)) <- ctxify $ do
+varOrFunc =   do pos0 <- getPosition
+                 pragmas <- getState >>= return . pendingPragmas
+                 (Ctx ctx (t,id)) <- ctxify $ do
                      t <- try typeName
                      id <- ctxify identifier <?> "identifier"
                      return (t,id)
-                 choice [func t id, gvar ctx t id]
-          <|> do id <- ctxify identifier <?> "identifier"
-                 func LLVoid id
-func t id = do ps <- parens params
-               stmts <- braces statements
-               return $ GF $ Func (FuncDec id t ps) stmts
+                 choice [func t id pragmas pos0, gvar ctx t id]
+          <|> do pos0 <- getPosition
+                 pragmas <- getState >>= return . pendingPragmas
+                 id <- ctxify identifier <?> "identifier"
+                 func LLVoid id pragmas pos0
+func t id pragmas pos0 = do ps <- parens params
+                            stmts <- braces statements
+                            pos1 <- getPosition
+                            return $ GF $ Ctx (pos2Ctx (pos0, pos1) pragmas) $ Func (FuncDec id t ps) stmts
 gvar ctx t (Ctx _ id) = do mexpr <- option Nothing (reservedOp' "=" >> expr >>= return . Just)
                            semi
                            return $ GV (Ctx ctx (Var id t)) mexpr
@@ -573,7 +641,7 @@ moduleParser = do whiteSpace
                   return $ LModule globs freevars
 
 parseFromString parser string =
-    case runParser parser False "" string of
+    case runParser parser newNoAQState "" string of
         Left err -> Left (snd (fromParseError err))
         Right x -> Right x
 
@@ -586,23 +654,24 @@ parseModuleFromString s = parseFromString moduleParser s
 
 -- | Parse an LSL script, with possible antiquotations, into its syntax tree.
 parseScriptFromStringAQ :: String -> Either ParseError LSLScript
-parseScriptFromStringAQ s = runParser lslParser True "" s
+parseScriptFromStringAQ s = runParser lslParser newAQState "" s
 -- | Parse an LSL (Plus) module, with possible antiquotations, into its syntax tree.
 parseModuleFromStringAQ :: String -> Either ParseError LModule
-parseModuleFromStringAQ s = runParser moduleParser True "" s
+parseModuleFromStringAQ s = runParser moduleParser newAQState "" s
 
-parseModule :: (MonadIO m) => SourceName -> m (Either (SourceContext,String) LModule)
+parseModule :: (MonadIO m) => SourceName -> m (Either (Maybe SourceContext,String) LModule)
 parseModule file = parseFile moduleParser file
 parseScript file = parseFile lslParser file
 
-fromParseError :: ParseError -> (SourceContext,String)
+fromParseError :: ParseError -> (Maybe SourceContext,String)
 fromParseError err =
         let pos = errorPos err
             msg = showErrorMessages "or" "unknown parse error" 
                                     "expecting" "unexpected" "end of input" (errorMessages err)
-        in (TextLocation { textLine0 = sourceLine pos, textColumn0 = sourceColumn pos,
-                           textLine1 = sourceLine pos, textColumn1 = sourceColumn pos,
-                           textName = sourceName pos },
+        in (Just $ SourceContext TextLocation { textLine0 = sourceLine pos, textColumn0 = sourceColumn pos,
+                                                textLine1 = sourceLine pos, textColumn1 = sourceColumn pos,
+                                                textName = sourceName pos }
+                                 "" "" [],
             msg)
 
 parseFile p file =
@@ -610,31 +679,24 @@ parseFile p file =
        case parser s of
            Left err -> return $ Left (fromParseError err)
            Right x -> return $ Right x
-    where parser = runParser p False file
+    where parser = runParser p newNoAQState file
     
-txtLoc pos len =
-    TextLocation { textName = sourceName pos, 
-                   textColumn0 = sourceColumn pos, 
-                   textLine0 = sourceLine pos,
-                   textColumn1 = sourceColumn pos + (len-1),
-                   textLine1 = sourceLine pos }
-    
-idLoc pos id = txtLoc pos $ length id
-
 pos2Loc (pos0,pos1) = 
-     TextLocation { 
+     SourceContext TextLocation { 
          textName = sourceName pos0,
          textColumn0 = sourceColumn pos0,
          textLine0 = sourceLine pos0,
          textColumn1 = sourceColumn pos1,
          textLine1 = sourceLine pos1
-     }
+     } "" "" []
      
-combineContexts (UnknownSourceContext,pos0,pos1,UnknownSourceContext) = pos2Loc (pos0,pos1)
-combineContexts (TextLocation l0 c0 l1 c1 n,_,_,TextLocation l0' c0' l1' c1' n') =
-    TextLocation l0 c0 l1' c1' n
-combineContexts (TextLocation l0 c0 l1 c1 n,_,pos,_) =
-    TextLocation l0 c0 (sourceLine pos) (sourceColumn pos) n
-combineContexts (_,pos,_,TextLocation l0 c0 l1 c1 n) =
-    TextLocation (sourceLine pos) (sourceColumn pos) l1 c1 n
+pos2Ctx (pos0,pos1) pragmas =  Just (pos2Loc (pos0,pos1)) { srcPragmas = pragmas }
+
+combineContexts (Nothing,pos0,pos1,Nothing) = Just $ pos2Loc (pos0,pos1)
+combineContexts (Just (SourceContext (TextLocation l0 c0 l1 c1 n) pre _ prag),_,_,Just (SourceContext (TextLocation l0' c0' l1' c1' n') _ post _ )) =
+    Just $ SourceContext (TextLocation l0 c0 l1' c1' n) pre post prag
+combineContexts (Just (SourceContext (TextLocation l0 c0 l1 c1 n) pre post prag),_,pos,_) =
+    Just $ SourceContext (TextLocation l0 c0 (sourceLine pos) (sourceColumn pos) n) pre post prag
+combineContexts (_,pos,_,Just (SourceContext (TextLocation l0 c0 l1 c1 n) pre post prag)) =
+    Just $ SourceContext (TextLocation (sourceLine pos) (sourceColumn pos) l1 c1 n) pre post prag
 

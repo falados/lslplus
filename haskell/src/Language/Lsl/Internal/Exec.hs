@@ -38,6 +38,7 @@ import Language.Lsl.Syntax(Expr(..),
                   State(..),
                   Ctx(..),
                   Global(..),
+                  TextLocation(..),
                   SourceContext(..),
                   Handler(..),
                   ctxVr2Vr,
@@ -66,7 +67,7 @@ initLSLScript (CompiledLSLScript globals fs ss)  =
         curState = "default",
         executionState = Waiting,
         glob = initGlobals globals,
-        funcs = fs,
+        funcs = map ctxItem fs,
         states = ss,
         valueStack = [],
         callStack = [],
@@ -141,14 +142,14 @@ data ScriptImage = ScriptImage {
                      currentEvent :: Maybe Event
                  } deriving (Show)
 
-data FrameInfo = FrameInfo { frameInfoImageName :: String, frameInfoFrames :: [(String,SourceContext,Maybe Int,[(String,LSLValue)])] }
+data FrameInfo = FrameInfo { frameInfoImageName :: String, frameInfoFrames :: [(String,Maybe SourceContext,Maybe Int,[(String,LSLValue)])] }
     deriving (Show)
 
 frameInfo scriptImage = FrameInfo (scriptImageName scriptImage) $
     frames ++ [("glob", bottomContext, Nothing, glob scriptImage)]
     where frames = (map collapseFrame $ callStack scriptImage)
           (bottomContext,bottomLine) = case frames of
-              [] -> (UnknownSourceContext,Nothing)
+              [] -> (Nothing,Nothing)
               _ -> let (_,ctx,_,_) = last frames in (ctx,Just 1)
           collapseFrame (Frame name ctx line (ss,_)) =
               (name,ctx,line,concat $ map fst ss)
@@ -264,9 +265,9 @@ evalLit globals expr =
                 _ -> error "invalid float expression"
     in case expr of
         Neg (Ctx _ (IntLit i)) -> IVal (-i)
-        Neg (Ctx _ (FloatLit f)) -> FVal (-f)
+        Neg (Ctx _ (FloatLit f)) -> FVal (-(realToFrac f))
         IntLit i        -> IVal i
-        FloatLit f      -> FVal f
+        FloatLit f      -> FVal (realToFrac f)
         StringLit s     -> SVal s
         KeyLit k        -> KVal k
         ListExpr l      -> LVal $ map (evalCtxLit globals) l
@@ -298,7 +299,7 @@ bindParmsForgiving vars vals = zipWithM bindParmForgiving vars vals
 toBool x = if x == 0 then False else True
 
 --type Frame = (ScopeStack,EvalStack)
-data Frame = Frame { frameName :: String, frameContext :: SourceContext, frameSourceLine :: Maybe Int,
+data Frame = Frame { frameName :: String, frameContext :: Maybe SourceContext, frameSourceLine :: Maybe Int,
                      frameStacks :: (ScopeStack, EvalStack) }
      deriving (Show)
 type LabelSet = [LBlock]
@@ -341,7 +342,7 @@ data EvalElement = EvBlock [Ctx Statement] | EvCtxStatement (Ctx Statement)
                  | EvShiftL | EvShiftR | EvCast LSLType | EvGet (String,Component) | EvSet (String,Component)
                  | EvCons | EvMkVec | EvMkRot | EvPop
                  | EvReturn | EvDiscard | EvBind String LSLType
-                 | EvCond Statement Statement | EvCall String SourceContext [Var] [Ctx Statement] Bool
+                 | EvCond Statement Statement | EvCall String (Maybe SourceContext) [Var] [Ctx Statement] Bool
                  | EvPredef String | EvLoop Expr [Ctx Expr] Statement
     deriving (Show)
     
@@ -709,12 +710,13 @@ eval' =
                EvBlock (s:ss) -> pushElements [EvBlock ss,EvCtxStatement s]
                EvCtxStatement s -> do
                    pushElements [EvStatement $ ctxItem s]
-                   if (isTextLocation $ srcCtx s) then
-                       let bp = mkBreakpoint (textName $ srcCtx s) (textLine0 $ srcCtx s) 0 in
-                               do  brk <- checkBp bp
-                                   if brk then return $ BrokeAt bp
-                                          else continue
-                       else continue
+                   case srcCtx s of
+                       Just (SourceContext { srcTextLocation = txtl }) -> 
+                           let bp = mkBreakpoint (textName txtl) (textLine0 txtl) 0 in
+                                    do  brk <- checkBp bp
+                                        if brk then return $ BrokeAt bp
+                                               else continue
+                       Nothing -> continue
                EvStatement (Return mexpr) -> pushElements [EvReturn,EvMexpr $ fromMCtx mexpr]
                EvStatement (NullStmt) -> eval'
                EvStatement (StateChange s) -> return $ EvalComplete $ Just s
@@ -765,7 +767,7 @@ eval' =
                       pushElement (EvStatement (if trueCondition val then stmt1 else stmt2))
                       continue
                EvExpr (IntLit i) -> pushVal (IVal i) >> continue
-               EvExpr (FloatLit f) -> pushVal (FVal f) >> continue
+               EvExpr (FloatLit f) -> pushVal (FVal (realToFrac f)) >> continue
                EvExpr (StringLit s) -> pushVal (SVal s) >> continue
                EvExpr (KeyLit k) -> pushVal (KVal k) >> continue
                EvExpr (VecExpr e1 e2 e3) ->
@@ -1097,7 +1099,7 @@ evalPredef' name =
           convertArg LLString (KVal k) = SVal k
           convertArg _ v = v
           
-ctxList es = map (Ctx UnknownSourceContext) es
+ctxList es = map (Ctx Nothing) es
 
 data ExecutionInfo = ExecutionInfo String Int FrameInfo deriving (Show)
 

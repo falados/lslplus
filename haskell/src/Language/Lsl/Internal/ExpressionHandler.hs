@@ -198,7 +198,7 @@ evalExpr (Not expr) =
        case t of
            (IVal i) -> return $ IVal (if i == 0 then 1 else 0)
 evalExpr (IntLit i) = return (IVal i)
-evalExpr (FloatLit f) = return (FVal f)
+evalExpr (FloatLit f) = return (FVal $ realToFrac f)
 evalExpr (StringLit s) = return (SVal s)
 evalExpr (KeyLit k) = return (KVal k)
 evalExpr (VecExpr xExpr yExpr zExpr) = 

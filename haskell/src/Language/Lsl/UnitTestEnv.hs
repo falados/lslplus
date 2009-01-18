@@ -179,7 +179,7 @@ hasFunc lib (moduleName,functionName) =
         case converted of
            Left s -> Left ("no such module: " ++ moduleName)
            Right (Left s) -> Left ("no such module: " ++ moduleName)
-           Right (Right (script,path)) -> Right $ isJust (findFunc functionName $ scriptFuncs script)
+           Right (Right (script,path)) -> Right $ isJust (findFunc functionName $ map ctxItem $ scriptFuncs script)
     where converted = evalState (runErrorT (convertEntryPoint ep)) world
           ep = ModuleFunc moduleName functionName
           world = SimpleWorld { maxTick = 10000, tick = 0, msgLog = [], wScripts = [], wLibrary = lib, 
