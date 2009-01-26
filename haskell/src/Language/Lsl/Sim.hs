@@ -75,7 +75,7 @@ import System.Time(ClockTime(..),CalendarTime(..),TimeDiff(..),addToClockTime,to
 import Text.Printf(PrintfType(..),printf)
 
 -- execute a predefined ('ll') function
-doPredef :: Monad m => String -> ScriptInfo -> [LSLValue] -> WorldM m (EvalResult,LSLValue)
+doPredef :: Monad m => String -> ScriptInfo Float -> [LSLValue Float] -> WorldM m (EvalResult,LSLValue Float)
 doPredef name info@(ScriptInfo oid pid sid pkey event) args =
     do predefs <- getPredefFuncs
        -- find the correct function to execute
@@ -2566,7 +2566,7 @@ implementedFuncs = (map fst $ M.toList (defaultPredefs::(M.Map String (PredefFun
 unimplementedFuncs = S.toList (S.difference (S.fromList allFuncs) (S.fromList implementedFuncs))
 
 ---------------------------------------------------------------------------------------------------
-logFromScript :: Monad m => ScriptInfo -> String -> WorldM m ()
+logFromScript :: Monad m => ScriptInfo Float -> String -> WorldM m ()
 logFromScript scriptInfo msg = logAMessage LogInfo (infoToLogSource scriptInfo) msg
 
 infoToLogSource info = (scriptInfoPrimKey info ++ ": " ++ scriptInfoScriptName info)
@@ -3496,7 +3496,7 @@ data SimCommand = SimContinue { simCmdBreakpoints :: [Breakpoint], simCmdEvents 
 data SimStatus = SimEnded { simStatusMessage :: String, simStatusLog :: [LogMessage], simStatusState :: SimStateInfo } | 
                  SimInfo { simStatusEvents :: [SimEvent], simStatusLog :: [LogMessage], simStatusState :: SimStateInfo } |
                  SimSuspended { simStatusEvents :: [SimEvent], 
-                                simStatusSuspendInfo :: ExecutionInfo,
+                                simStatusSuspendInfo :: ExecutionInfo Float,
                                 simStatusLog :: [LogMessage],
                                 simStatusState :: SimStateInfo } deriving (Show)
 
@@ -3521,7 +3521,7 @@ data SimInputEventDefinition m = SimInputEventDefinition {
     simInputEventName :: String,
     simInputEventDescription :: String,
     simInputEventParameters :: [SimParam],
-    simInputEventHandler :: String -> [LSLValue] -> WorldM m () }
+    simInputEventHandler :: String -> [LSLValue Float] -> WorldM m () }
 
 data SimParam = SimParam { simParamName :: String, simParamDescription :: String,
                            simParamType :: SimParamType }

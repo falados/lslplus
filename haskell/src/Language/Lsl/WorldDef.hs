@@ -153,7 +153,7 @@ data Avatar = Avatar { avatarKey :: String,
                        avatarCameraControlParams :: CameraParams,
                        avatarActiveAnimations :: [(Maybe Int,String)],
                        avatarAttachments :: IM.IntMap String,
-                       avatarEventHandler :: !(Maybe (String,[(String,LSLValue)])),
+                       avatarEventHandler :: !(Maybe (String,[(String,LSLValue Float)])),
                        avatarControls :: !Int,
                        avatarControlListener :: !(Maybe AvatarControlListener) } deriving (Show)
 
@@ -213,7 +213,7 @@ primPhantomBit = 4
 primPhysicsBit :: Int
 primPhysicsBit = 0
 
-data InventoryItemData = InvScript { invScriptLibId :: String, invScriptState :: Maybe ScriptImage }
+data InventoryItemData = InvScript { invScriptLibId :: String, invScriptState :: Maybe (ScriptImage Float) }
                        | InvBodyPart
                        | InvGesture
                        | InvClothing
@@ -434,13 +434,13 @@ defaultRegions owner = [
                      regionParcels = [Parcel "parcel_0" "default parcel" (0,256,0,256) owner 0xffffffff [] []] })
     ]
 
-data Script = Script { scriptImage :: !ScriptImage,
+data Script = Script { scriptImage :: !(ScriptImage Float),
                        scriptActive :: Bool,
                        scriptPermissions :: M.Map String Int,
                        scriptLastPerm :: Maybe String,
                        scriptStartTick :: Int,
                        scriptLastResetTick :: Int,
-                       scriptEventQueue :: [Event],
+                       scriptEventQueue :: [Event Float],
                        scriptStartParameter :: Int,
                        scriptCollisionFilter :: !(String,String,Bool),
                        scriptTargetIndex :: !Int,

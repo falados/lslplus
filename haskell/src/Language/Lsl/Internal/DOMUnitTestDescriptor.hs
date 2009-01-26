@@ -56,58 +56,58 @@ fileNameElement = ElemAcceptor "fileName" simple
 pathElement :: MonadError String m => ElemAcceptor m String
 pathElement = ElemAcceptor "path" simple
 
-argumentsElement :: MonadError String m => ElemAcceptor m [LSLValue]
+argumentsElement :: MonadError String m => ElemAcceptor m [LSLValue Float]
 argumentsElement = 
     let f (Elem _ _ contents) = 
           mapM (matchChoice [lslString, lslInteger, lslFloat, lslVector, lslRotation, lslKey, lslList1]) (elementsOnly contents)
     in ElemAcceptor "arguments" f
 
-lslString :: MonadError String m => ElemAcceptor m LSLValue    
+lslString :: MonadError String m => ElemAcceptor m (LSLValue Float)
 lslString = ElemAcceptor "lsl-string" (\ e -> do
              s <- simple e
              case evaluateExpression LLString s of
                  Just k -> return k
                  Nothing -> fail "invalid content for lsl-string")
-lslKey :: MonadError String m => ElemAcceptor m LSLValue    
+lslKey :: MonadError String m => ElemAcceptor m (LSLValue Float)
 lslKey = ElemAcceptor "lsl-key" (\ e -> do
              s <- simple e
              case evaluateExpression LLKey s of
                  Just k -> return k
                  Nothing -> fail "invalid content for lsl-key")
-lslInteger :: MonadError String m => ElemAcceptor m LSLValue    
+lslInteger :: MonadError String m => ElemAcceptor m (LSLValue Float)
 lslInteger = ElemAcceptor "lsl-integer" (\ e -> do
                s <- simple e
                case evaluateExpression LLInteger s of
                    Just f -> return f
                    Nothing -> fail "invalid content for lsl-integer")
-lslFloat :: MonadError String m => ElemAcceptor m LSLValue
+lslFloat :: MonadError String m => ElemAcceptor m (LSLValue Float)
 lslFloat = ElemAcceptor "lsl-float" (\ e -> do
                s <- simple e
                case evaluateExpression LLFloat s of
                    Just f -> return f
                    Nothing -> fail "invalid content for lsl-float")
 
-lslVector :: MonadError String m => ElemAcceptor m LSLValue    
+lslVector :: MonadError String m => ElemAcceptor m (LSLValue Float)
 lslVector = ElemAcceptor "lsl-vector" (\ e -> do
                s <- simple e
                case evaluateExpression LLVector s of
                    Just f -> return f
                    Nothing -> fail "invalid content for lsl-vector")
-lslRotation :: MonadError String m => ElemAcceptor m LSLValue    
+lslRotation :: MonadError String m => ElemAcceptor m (LSLValue Float)
 lslRotation = ElemAcceptor "lsl-rotation" (\ e -> do
                s <- simple e
                case evaluateExpression LLRot s of
                    Just f -> return f
                    Nothing -> fail "invalid content for lsl-rotation")
 
-lslList :: MonadError String m => ElemAcceptor m LSLValue    
+lslList :: MonadError String m => ElemAcceptor m (LSLValue Float)
 lslList =
     let f (Elem _ _ contents) =
           do list <- mapM (matchChoice [lslString,lslInteger,lslKey,lslVector,lslRotation,lslFloat]) (elementsOnly contents)
              return (LVal list)
     in ElemAcceptor "lsl-list" f
     
-lslList1 :: MonadError String m => ElemAcceptor m LSLValue    
+lslList1 :: MonadError String m => ElemAcceptor m (LSLValue Float)
 lslList1 =ElemAcceptor "lsl-list1" (\ e -> do
                s <- simple e
                case evaluateExpression LLList s of
@@ -115,17 +115,17 @@ lslList1 =ElemAcceptor "lsl-list1" (\ e -> do
                    Nothing -> fail "invalid content for lsl-list1")
 
 
-lslVoid :: MonadError String m => ElemAcceptor m LSLValue
+lslVoid :: MonadError String m => ElemAcceptor m (LSLValue Float)
 lslVoid = 
     let f (Elem _ _ []) = return VoidVal
         f (Elem name _ _) = fail ("unexpected content in " ++ name ++ " tag.")
     in ElemAcceptor "lsl-void" f
         
 
-expectedReturnElement :: MonadError String m => ElemAcceptor m (Maybe LSLValue)
+expectedReturnElement :: MonadError String m => ElemAcceptor m (Maybe (LSLValue Float))
 expectedReturnElement = maybeSomeVal "expectedReturn"
 
-expectationsElement :: MonadError String m => ElemAcceptor m FuncCallExpectations
+expectationsElement :: MonadError String m => ElemAcceptor m (FuncCallExpectations Float)
 expectationsElement =
     let f (Elem _ _ contents) = do
           (modeString,contents1) <- findElement modeElement (elementsOnly contents)
@@ -145,10 +145,10 @@ expectationsElement =
 modeElement :: MonadError String m => ElemAcceptor m String
 modeElement = ElemAcceptor "mode" simple
 
-callsElement :: MonadError String m => ElemAcceptor m [((String, [Maybe LSLValue]),LSLValue)]
+callsElement :: MonadError String m => ElemAcceptor m [((String, [Maybe (LSLValue Float)]),LSLValue Float)]
 callsElement = elementList "calls" callElement
     
-callElement :: MonadError String m => ElemAcceptor m ((String, [Maybe LSLValue]),LSLValue)
+callElement :: MonadError String m => ElemAcceptor m ((String, [Maybe (LSLValue Float)]),LSLValue Float)
 callElement =
     let f (Elem _ _ contents) = do
           (name,contents1) <- findElement (ElemAcceptor "name" simple) (elementsOnly contents)
@@ -157,19 +157,19 @@ callElement =
           return ((name,args),retval)
     in ElemAcceptor "call" f
 
-callArgsElement :: MonadError String m => ElemAcceptor m [Maybe LSLValue]
+callArgsElement :: MonadError String m => ElemAcceptor m [Maybe (LSLValue Float)]
 callArgsElement = elementList "args" (maybeSomeVal "maybe-value")
 
-returnsElement :: MonadError String m => ElemAcceptor m LSLValue
+returnsElement :: MonadError String m => ElemAcceptor m (LSLValue Float)
 returnsElement = someVal "returns"
 
-initialBindingsElement :: MonadError String m => ElemAcceptor m [(String,LSLValue)]
+initialBindingsElement :: MonadError String m => ElemAcceptor m [(String,LSLValue Float)]
 initialBindingsElement = elementList "initialBindings" globalBindingElement
 
-finalBindingsElement :: MonadError String m => ElemAcceptor m [(String,LSLValue)]
+finalBindingsElement :: MonadError String m => ElemAcceptor m [(String,LSLValue Float)]
 finalBindingsElement = elementList "finalBindings" globalBindingElement
 
-globalBindingElement :: MonadError String m => ElemAcceptor m (String,LSLValue)
+globalBindingElement :: MonadError String m => ElemAcceptor m (String,LSLValue Float)
 globalBindingElement =
     let f (Elem _ _ contents) = do
         (name,contents1) <- findElement (ElemAcceptor "name" simple) (elementsOnly contents)

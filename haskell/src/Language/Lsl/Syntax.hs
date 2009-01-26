@@ -768,7 +768,7 @@ compileCtxExpr (Ctx ctx (Not expr)) =
        return $ Just LLInteger
 compileCtxExpr (Ctx ctx (Neg expr))  =
     do mt <- compileCtxExpr expr
-       (mt `whenIsJust` (==LLList)) $ vsmAddErr (ctx, "operator not applicable to list type")
+       (mt `whenIsJust` (`elem` [LLList,LLString,LLKey])) $ vsmAddErr (ctx, "operator not applicable to this type")
        return mt
 compileCtxExpr (Ctx ctx (Inv expr)) =
     do mt <- compileCtxExpr expr

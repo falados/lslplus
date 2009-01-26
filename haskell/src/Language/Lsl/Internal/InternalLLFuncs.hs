@@ -126,9 +126,9 @@ import qualified Data.ByteString.UTF8 as UTF8
 import Network.URI(escapeURIChar,unEscapeString)
 
 internalLLFuncNames :: [String]
-internalLLFuncNames = map fst (internalLLFuncs :: [(String, a -> [LSLValue] -> Maybe (EvalResult,LSLValue))])
+internalLLFuncNames = map fst (internalLLFuncs :: (Read a, RealFloat a) => [(String, a -> [LSLValue a] -> Maybe (EvalResult,LSLValue a))])
 
-internalLLFuncs :: (Monad m) => [(String, a -> [LSLValue] -> m (EvalResult,LSLValue))]
+internalLLFuncs :: (Read a, RealFloat a, Monad m) => [(String, b -> [LSLValue a] -> m (EvalResult,LSLValue a))]
 internalLLFuncs = [
     ("llAbs",llAbs),
     ("llAcos",llAcos),
@@ -274,7 +274,7 @@ llMD5String _ [SVal string, IVal nonce] =
 llSHA1String _ [SVal string] = continueWith $ SVal (hashStoHex string)
 -- Math functions
 
-unaryToLL :: (Monad m) => (Float -> Float) -> [LSLValue] -> m (EvalResult,LSLValue)
+unaryToLL :: (RealFloat a, Monad m) => (a -> a) -> [LSLValue a] -> m (EvalResult,LSLValue a)
 unaryToLL f [FVal v] = continueWith $ FVal (f v)
 
 llCos _ = unaryToLL cos
@@ -308,7 +308,7 @@ modpow a b c | b < 0 = 0
                 in pow (a `mod` c) b'
 
 -- should use a map for this, but have been using lists for everything, so will stick with it...
-statFuncs :: [(Int, [Float] -> Float)]
+statFuncs :: RealFloat a => [(Int, [a] -> a)]
 statFuncs = map (\(Just (IVal op), f) -> (op,f)) [
     (findConstVal "LIST_STAT_RANGE", listStatRange),
     (findConstVal "LIST_STAT_MAX", listStatMax),
@@ -321,7 +321,7 @@ statFuncs = map (\(Just (IVal op), f) -> (op,f)) [
     (findConstVal "LIST_STAT_NUM_COUNT", fromInt . length),
     (findConstVal "LIST_STAT_GEOMETRIC_MEAN", listStatGeometricMean)]
                    
-toF :: LSLValue -> Maybe Float
+toF :: Num a => LSLValue a -> Maybe a
 toF (IVal i) = Just (fromInt i)
 toF (FVal f) = Just f
 toF _ = Nothing
@@ -492,6 +492,7 @@ llListSort _ [LVal list, IVal stride, IVal ascending] =
       concat (direction $ sort $ strideList list stride)
       
 
+typeCodes :: RealFloat a => [(LSLType, LSLValue a)]
 typeCodes = map (\ (t,Just v) -> (t,v)) [
     (LLInteger, findConstVal "TYPE_INTEGER"),
     (LLFloat, findConstVal "TYPE_FLOAT"),
@@ -499,7 +500,8 @@ typeCodes = map (\ (t,Just v) -> (t,v)) [
     (LLKey, findConstVal "TYPE_KEY"),
     (LLVector, findConstVal "TYPE_VECTOR"),
     (LLRot, findConstVal "TYPE_ROTATION")]
-    
+
+invalidType :: RealFloat a => LSLValue a    
 invalidType = let Just v = findConstVal "TYPE_INVALID" in v
 
 -- TODO: might this function work with negative indices? assuming no.

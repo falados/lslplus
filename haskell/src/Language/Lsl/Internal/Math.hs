@@ -65,7 +65,7 @@ rot3d vec rotation =
     
 invertQuaternion (x,y,z,s) = (-x,-y,-z,s)
 
-rotationsToQuaternion :: Permutation3 -> (Float,Float,Float) -> (Float,Float,Float,Float)
+rotationsToQuaternion :: RealFloat a => Permutation3 -> (a,a,a) -> (a,a,a,a)
 rotationsToQuaternion order (x,y,z) = 
     let rx = (sin (x/2), 0.0, 0.0, cos (x/2))
         ry = (0.0, sin (y/2), 0.0, cos (y/2))
@@ -86,7 +86,7 @@ quatPermute (x,y,z,w) p = let (p1,p2,p3) = permute p (x,y,z) in (p1,p2,p3,w)
 
 sign f = if f < 0 then -1 else 1
 
-quaternionToRotations :: Permutation3 -> Bool -> (Float,Float,Float,Float) -> (Float,Float,Float)
+quaternionToRotations :: RealFloat a => Permutation3 -> Bool -> (a,a,a,a) -> (a,a,a)
 quaternionToRotations rotOrder lh quat=
     let (p1,p2,p3,p0) = quatPermute quat rotOrder
         mult = if lh then -1 else 1

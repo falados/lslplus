@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -XNoMonomorphismRestriction #-}
 module Language.Lsl.Internal.Exec(
     ScriptImage(..),
     EvalState,
@@ -60,7 +61,7 @@ import Control.Monad.State(lift,StateT(..))
 import Control.Monad.Error(ErrorT(..))
 
 -- initialize a script for execution
-initLSLScript :: CompiledLSLScript -> ScriptImage
+initLSLScript :: RealFloat a => CompiledLSLScript -> ScriptImage a
 initLSLScript (CompiledLSLScript globals fs ss)  =
     ScriptImage {
         scriptImageName = "",
@@ -107,42 +108,42 @@ executeLsl img oid pid sid pkey perfAction log qtick utick chkBp queue maxTick =
             (Right queue',evalState) -> return $ Right $ (scriptImage evalState, queue')
 
 -- The state of evaluation for a script.
-data EvalState m = EvalState {
-     scriptImage :: ScriptImage,
+data EvalState m a = EvalState {
+     scriptImage :: ScriptImage a,
      objectId :: String,
      primId :: Int,
      scriptName :: String,
      myPrimKey :: String,
-     performAction :: String -> ScriptInfo -> [LSLValue] -> m (EvalResult,LSLValue),
+     performAction :: String -> ScriptInfo a -> [LSLValue a] -> m (EvalResult,LSLValue a),
      logMessage :: String -> m (),
      qwtick :: m Int,
      uwtick :: Int -> m (),
      checkBreakpoint :: Breakpoint -> StepManager -> m (Bool, StepManager),
-     nextEvent :: String -> String -> m (Maybe Event)  }
+     nextEvent :: String -> String -> m (Maybe (Event a))  }
 
-type Eval m = ErrorT String (StateT (EvalState m) m)
+type Eval m a = ErrorT String (StateT (EvalState m a) m)
 
-evalT :: Monad m => ((EvalState m) -> (a,EvalState m)) -> Eval m a
+evalT :: Monad m => ((EvalState m b) -> (a,EvalState m b)) -> Eval m b a
 evalT v = lift ((\ f -> StateT (\ s -> return (f s))) v)
 
 -- the image, or 'memory state' of a running script.  Includes the
 -- status of all stacks, global variables, and immutable items like
 -- the functions and state definitions.
-data ScriptImage = ScriptImage {
+data ScriptImage a = ScriptImage {
                      scriptImageName :: String,
                      curState :: StateName,
                      executionState :: ExecutionState,
-                     glob :: MemRegion,
+                     glob :: MemRegion a,
                      funcs :: [Func],
                      states :: [State],
-                     valueStack :: ValueStack,
-                     callStack :: CallStack,
+                     valueStack :: ValueStack a,
+                     callStack :: CallStack a,
                      stepManager :: StepManager,
                      globals :: [Global],
-                     currentEvent :: Maybe Event
+                     currentEvent :: Maybe (Event a)
                  } deriving (Show)
 
-data FrameInfo = FrameInfo { frameInfoImageName :: String, frameInfoFrames :: [(String,Maybe SourceContext,Maybe Int,[(String,LSLValue)])] }
+data FrameInfo a = FrameInfo { frameInfoImageName :: String, frameInfoFrames :: [(String,Maybe SourceContext,Maybe Int,[(String,LSLValue a)])] }
     deriving (Show)
 
 frameInfo scriptImage = FrameInfo (scriptImageName scriptImage) $
@@ -222,14 +223,14 @@ labelBlocks (ctxStmt:stmts) =
 -- location has a name (rather than an address) and can hold a value
 -- which can be of any LSL type.  So 1 memory location can hold a
 -- vector, or a string, or a list, etc.
-type Binding = (String,LSLValue)
+type Binding a = (String,LSLValue a)
 
 -- a memory region is just a collection of NameElementPairs
-type MemRegion = [Binding]
+type MemRegion a = [Binding a]
 emptyMemRegion = []
 
 initVar name LLInteger Nothing = (name,IVal 0)
-initVar name LLFloat Nothing  = (name,FVal 0.0)
+initVar name LLFloat Nothing  = (name,FVal $ realToFrac 0.0)
 initVar name LLString Nothing = (name,SVal "")
 initVar name LLKey Nothing = (name,SVal "")
 initVar name LLList Nothing = (name,LVal [])
@@ -241,16 +242,16 @@ initVar name LLFloat (Just (IVal i)) = (name,FVal $ fromInt i)
 initVar name LLInteger (Just (FVal f)) = (name,IVal $ floor f)
 initVar name _ (Just v) = (name,v)
 
-writeMem :: Monad m => String -> LSLValue -> MemRegion -> m MemRegion
+writeMem :: Monad m => String -> LSLValue a -> MemRegion a -> m (MemRegion a)
 writeMem name value cells = 
   case break (\(name',element) -> name' == name) cells of
       (cells',[]) -> fail "no such variable"
       (xs,y:ys) -> return ((name,value):(xs ++ ys))
 
-readMem :: Monad m => String -> MemRegion -> m LSLValue
+readMem :: Monad m => String -> MemRegion a -> m (LSLValue a)
 readMem = lookupM
 
-initGlobals :: [Global] -> MemRegion
+initGlobals :: RealFloat a => [Global] -> MemRegion a
 initGlobals globals = map (initGlobal globals) globals
  
 initGlobal globals (GDecl (Var name t) mexpr) = initVar name t $ fmap (evalLit globals) mexpr
@@ -299,25 +300,25 @@ bindParmsForgiving vars vals = zipWithM bindParmForgiving vars vals
 toBool x = if x == 0 then False else True
 
 --type Frame = (ScopeStack,EvalStack)
-data Frame = Frame { frameName :: String, frameContext :: Maybe SourceContext, frameSourceLine :: Maybe Int,
-                     frameStacks :: (ScopeStack, EvalStack) }
+data Frame a = Frame { frameName :: String, frameContext :: Maybe SourceContext, frameSourceLine :: Maybe Int,
+                       frameStacks :: (ScopeStack a, EvalStack) }
      deriving (Show)
 type LabelSet = [LBlock]
-type Scope = (MemRegion,LabelSet)
-type ScopeStack = [Scope]
-type CallStack = [Frame]
+type Scope a = (MemRegion a,LabelSet)
+type ScopeStack a = [Scope a]
+type CallStack a = [Frame a]
 
 
-readVarScope :: String -> Scope -> Maybe LSLValue
+readVarScope :: String -> Scope a -> Maybe (LSLValue a)
 readVarScope name (mem,_) = readMem name mem
-readVarSStack :: String -> ScopeStack -> Maybe LSLValue
+readVarSStack :: String -> ScopeStack a -> Maybe (LSLValue a)
 readVarSStack name ss = foldl mplus Nothing $ map (readVarScope name) ss
-readVarFrame :: String -> Frame -> Maybe LSLValue
+readVarFrame :: String -> Frame a -> Maybe (LSLValue a)
 readVarFrame name = (readVarSStack name) . fst . frameStacks
-readVarCallStack :: String -> CallStack -> Maybe LSLValue
+readVarCallStack :: String -> CallStack a -> Maybe (LSLValue a)
 readVarCallStack name = (readVarFrame name) . head
 
-writeVarScope :: String -> LSLValue -> Scope -> Maybe Scope
+writeVarScope :: String -> LSLValue a -> Scope a -> Maybe (Scope a)
 writeVarScope name val (mem,l) = writeMem name val mem >>= return . (flip (,) l)
 writeVarSStack rs name val [] = Nothing
 writeVarSStack rs name val (s:ss) =
@@ -333,7 +334,7 @@ writeVarCallStack name val (frame:cs) = writeVarFrame name val frame >>= return 
 
 type EvalStack = [EvalElement]
 
-type ValueStack = [LSLValue]
+type ValueStack a = [LSLValue a]
 
 data EvalElement = EvBlock [Ctx Statement] | EvCtxStatement (Ctx Statement)
                  | EvStatement Statement | EvExpr Expr | EvMexpr (Maybe Expr)
@@ -347,15 +348,15 @@ data EvalElement = EvBlock [Ctx Statement] | EvCtxStatement (Ctx Statement)
     deriving (Show)
     
 -- Note: lifted from Hudak, p.273
-queryState :: Monad w => (EvalState w -> a) -> Eval w a
+--queryState :: Monad w => (EvalState w a -> a) -> Eval w b a
 queryState q = evalT (\s -> (q s, s))
-updateState :: Monad w => (EvalState w -> EvalState w) -> Eval w ()
+updateState :: Monad w => (EvalState w a -> EvalState w a) -> Eval w a ()
 updateState u = evalT (\s -> ((), u s))
 queryExState q = queryState (q . scriptImage)
-updateExState :: Monad w => (ScriptImage -> ScriptImage) -> Eval w ()
+updateExState :: Monad w => (ScriptImage a -> ScriptImage a) -> Eval w a ()
 updateExState u = updateState (\s -> s { scriptImage = u $ scriptImage s })
 
-getTick :: Monad w => Eval w Int
+getTick :: Monad w => Eval w a Int
 getTick = join $ evalT (\s -> (lift $ lift $ qwtick s,s))
 setTick v = do f <- (queryState uwtick) 
                lift $ lift $ f v
@@ -372,35 +373,35 @@ checkBp bp = do sm <- getStepManager
                 setStepManager sm'
                 return result
                
-getGlob :: Monad w => Eval w MemRegion
+getGlob :: Monad w => Eval w a (MemRegion a)
 getGlob = queryExState glob
-getFuncs :: Monad w => Eval w [Func]
+getFuncs :: Monad w => Eval w a [Func]
 getFuncs = queryExState funcs
-getVStack :: Monad w => Eval w ValueStack
+getVStack :: Monad w => Eval w a (ValueStack a)
 getVStack = queryExState valueStack
-getCallStack :: Monad w => Eval w CallStack
+getCallStack :: Monad w => Eval w a (CallStack a)
 getCallStack = queryExState callStack
-getStates :: Monad w => Eval w [State]
+getStates :: Monad w => Eval w a [State]
 getStates = queryExState states
-getCurrentEvent :: Monad w => Eval w (Maybe Event)
+getCurrentEvent :: Monad w => Eval w a (Maybe (Event a))
 getCurrentEvent = queryExState currentEvent
-getExecutionState :: Monad w => Eval w ExecutionState
+getExecutionState :: Monad w => Eval w a ExecutionState
 getExecutionState = queryExState executionState
-getCurState :: Monad w => Eval w String
+getCurState :: Monad w => Eval w a String
 getCurState = queryExState curState
-getEvalState :: Monad w => Eval w (EvalState w)
+--getEvalState :: (RealFloat a, Read a, Monad w) => Eval w a (EvalState w a)
 getEvalState = queryState id
-getObjectId :: Monad w => Eval w String
+getObjectId :: Monad w => Eval w a String
 getObjectId = queryState objectId
-getPrimId :: Monad w => Eval w Int
+getPrimId :: Monad w => Eval w a Int
 getPrimId = queryState primId
-getScriptName :: Monad w => Eval w String
+getScriptName :: Monad w => Eval w a String
 getScriptName = queryState scriptName
-getScriptImageName :: Monad w => Eval w String
+getScriptImageName :: Monad w => Eval w a String
 getScriptImageName = queryExState scriptImageName
-getMyPrimKey :: Monad w => Eval w String
+getMyPrimKey :: Monad w => Eval w a String
 getMyPrimKey = queryState myPrimKey
-getStepManager :: Monad w => Eval w StepManager
+getStepManager :: Monad w => Eval w a StepManager
 getStepManager = queryExState stepManager
 
 setGlob g = updateExState (\e -> e { glob = g })
@@ -412,12 +413,12 @@ setCurState state = updateExState (\e -> e { curState = state })
 setCurrentEvent event = updateExState (\e -> e { currentEvent = Just event })
 setScriptImageName n = updateExState (\ e -> e { scriptImageName = n })
 
-initStacks :: Monad w => Eval w ()
+initStacks :: Monad w => Eval w a ()
 initStacks = 
     do setVStack []
        setCallStack []
 
-popScope :: Monad w => Eval w Scope
+popScope :: Monad w => Eval w a (Scope a)
 popScope =
     do --((s:ss,es):cs) <- getCallStack
        (frame:frames) <- getCallStack
@@ -425,7 +426,7 @@ popScope =
        setCallStack (frame { frameStacks = (ss,es) }:frames)
        return s
 
-pushScope :: Monad w => MemRegion -> LabelSet -> Eval w ()
+pushScope :: Monad w => MemRegion a -> LabelSet -> Eval w a ()
 pushScope mem labels =
     do (frame:frames) <- getCallStack
        let (ss,es) = frameStacks frame
@@ -435,7 +436,7 @@ pushVal value =
     do vstack <- getVStack
        setVStack (value:vstack)
 
-popVal :: Monad w => Eval w LSLValue
+popVal :: Monad w => Eval w a (LSLValue a)
 popVal =
     do vstack <- getVStack
        case vstack of
@@ -444,24 +445,24 @@ popVal =
                setVStack vs
                return v
 
-peekVal :: Monad w => Eval w LSLValue
+peekVal :: Monad w => Eval w a (LSLValue a)
 peekVal =
     do vstack <- getVStack
        case vstack of
            [] -> fail "empty value stack"
            (v:_) -> return v
            
-valStackEmpty :: Monad w => Eval w Bool
+valStackEmpty :: (RealFloat a, Read a, Monad w) => Eval w a Bool
 valStackEmpty = getVStack >>= (return . (==[]))
 
-elementStackEmpty :: Monad w => Eval w Bool
+elementStackEmpty :: Monad w => Eval w a Bool
 elementStackEmpty = 
     do (frame:cs) <- getCallStack
        case frameStacks frame of
            (_,[]) -> return True
            _ -> return False
            
-popElement :: Monad w => Eval w EvalElement
+popElement :: Monad w => Eval w a EvalElement
 popElement =
     do (frame:frames) <- getCallStack
        let (ss,e:es) = frameStacks frame
@@ -482,10 +483,10 @@ pushElements elements =
   do mapM pushElement elements
      return EvalIncomplete
 
-callStackEmpty :: Monad w => Eval w Bool
+callStackEmpty :: Monad w => Eval w a Bool
 callStackEmpty = getCallStack >>= return . null
 
-popFrame :: Monad w => Eval w ()           
+popFrame :: Monad w => Eval w a ()           
 popFrame =
     do (f:cs) <- getCallStack
        stepMgr <- getStepManager
@@ -501,12 +502,12 @@ pushFrame name ctx line =
        cs <- getCallStack
        setCallStack (Frame { frameName = name, frameContext = ctx, frameSourceLine = line, frameStacks = ([],[])}:cs)
        
-getFunc :: Monad w => String -> Eval w Func
+getFunc :: Monad w => String -> Eval w a Func
 getFunc name =
     do funcs <- getFuncs
        incontext ("func: " ++ name) $ findFunc name funcs
 
-setVar :: Monad w => String -> LSLValue -> Eval w ()
+setVar :: Monad w => String -> LSLValue a -> Eval w a ()
 setVar name val =
     do cs <- getCallStack
        case writeVarCallStack name val cs of
@@ -516,7 +517,7 @@ setVar name val =
                   glob' <- incontext ("setting " ++ name ++ ":") $ writeMem name val glob
                   setGlob glob'
                  
-getVar :: Monad w => String -> Eval w LSLValue
+getVar :: (RealFloat a, Read a, Monad w) => String -> Eval w a (LSLValue a)
 getVar name =
     do cs <- getCallStack
        glob <- getGlob
@@ -524,7 +525,7 @@ getVar name =
            Nothing -> fail ("no such variable " ++ name)
            Just val -> return val
 
-initVar1 :: Monad w => String -> LSLType -> Maybe LSLValue -> Eval w ()
+initVar1 :: (RealFloat a, Read a, Monad w) => String -> LSLType -> Maybe (LSLValue a) -> Eval w a ()
 initVar1 name t mval = 
     do --(((m,l):ss,es):cs) <- getCallStack
        (frame:frames) <- getCallStack
@@ -532,7 +533,7 @@ initVar1 name t mval =
        let frame' = frame { frameStacks = (((initVar name t mval):m,l):ss,es) }
        setCallStack (frame':frames)
 
-initVars1 :: Monad w => [Var] -> [LSLValue] -> Eval w ()
+initVars1 :: (RealFloat a, Read a, Monad w) => [Var] -> [LSLValue a] -> Eval w a ()
 initVars1 vars vals =
     foldM_ (\_ -> \ (Var n t, v) -> initVar1 n t $ Just v) () $ zip vars vals
     
@@ -565,7 +566,7 @@ findHandler name handlers = ctx ("finding handler " ++ name) $
     findM (\ (Handler (Ctx _ name') _ _) -> name' == name) handlers
 
 
-evalScriptSimple :: Monad w => Int -> [String] -> [Binding] -> [LSLValue] -> Eval w (EvalResult,Maybe LSLValue)
+evalScriptSimple :: (Read a, RealFloat a, Monad w) => Int -> [String] -> [Binding a] -> [LSLValue a] -> Eval w a (EvalResult,Maybe (LSLValue a))
 evalScriptSimple maxTick path globbindings args =
     do  setupSimple path globbindings args
         evalSimple maxTick
@@ -612,7 +613,7 @@ incontext s f =
         Left s -> fail s
         Right v -> return v                             
 
-evalScript :: Monad w => Int -> [Event] -> Eval w [Event]
+evalScript :: (RealFloat a, Read a, Monad w) => Int -> [Event a] -> Eval w a [Event a]
 evalScript maxTick queue =
     do executionState <- getExecutionState
        case executionState of
@@ -672,7 +673,7 @@ evalScript maxTick queue =
                                   else return queue
            Halted -> return queue
 
-eval :: Monad w => Int -> Eval w EvalResult
+eval :: (RealFloat a, Read a, Monad w) => Int -> Eval w a EvalResult
 eval maxTick =
     do 
        t <- getTick
@@ -686,10 +687,10 @@ eval maxTick =
         else
             return EvalIncomplete)
 
-eval' :: Monad w => Eval w EvalResult
+eval' :: (RealFloat a, Read a, Monad w) => Eval w a EvalResult
 eval' =
     let continue = return EvalIncomplete 
-        popAndCheck :: Monad w => Eval w EvalResult
+        popAndCheck :: Monad w => Eval w a EvalResult
         popAndCheck = do  
                popFrame
                noMoreFrames <- callStackEmpty
@@ -1101,7 +1102,7 @@ evalPredef' name =
           
 ctxList es = map (Ctx Nothing) es
 
-data ExecutionInfo = ExecutionInfo String Int FrameInfo deriving (Show)
+data ExecutionInfo a = ExecutionInfo String Int (FrameInfo a) deriving (Show)
 
 hasActiveHandler simage handler =
     case find ( \ (State ctxname _) -> curState simage == ctxItem ctxname) (states simage) of

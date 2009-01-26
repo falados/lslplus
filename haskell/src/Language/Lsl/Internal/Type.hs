@@ -43,16 +43,16 @@ import Language.Lsl.Internal.Key(nullKey)
 import Language.Lsl.Internal.Util(lookupM,readM,cross,quaternionMultiply,quaternionToMatrix,fromInt)
 import Language.Lsl.Internal.DOMProcessing(Element(..),ElemAcceptor(..),findValue,elementsOnly,simple,attrString,acceptList)
 
-import Text.Printf(printf)
+import Text.Printf(printf,PrintfArg(..))
 
 data LSLType = LLList | LLInteger | LLVector | LLFloat | LLString | LLRot | LLKey | LLVoid
     deriving (Eq, Show, Typeable, Data)
 
 -- A value.  Values correspond to the built in types (LSLType) that LSL
 -- supports.  A value is an item that can be pushed onto the value stack.
-data LSLValue = IVal Int | FVal Float | SVal String | VVal Float Float Float 
-              | RVal Float Float Float Float | LVal [LSLValue] | KVal String
-              | VoidVal deriving (Show,Eq,Ord)
+data LSLValue a = IVal Int | FVal a | SVal String | VVal a a a 
+               | RVal a a a a | LVal [LSLValue a] | KVal String
+               | VoidVal deriving (Show,Eq,Ord)
 
 data Component = X | Y | Z | S | All deriving (Eq,Show, Typeable, Data)
 
@@ -84,6 +84,7 @@ replaceLslValueComponent S (RVal x y z s) (FVal f) = RVal x y z f
 replaceLslValueComponent All v v' = v'
 replaceLslValueComponent c v v' = error ("can't replace component " ++ (show c) ++ " of value " ++ (show v) ++ " with value " ++ (show v'))
 
+typeOfLSLValue :: (RealFloat a) => LSLValue a -> LSLType
 typeOfLSLValue v =
     case v of
         (IVal _) -> LLInteger
@@ -103,7 +104,7 @@ typeOfLSLComponent v c = error ("value " ++ (show v) ++ " doesn't have a subcomp
 -- convert a value to a string 'internally' (TODO: where SHOULD this be used? It's used in internal funcs, but
 -- probably will not work completely correctly when tabs, newlines, or double quotes are involved)
 lslValString (IVal i) = (show i)
-lslValString (FVal f) = (printf "%.6f" f)
+lslValString (FVal f) = (printf "%.6f" ((realToFrac f) :: Double))
 lslValString (SVal s) = s
 lslValString (KVal k) = k
 lslValString (VVal x y z) = concat ["<",comp2Str x,",",comp2Str y,",",comp2Str z,">"]
@@ -186,9 +187,9 @@ readFloat s =
         [] -> reads s
         v -> v
         
-toSVal :: LSLValue -> LSLValue
+toSVal :: RealFloat a => LSLValue a -> LSLValue a
 toSVal (SVal s) = SVal s
-toSVal (FVal f) = SVal (printf "%.6f" f)
+toSVal (FVal f) = SVal (printf "%.6f" (realToFrac f :: Double))
 toSVal (IVal i) = SVal (show i)
 toSVal (KVal k) = SVal k
 toSVal (VVal x y z) = SVal $ concat ["<",comp2Str x,",",comp2Str y,",",comp2Str z,">"]
@@ -198,10 +199,10 @@ toSVal (LVal l) =
     SVal $ concatMap toS l
     where toS v = let (SVal s) = toSVal v in s
 
-comp2Str :: Float -> String
-comp2Str f = printf "%.5f" f
+comp2Str :: RealFloat a => a -> String
+comp2Str f = printf "%.5f" (realToFrac f :: Double)
 
-lslValueElement :: MonadError String m => ElemAcceptor m LSLValue
+lslValueElement :: (RealFloat a, Read a, MonadError String m) => ElemAcceptor m (LSLValue a)
 lslValueElement =
     let f e@(Elem _ attrs contents) = do
             valType <- lookupM "class" attrs

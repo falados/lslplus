@@ -2,10 +2,12 @@
 module Language.Lsl.Internal.Optimize(optimizeScript,OptimizerOption(..)) where
 
 import Control.Monad.State hiding (State)
+import qualified Control.Monad.Identity as Id
 import qualified Control.Monad.State as State(State)
 
+import Data.Bits((.&.),(.|.),xor,shiftL,shiftR,complement)
 import Data.Generics
-import Data.Generics.Extras.Schemes(everythingTwice)
+import Data.Generics.Extras.Schemes(everythingTwice,downup)
 import Data.List(foldl',nub,lookup)
 import Data.Graph
 import qualified Data.Set as Set
@@ -14,7 +16,7 @@ import qualified Data.Map as M
 import Debug.Trace
 
 import Language.Lsl.Parse
-import Language.Lsl.Internal.Constants(allConstants,constName)
+import Language.Lsl.Internal.Constants(allConstants,Constant(..),findConstVal)
 import Language.Lsl.Internal.FuncSigs(funcSigs)
 import Language.Lsl.Internal.InternalLLFuncs(internalLLFuncs,internalLLFuncNames)
 import Language.Lsl.Syntax(CompiledLSLScript(..),Expr(..),Statement(..),Var(..),
@@ -22,6 +24,8 @@ import Language.Lsl.Syntax(CompiledLSLScript(..),Expr(..),Statement(..),Var(..),
                            Global(..),Component(..),SourceContext(..),rewriteCtxExpr)
 import Language.Lsl.Internal.Type(LSLType(..))
 import Language.Lsl.Internal.Pragmas(Pragma(..))
+import Language.Lsl.Internal.Type(LSLValue(..))
+import Language.Lsl.UnitTestEnv(simSFunc)
 
 data OptimizerOption = OptimizationInlining deriving (Show,Eq)
 
@@ -30,10 +34,13 @@ optionInlining = elem OptimizationInlining
 -- deriving instance (Show a) => Show (SCC a)
 
 optimizeScript :: [OptimizerOption] -> CompiledLSLScript -> CompiledLSLScript
-optimizeScript options (CompiledLSLScript gs fsIn ss) = (CompiledLSLScript gs fsReachable ss')
+optimizeScript options script@(CompiledLSLScript gs fsIn ss) = (CompiledLSLScript gs (simp fsReachable) (simp ss'))
    where inline = optionInlining options
+         gcs = globalConstants gs fsIn ss
          scc = graphInfo fsIn
-         funFacts = sccsPurity basicFunctionFacts scc
+         funFacts = sccsPurity gcs basicFunctionFacts scc
+         pure = Set.fromList [ nm | (nm,ff) <- M.toList funFacts, isPureFunction ff]
+         --pure = trace (show pure') pure'
          ifs = [ f | AcyclicSCC f <- scc, inlineable f]  -- inlineables
          nifs = [ f | f <- fsIn, fname f `notElem` (map fname ifs)] -- non-inlineables
          ss' = if inline then map runInliningOnState ss else ss
@@ -41,6 +48,7 @@ optimizeScript options (CompiledLSLScript gs fsIn ss) = (CompiledLSLScript gs fs
          nifs' = map (runInliningOnFunc funFacts ifs' gs) nifs -- non-inlineables that have had any inlining done
          fs' = if inline then (nifs' ++ ifs') else fsIn
          fsReachable = reachableFuncs ss' fs' -- funcs that are still reachable from handlers
+         simp = if inline then simplify script pure gcs else id
          runInliningOnState s@(State nm hs) = if noinlining nm then s
              else (State nm (map (runInliningOnHandler funFacts ifs' gs) hs))
           
@@ -129,7 +137,7 @@ newNames seed curNames verbotenNames = foldl' newName (seed,[]) curNames
 nullCtx :: a -> Ctx a              
 nullCtx = Ctx Nothing 
 
-newtype FunctionFacts = FunctionFacts { isPureFunction :: Bool }
+newtype FunctionFacts = FunctionFacts { isPureFunction :: Bool } deriving (Show)
 
 data OptimizerState = OptimizerState { 
     optAllFuncs :: !(M.Map String (Ctx Func)),
@@ -144,7 +152,8 @@ data OptimizerState = OptimizerState {
     
 type OState a = State.State OptimizerState a
 
-basicFunctionFacts = M.fromList (zip internalLLFuncNames (repeat (FunctionFacts { isPureFunction = True })))
+basicFunctionFacts = M.fromList (zip internalLLFuncNames (repeat (FunctionFacts { isPureFunction = True }))) `M.union`
+                     M.fromList [(nm,FunctionFacts False) | (nm,_,_) <- funcSigs]
 
 freshOptimizerState funFacts fs vnames = OptimizerState { 
     optAllFuncs = M.fromList (map (\ f@(Ctx _ (Func (FuncDec nm _ _) _)) -> (ctxItem nm,f)) fs),
@@ -226,11 +235,11 @@ isVerboten s = do
     verbotenNames <- get >>= return . optVerbotenNames
     return (s `Set.member` verbotenNames)
 
-simplify :: Ctx Statement -> Ctx Statement
-simplify = everywhere (mkT simp)
-    where simp s@(Compound [Ctx _ (Decl _ _)]) = s
-          simp s@(Compound [s']) = ctxItem s'
-          simp s = s
+-- simplifyStatement :: Ctx Statement -> Ctx Statement
+-- simplifyStatement = everywhere (mkT simp)
+--     where simp s@(Compound [Ctx _ (Decl _ _)]) = s
+--           simp s@(Compound [s']) = ctxItem s'
+--           simp s = s
           
 inlineProc :: 
     Ctx Func -> -- the function to inline
@@ -586,8 +595,13 @@ withoutFinalJumpTo label ss =
           rmvj (Compound ss)           = Compound (withoutFinalJumpTo label ss)
           rmvj s                       = s
           
+-- an explicit dictionary (could create a class for this, but seems unnecessary)
+data ScopeFuncs m = ScopeFuncs { sfPushFrame :: m (), sfPopFrame :: m (), sfPushVar :: String -> m (), sfVars :: m [String] }
 
-type NamesState a = State.State [[String]] a
+type NamesState = State.State [[String]]
+
+nameStateScopeFuncs :: ScopeFuncs NamesState
+nameStateScopeFuncs = ScopeFuncs pushFrame popFrame pushVar (get >>= return . concat)
      
 pushFrame :: NamesState ()
 pushFrame = get >>= put . ([]:)
@@ -599,46 +613,58 @@ pushVar v = do
        [] -> error "stack empty: cannot add variable"
        (f:fs) -> put ((v:f):fs)  
 
-sccsPurity :: M.Map String FunctionFacts -> [SCC (Ctx Func)] -> M.Map String FunctionFacts
-sccsPurity ff = foldl' sccPurity ff
+sccsPurity :: M.Map String Expr -> M.Map String FunctionFacts -> [SCC (Ctx Func)] -> M.Map String FunctionFacts
+sccsPurity gcs ff = foldl' (sccPurity gcs) ff
 
-sccPurity :: M.Map String FunctionFacts -> SCC (Ctx Func) -> M.Map String FunctionFacts
-sccPurity ff scc =
+sccPurity :: M.Map String Expr -> M.Map String FunctionFacts -> SCC (Ctx Func) -> M.Map String FunctionFacts
+sccPurity gcs ff scc =
        case scc of
            AcyclicSCC f -> go [f]
            CyclicSCC fs -> go fs
    where go fs = ff `M.union` ( M.fromList $ map ( \ f -> (fname f, FunctionFacts purity)) fs)
-             where purity = not $ or $ map (isImpure ff) fs
+             where purity = not $ or $ map (isImpure (M.keysSet gcs) ff) fs
    
-stmtIn s@(Compound _) = pushFrame >> return False
-stmtIn s = return False
-funcDec fd@(FuncDec _ _ parms) = pushFrame >> mapM_ (\ cv -> pushVar $ (varName . ctxItem) cv) parms >> return False
-stmtOut s@(Compound _) = popFrame >> return False
-stmtOut s@(Decl v _) = (pushVar $ varName v) >> return False
-stmtOut s = return False
+stmtIn sfs s@(Compound _) = (sfPushFrame sfs) >> return s
+stmtIn _ s = return s
+funcDecIn sfs fd@(FuncDec _ _ parms) = (sfPushFrame sfs) >> mapM_ (\ cv -> (sfPushVar sfs) $ (varName . ctxItem) cv) parms >> return fd
+stmtOut sfs s@(Compound _) = (sfPopFrame sfs) >> return s
+stmtOut sfs s@(Decl v _) = ((sfPushVar sfs) $ varName v) >> return s
+stmtOut _ s = return s
+handlerDecIn sfs h@(Handler _ parms _) = (sfPushFrame sfs) >> mapM_ (\ cv -> (sfPushVar sfs) $ (varName . ctxItem) cv) parms >> return h
+handlerDecOut sfs h@(Handler _ _ _) = (sfPopFrame sfs) >> return h
+funcDecOut sfs f@(FuncDec _ _ _) = (sfPopFrame sfs) >> return f
 
-isImpure :: M.Map String FunctionFacts -> Ctx Func -> Bool
-isImpure ff f =
+cvt :: Monad m => (a -> m a) -> b -> a -> m b
+cvt f v x = f x >> return v
+
+isImpure :: Set.Set String -> M.Map String FunctionFacts -> Ctx Func -> Bool
+isImpure consts ff f =
         evalState (go f) []
     where go :: Ctx Func -> NamesState Bool
-          go = everythingTwice (liftM2 (||)) (return False `mkQ` funcDec `extQ` stmtIn `extQ` call `extQ` ref)
-                                             (return False `mkQ` stmtOut)
+          go = everythingTwice (liftM2 (||)) (return False `mkQ` cvt (funcDecIn nameStateScopeFuncs) False `extQ` 
+                                              cvt (stmtIn nameStateScopeFuncs) False `extQ` call `extQ` ref nameStateScopeFuncs)
+                                             (return False `mkQ` cvt (stmtOut nameStateScopeFuncs) False)
           call c@(Call nm _) = do
               case M.lookup (ctxItem nm) ff of
                   Just (FunctionFacts { isPureFunction = False }) -> return True
                   _ -> return False
           call e = return False
-          ref:: (Ctx String, Component) -> NamesState Bool
-          ref v@(Ctx _ nm,_) = get >>= return . (notElem nm) . concat
+          ref:: ScopeFuncs NamesState -> (Ctx String, Component) -> NamesState Bool
+          ref sfs v@(Ctx _ nm,_) = do 
+              locals <- sfVars sfs
+              return (nm `notElem` locals && (not $ isConst nm))
+          isConst nm = (nm `Set.member` consts) || (nm `elem` map constName allConstants)
           
-isConstant :: Data a => String -> [Ctx a] -> Bool
-isConstant s xs = 
-        not $ evalState (isntConstantM s xs) []
+isConstant :: Data a => String -> [a] -> Bool
+isConstant s xs = not $ evalState (isntConstantM s xs) []
         
-isntConstantM :: (Data a) => String -> [Ctx a] -> NamesState Bool
-isntConstantM s = everythingTwice (liftM2 (||)) (return False `mkQ` funcDec `extQ` stmtIn `extQ` modified `extQ` handlerDec)
-                                                (return False `mkQ` funcDecOut `extQ` handlerOut `extQ` stmtOut)
-    where checkNm nm = get >>= return . ((nm == s) &&) . (notElem nm) . concat
+isntConstantM :: (Data a) => String -> [a] -> NamesState Bool
+isntConstantM s = everythingTwice (liftM2 (||)) (return False `mkQ` cvt (funcDecIn sfs) False `extQ` 
+                                                 cvt (stmtIn sfs) False `extQ` modified `extQ` cvt (handlerDecIn sfs) False)
+                                                (return False `mkQ` cvt (funcDecOut sfs) False `extQ` 
+                                                 cvt (handlerDecOut sfs) False `extQ` cvt (stmtOut sfs) False)
+    where sfs = nameStateScopeFuncs
+          checkNm nm = (sfVars sfs) >>= return . ((nm == s) &&) . (notElem nm)
           modified (Set (Ctx _ nm,_) _)   = checkNm nm
           modified (IncBy (Ctx _ nm,_) _) = checkNm nm
           modified (DecBy (Ctx _ nm,_) _) = checkNm nm
@@ -650,6 +676,203 @@ isntConstantM s = everythingTwice (liftM2 (||)) (return False `mkQ` funcDec `ext
           modified (PostDec (Ctx _ nm,_)) = checkNm nm
           modified (PostInc (Ctx _ nm,_)) = checkNm nm
           modified _ = return False
-          handlerDec (Handler _ parms _) = pushFrame >> mapM_ (\ cv -> pushVar $ (varName . ctxItem) cv) parms >> return False
-          handlerOut (Handler _ _ _) = popFrame >> return False
-          funcDecOut (FuncDec _ _ _) = popFrame >> return False
+
+globalConstants :: [Global] -> [Ctx Func] -> [State] -> M.Map String Expr
+globalConstants gs fs ss =
+        foldl globalConstant M.empty gs
+    where globalConstant m (GDecl (Var nm t) mexpr) = if isAConst nm then M.insert nm (mexpr2expr m t mexpr) m else m
+          isAConst nm = isConstant nm fs && isConstant nm ss
+          expr2expr :: M.Map String Expr -> Expr -> Expr
+          expr2expr m = everywhere (mkT go)
+              where go e@(Get (nm,All)) = case M.lookup (ctxItem nm) m of
+                      Nothing -> e
+                      Just e' -> e'
+                    go e@(Neg (Ctx _ (IntLit i))) = (IntLit (-i))
+                    go e@(Neg (Ctx _ (FloatLit f))) = (FloatLit (-f))
+                    go e = e
+          mexpr2expr m _ (Just expr) = expr2expr m expr
+          mexpr2expr m LLFloat Nothing = FloatLit 0
+          mexpr2expr m LLInteger Nothing = IntLit 0
+          mexpr2expr m LLString Nothing = StringLit ""
+          mexpr2expr m LLList Nothing = ListExpr []
+          mexpr2expr m LLVector Nothing = VecExpr (nullCtx $ FloatLit 0) (nullCtx $ FloatLit 0) (nullCtx $ FloatLit 0)
+          mexpr2expr m LLRot Nothing = RotExpr (nullCtx $ FloatLit 0) (nullCtx $ FloatLit 0) (nullCtx $ FloatLit 0) (nullCtx $ FloatLit 1)
+          mexpr2expr m LLKey Nothing = KeyLit ""
+          mexpr2expr m LLVoid Nothing = error "somehow, an expression of type void?"
+
+bb2int :: (a -> a -> Bool) -> a -> a -> Int
+bb2int op x y = if op x y then 1 else 0
+
+fromBool :: Num a => Bool -> a
+fromBool x = if x then 1 else 0
+
+liftBool :: Monad m => Bool -> m Expr
+liftBool b = return (IntLit (fromBool b))
+
+data SimplificationInfo = SimplificationInfo {
+      siScript :: !CompiledLSLScript,
+      siPureFuncs :: !(Set.Set String),
+      siConstants :: !(M.Map String Expr),
+      siLocalsInScope :: [[String]]
+    }
+
+simpInfoScopeFuncs = ScopeFuncs {
+        sfPushFrame = get >>= \ si -> put si { siLocalsInScope = [] : (siLocalsInScope si) },
+        sfPopFrame = do
+            si <- get
+            case siLocalsInScope si of
+                [] -> error "stack empty, cannot pop frame"
+                (f:fs) -> put si { siLocalsInScope = fs },
+        sfPushVar = (\ s -> do
+             si <- get
+             case siLocalsInScope si of
+                 [] -> error "stack empty, cannot push variable"
+                 (f:fs) -> put si { siLocalsInScope = ((s:f):fs) }),
+        sfVars = get >>= return . concat . siLocalsInScope
+    }
+    
+type SimpState a = State.State SimplificationInfo a
+
+floatToLit :: RealFloat a => a -> Expr
+floatToLit = FloatLit . realToFrac
+
+valToExpr :: RealFloat a => LSLValue a -> Expr
+valToExpr (IVal i) = IntLit i
+valToExpr (FVal f) = floatToLit f
+valToExpr (SVal s) = StringLit s
+valToExpr (KVal k) = KeyLit k
+valToExpr (VVal x y z) = VecExpr (nullCtx $ floatToLit x) (nullCtx $ floatToLit y) (nullCtx $ floatToLit z)
+valToExpr (RVal x y z s) = RotExpr (nullCtx $ floatToLit x) (nullCtx $ floatToLit y) (nullCtx $ floatToLit z) (nullCtx $ floatToLit s)
+valToExpr (LVal l) = ListExpr (map (nullCtx . valToExpr) l)
+valToExpr VoidVal = error "can't convert the void value to an expression"
+
+predefToLit :: String -> Maybe Expr
+predefToLit s = fmap valToExpr (findConstVal s)
+
+constVarToLit :: M.Map String Expr -> String -> Maybe Expr
+constVarToLit m s = M.lookup s m
+
+nameToLit :: M.Map String Expr -> String -> Maybe Expr
+nameToLit m s = predefToLit s `mplus` constVarToLit m s
+
+exprsToVals :: [Ctx Expr] -> Maybe [LSLValue Double]
+exprsToVals es = mapM exprToVal es
+    where exprToVal :: Ctx Expr -> Maybe (LSLValue Double)
+          exprToVal (Ctx _ (IntLit i)) = Just (IVal i)
+          exprToVal (Ctx _ (FloatLit f)) = Just (FVal f)
+          exprToVal (Ctx _ (StringLit s)) = Just (SVal s)
+          exprToVal (Ctx _ (KeyLit k)) = Just (KVal k)
+          exprToVal (Ctx _ (VecExpr ex ey ez)) = 
+              case (exprToVal ex, exprToVal ey, exprToVal ez) of
+                  (Just (FVal x),Just (FVal y),Just (FVal z)) -> Just (VVal x y z)
+                  _ -> Nothing
+          exprToVal (Ctx _ (RotExpr ex ey ez es)) = 
+              case (exprToVal ex, exprToVal ey, exprToVal ez, exprToVal es) of
+                  (Just (FVal x),Just (FVal y),Just (FVal z),Just (FVal s)) -> Just (RVal x y z s)
+                  _ -> Nothing
+          exprToVal (Ctx _ (ListExpr es)) = case exprsToVals es of
+              Nothing -> Nothing
+              Just vs -> Just $ LVal vs
+          exprToVal _ = Nothing
+              
+simplifyE :: Expr -> SimpState Expr
+simplifyE (Neg (Ctx _ (IntLit i))) = return (IntLit (-i))
+simplifyE (Not (Ctx _ (IntLit i))) = return (IntLit (fromBool (i == 0)))
+simplifyE (Add (Ctx _ (IntLit i)) (Ctx _ (IntLit j))) = return (IntLit (i + j))
+simplifyE (Mul (Ctx _ (IntLit i)) (Ctx _ (IntLit j))) = return (IntLit (i * j))
+simplifyE (Sub (Ctx _ (IntLit i)) (Ctx _ (IntLit j))) = return (IntLit (i - j))
+simplifyE (And (Ctx _ (IntLit i)) (Ctx _ (IntLit j))) = return (IntLit (fromBool (i /= 0 && j /= 0)))
+simplifyE (Or (Ctx _ (IntLit i)) (Ctx _ (IntLit j)))  = return (IntLit (fromBool (i /= 0 || j /= 0)))
+simplifyE (Lt (Ctx _ (IntLit i)) (Ctx _ (IntLit j)))  = return (IntLit (bb2int (<) i j))
+simplifyE (Gt (Ctx _ (IntLit i)) (Ctx _ (IntLit j)))  = return (IntLit (bb2int (>) i j))
+simplifyE (Ge (Ctx _ (IntLit i)) (Ctx _ (IntLit j)))  = return (IntLit (bb2int (>=) i j))
+simplifyE (Le (Ctx _ (IntLit i)) (Ctx _ (IntLit j)))  = return (IntLit (bb2int (<=) i j))
+simplifyE (Equal (Ctx _ (IntLit i)) (Ctx _ (IntLit j)))  = return (IntLit (bb2int (==) i j))
+simplifyE (NotEqual (Ctx _ (IntLit i)) (Ctx _ (IntLit j)))  = return (IntLit (bb2int (==) i j))
+simplifyE (BAnd (Ctx _ (IntLit i)) (Ctx _ (IntLit j)))  = return (IntLit (i .&. j))
+simplifyE (BOr (Ctx _ (IntLit i)) (Ctx _ (IntLit j)))  = return (IntLit (i .|. j))
+simplifyE (Xor (Ctx _ (IntLit i)) (Ctx _ (IntLit j)))  = return (IntLit (i `xor` j))
+simplifyE (ShiftL (Ctx _ (IntLit i)) (Ctx _ (IntLit j)))  = return (IntLit (i `shiftL` j))
+simplifyE (ShiftR (Ctx _ (IntLit i)) (Ctx _ (IntLit j)))  = return (IntLit (i `shiftR` j))
+simplifyE e@(Div (Ctx _ (IntLit i)) (Ctx _ (IntLit j))) | j /= 0 = return (IntLit ( i `div` j))
+                                                        | otherwise = return e
+simplifyE e@(Mod (Ctx _ (IntLit i)) (Ctx _ (IntLit j))) | j /= 0 = return (IntLit ( i `mod` j))
+                                                        | otherwise = return e
+simplifyE (Neg (Ctx _ (FloatLit i))) = return (FloatLit (-i))
+simplifyE (Add (Ctx _ (FloatLit i)) (Ctx _ (FloatLit j))) = return (FloatLit (i + j))
+simplifyE (Mul (Ctx _ (FloatLit i)) (Ctx _ (FloatLit j))) = return (FloatLit (i * j))
+simplifyE (Sub (Ctx _ (FloatLit i)) (Ctx _ (FloatLit j))) = return (FloatLit (i - j))
+simplifyE (Lt (Ctx _ (FloatLit i)) (Ctx _ (FloatLit j)))  = return (IntLit (bb2int (<) i j))
+simplifyE (Gt (Ctx _ (FloatLit i)) (Ctx _ (FloatLit j)))  = return (IntLit (bb2int (>) i j))
+simplifyE (Ge (Ctx _ (FloatLit i)) (Ctx _ (FloatLit j)))  = return (IntLit (bb2int (>=) i j))
+simplifyE (Le (Ctx _ (FloatLit i)) (Ctx _ (FloatLit j)))  = return (IntLit (bb2int (<=) i j))
+simplifyE (Equal (Ctx _ (FloatLit i)) (Ctx _ (FloatLit j)))  = return (IntLit (bb2int (==) i j))
+simplifyE (NotEqual (Ctx _ (FloatLit i)) (Ctx _ (FloatLit j)))  = return (IntLit (bb2int (==) i j))
+simplifyE e@(Div (Ctx _ (FloatLit i)) (Ctx _ (FloatLit j))) | j /= 0 = return (FloatLit ( i / j))
+                                                            | otherwise = return e
+simplifyE (Add (Ctx _ (IntLit i)) (Ctx _ (FloatLit j))) = return (FloatLit (fromIntegral i + j))
+simplifyE (Mul (Ctx _ (IntLit i)) (Ctx _ (FloatLit j))) = return (FloatLit (fromIntegral i * j))
+simplifyE (Sub (Ctx _ (IntLit i)) (Ctx _ (FloatLit j))) = return (FloatLit (fromIntegral i - j))
+simplifyE e@(Div (Ctx _ (IntLit i)) (Ctx _ (FloatLit j))) | j /= 0 = return (FloatLit ( fromIntegral i / j))
+                                                          | otherwise = return e
+simplifyE (Equal (Ctx _ (IntLit i)) (Ctx _ (FloatLit j))) = return (IntLit (if fromIntegral i == j then 1 else 0))
+simplifyE (NotEqual (Ctx _ (IntLit i)) (Ctx _ (FloatLit j))) = return (IntLit (if fromIntegral i == j then 0 else 1))
+simplifyE (Lt (Ctx _ (IntLit i)) (Ctx _ (FloatLit j))) = return (IntLit (if fromIntegral i < j then 1 else 0))
+simplifyE (Gt (Ctx _ (IntLit i)) (Ctx _ (FloatLit j))) = return (IntLit (if fromIntegral i > j then 1 else 0))
+simplifyE (Le (Ctx _ (IntLit i)) (Ctx _ (FloatLit j))) = return (IntLit (if fromIntegral i <= j then 1 else 0))
+simplifyE (Ge (Ctx _ (IntLit i)) (Ctx _ (FloatLit j))) = return (IntLit (if fromIntegral i >= j then 1 else 0))
+simplifyE (Add (Ctx _ (FloatLit i)) (Ctx _ (IntLit j))) = return (FloatLit (i + fromIntegral j))
+simplifyE (Mul (Ctx _ (FloatLit i)) (Ctx _ (IntLit j))) = return (FloatLit (i * fromIntegral j))
+simplifyE (Sub (Ctx _ (FloatLit i)) (Ctx _ (IntLit j))) = return (FloatLit (i - fromIntegral j))
+simplifyE e@(Div (Ctx _ (FloatLit i)) (Ctx _ (IntLit j))) | j /= 0 = return (FloatLit ( i / fromIntegral j))
+                                                          | otherwise = return e
+simplifyE (Equal (Ctx _ (FloatLit i)) (Ctx _ (IntLit j))) = return (IntLit (if i == fromIntegral j then 1 else 0))
+simplifyE (NotEqual (Ctx _ (FloatLit i)) (Ctx _ (IntLit j))) = return (IntLit (if i == fromIntegral j then 0 else 1))
+simplifyE (Lt (Ctx _ (FloatLit i)) (Ctx _ (IntLit j))) = return (IntLit (if i < fromIntegral j then 1 else 0))
+simplifyE (Gt (Ctx _ (FloatLit i)) (Ctx _ (IntLit j))) = return (IntLit (if i > fromIntegral j then 1 else 0))
+simplifyE (Le (Ctx _ (FloatLit i)) (Ctx _ (IntLit j))) = return (IntLit (if i <= fromIntegral j then 1 else 0))
+simplifyE (Ge (Ctx _ (FloatLit i)) (Ctx _ (IntLit j))) = return (IntLit (if i >= fromIntegral j then 1 else 0))
+simplifyE e@(Get (nm,c)) = do
+       locals <- get >>= return . concat . siLocalsInScope
+       if name `elem` locals 
+           then return e
+           else newExpr
+    where name = ctxItem nm
+          newExpr = do
+            m <- get >>= return . siConstants
+            return $ case nameToLit m name of
+                Nothing -> e
+                Just e' -> case (c,e') of
+                    (All,_) -> e'
+                    (X,VecExpr x _ _) -> ctxItem x
+                    (X,RotExpr x _ _ _) -> ctxItem x
+                    (Y,VecExpr _ y _) -> ctxItem y
+                    (Y,RotExpr _ y _ _) -> ctxItem y
+                    (Z,VecExpr _ _ z) -> ctxItem z
+                    (Z,RotExpr _ _ z _) -> ctxItem z
+                    (S,RotExpr _ _ _ s) -> ctxItem s
+                    _ -> e
+simplifyE e@(Call (Ctx _ nm) exprs) =
+    case exprsToVals exprs of
+        Nothing -> return e
+        Just vs -> 
+            case lookup nm internalLLFuncs of
+                Just f -> return (valToExpr $ snd (Id.runIdentity (f () vs)))
+                Nothing -> do
+                    pureFuncs <- get >>= return . siPureFuncs
+                    script <- get >>= return . siScript
+                    if nm `Set.member` pureFuncs
+                        then case simSFunc (script,[nm]) [] vs of
+                            Left _ -> return e
+                            Right (VoidVal,_) -> return e
+                            Right (v,_) -> return $ valToExpr v
+                        else return e
+simplifyE e = return e
+  
+simplify :: Data a => CompiledLSLScript -> Set.Set String -> M.Map String Expr -> a -> a
+simplify script pureFuncs gcs v =
+        evalState (go v) (SimplificationInfo script pureFuncs gcs [])
+    where go :: Data a => a -> SimpState a
+          go = downup (mkM (stmtIn simpInfoScopeFuncs) `extM` funcDecIn simpInfoScopeFuncs `extM` handlerDecIn simpInfoScopeFuncs)
+                      (mkM simplifyE `extM` stmtOut simpInfoScopeFuncs `extM` 
+                       funcDecOut simpInfoScopeFuncs `extM` handlerDecOut simpInfoScopeFuncs)

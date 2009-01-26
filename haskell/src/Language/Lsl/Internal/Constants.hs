@@ -1,52 +1,53 @@
+{-# OPTIONS_GHC -XNoMonomorphismRestriction #-}
 module Language.Lsl.Internal.Constants where
 
 import Data.Bits((.|.),shiftL)
 import Language.Lsl.Internal.Type(LSLValue(..),typeOfLSLValue)
 import Language.Lsl.Internal.Util(findM)
 
-data Constant = Constant { constName :: String, constVal :: LSLValue }
+data Constant a = Constant { constName :: String, constVal :: LSLValue a }
     deriving (Show)
 
-llcInventoryAll = IVal (-1)
-llcInventoryAnimation = IVal 20
-llcInventoryBodyPart = IVal 13
-llcInventoryClothing = IVal 5
-llcInventoryGesture = IVal 21
-llcInventoryLandmark = IVal 3
-llcInventoryNotecard = IVal 7
-llcInventoryNone = IVal (-1)
-llcInventoryObject = IVal 6
-llcInventoryScript = IVal 10
-llcInventorySound = IVal 1
-llcInventoryTexture = IVal 0
+cInventoryAll = (-1);llcInventoryAll :: RealFloat a => LSLValue a;llcInventoryAll = IVal cInventoryAll
+cInventoryAnimation = 20;llcInventoryAnimation :: RealFloat a => LSLValue a; llcInventoryAnimation = IVal cInventoryAnimation
+cInventoryBodyPart = 13;llcInventoryBodyPart :: RealFloat a => LSLValue a; llcInventoryBodyPart = IVal cInventoryBodyPart
+cInventoryClothing = 5;llcInventoryClothing :: RealFloat a => LSLValue a; llcInventoryClothing = IVal cInventoryClothing
+cInventoryGesture = 21;llcInventoryGesture :: RealFloat a => LSLValue a; llcInventoryGesture = IVal cInventoryGesture
+cInventoryLandmark = 3;llcInventoryLandmark :: RealFloat a => LSLValue a; llcInventoryLandmark = IVal cInventoryLandmark
+cInventoryNotecard = 7;llcInventoryNotecard :: RealFloat a => LSLValue a; llcInventoryNotecard = IVal cInventoryNotecard
+cInventoryNone = (-1);llcInventoryNone :: RealFloat a => LSLValue a;llcInventoryNone = IVal cInventoryNone
+cInventoryObject = 6;llcInventoryObject :: RealFloat a => LSLValue a; llcInventoryObject = IVal cInventoryObject
+cInventoryScript = 10;llcInventoryScript :: RealFloat a => LSLValue a; llcInventoryScript = IVal cInventoryScript
+cInventorySound = 1;llcInventorySound :: RealFloat a => LSLValue a; llcInventorySound = IVal cInventorySound
+cInventoryTexture = 0;llcInventoryTexture :: RealFloat a => LSLValue a; llcInventoryTexture = IVal cInventoryTexture
 cPermissionChangeLinks = 0x80 :: Int
 llcPermissionChangeLinks = IVal cPermissionChangeLinks
 
 cChangedLink = 0x20 :: Int
 llcChangedLink = IVal cChangedLink
-(cChangedInventory,llcChangedInventory) = mkIConst 0x1
-(cChnagedAllowedDrop,llcChangedAllowedDrop) = mkIConst 0x40
+cChangedInventory = 0x1;llcChangedInventory :: RealFloat a => LSLValue a; llcChangedInventory = IVal cChangedInventory
+cChangedAllowedDrop = 0x40;llcChangedAllowedDrop :: RealFloat a => LSLValue a; llcChangedAllowedDrop = IVal cChangedAllowedDrop
 
-(cMaskBase,llcMaskBase) = mkIConst 0
-(cMaskOwner,llcMaskOwner) = mkIConst 1
-(cMaskGroup,llcMaskGroup) = mkIConst 2
-(cMaskEveryone,llcMaskEveryone) = mkIConst 3
-(cMaskNext,llcMaskNext) = mkIConst 4
+cMaskBase = 0;llcMaskBase :: RealFloat a => LSLValue a; llcMaskBase = IVal cMaskBase
+cMaskOwner = 1;llcMaskOwner :: RealFloat a => LSLValue a; llcMaskOwner = IVal cMaskOwner
+cMaskGroup = 2;llcMaskGroup :: RealFloat a => LSLValue a; llcMaskGroup = IVal cMaskGroup
+cMaskEveryone = 3;llcMaskEveryone :: RealFloat a => LSLValue a; llcMaskEveryone = IVal cMaskEveryone
+cMaskNext = 4;llcMaskNext :: RealFloat a => LSLValue a; llcMaskNext = IVal cMaskNext
 
-(cPermModify,llcPermModify) = mkIConst 0x00004000
-(cPermCopy,llcPermCopy) = mkIConst 0x00008000
-(cPermTransfer,llcPermTransfer) = mkIConst 0x00002000
-(cPermMove,llcPermMove) = mkIConst 0x00080000
+cPermModify = 0x00004000;llcPermModify :: RealFloat a => LSLValue a; llcPermModify = IVal cPermModify
+cPermCopy = 0x00008000;llcPermCopy :: RealFloat a => LSLValue a; llcPermCopy = IVal cPermCopy
+cPermTransfer = 0x00002000;llcPermTransfer :: RealFloat a => LSLValue a; llcPermTransfer = IVal cPermTransfer
+cPermMove = 0x00080000;llcPermMove :: RealFloat a => LSLValue a; llcPermMove = IVal cPermMove
 cFullPerm = cPermModify .|. cPermMove .|. cPermTransfer .|. cPermCopy
 
-(cPrimTypeBox,llcPrimTypeBox) = mkIConst 0
-(cPrimTypeCylinder,llcPrimTypeCylinder) = mkIConst 1
-(cPrimTypePrism,llcPrimTypePrism) = mkIConst 2
-(cPrimTypeRing,llcPrimTypeRing) = mkIConst 6
-(cPrimTypeSphere,llcPrimTypeSphere) = mkIConst 3
-(cPrimTypeSculpt,llcPrimTypeSculpt) = mkIConst 7
-(cPrimTypeTorus,llcPrimTypeTorus) = mkIConst 4
-(cPrimTypeTube,llcPrimTypeTube) = mkIConst 5
+cPrimTypeBox = 0;llcPrimTypeBox :: RealFloat a => LSLValue a; llcPrimTypeBox = IVal cPrimTypeBox
+cPrimTypeCylinder = 1;llcPrimTypeCylinder :: RealFloat a => LSLValue a; llcPrimTypeCylinder = IVal cPrimTypeCylinder
+cPrimTypePrism = 2;llcPrimTypePrism :: RealFloat a => LSLValue a; llcPrimTypePrism = IVal cPrimTypePrism
+cPrimTypeRing = 6;llcPrimTypeRing :: RealFloat a => LSLValue a; llcPrimTypeRing = IVal cPrimTypeRing
+cPrimTypeSphere = 3;llcPrimTypeSphere :: RealFloat a => LSLValue a; llcPrimTypeSphere = IVal cPrimTypeSphere
+cPrimTypeSculpt = 7;llcPrimTypeSculpt :: RealFloat a => LSLValue a; llcPrimTypeSculpt = IVal cPrimTypeSculpt
+cPrimTypeTorus = 4;llcPrimTypeTorus :: RealFloat a => LSLValue a; llcPrimTypeTorus = IVal cPrimTypeTorus
+cPrimTypeTube = 5;llcPrimTypeTube :: RealFloat a => LSLValue a; llcPrimTypeTube = IVal cPrimTypeTube
 
 validAttachmentPoints = [0..36]::[Int]
 
@@ -58,88 +59,88 @@ llcEOF = (SVal cEOF)
 
 cPermissionControlCamera = 0x800 :: Int
 llcPermissionControlCamera = IVal cPermissionControlCamera
-(cPermissionTrackCamera,llcPermissionTrackCamera) = mkIConst 0x400
-(cPermissionTriggerAnimation,llcPermissionTriggerAnimation) = mkIConst 0x10
-(cPermissionDebit,llcPermissionDebit) = mkIConst 0x2
-(cPermissionAttach,llcPermissionAttach) = mkIConst 0x20
-(cPermissionTakeControls,llcPermissionTakeControls) = mkIConst 0x4
+cPermissionTrackCamera = 0x400;llcPermissionTrackCamera :: RealFloat a => LSLValue a; llcPermissionTrackCamera = IVal cPermissionTrackCamera
+cPermissionTriggerAnimation = 0x10;llcPermissionTriggerAnimation :: RealFloat a => LSLValue a; llcPermissionTriggerAnimation = IVal cPermissionTriggerAnimation
+cPermissionDebit = 0x2;llcPermissionDebit :: RealFloat a => LSLValue a; llcPermissionDebit = IVal cPermissionDebit
+cPermissionAttach = 0x20;llcPermissionAttach :: RealFloat a => LSLValue a; llcPermissionAttach = IVal cPermissionAttach
+cPermissionTakeControls = 0x4;llcPermissionTakeControls :: RealFloat a => LSLValue a; llcPermissionTakeControls = IVal cPermissionTakeControls
 
-(cActive,llcActive) = mkIConst 0x2
-(cAgent,llcAgent) = mkIConst 0x1
-(cPassive,llcPassive) = mkIConst 0x4
-(cScripted,llcScripted) = mkIConst 0x8
+cActive = 0x2;llcActive :: RealFloat a => LSLValue a; llcActive = IVal cActive
+cAgent = 0x1;llcAgent :: RealFloat a => LSLValue a; llcAgent = IVal cAgent
+cPassive = 0x4;llcPassive :: RealFloat a => LSLValue a; llcPassive = IVal cPassive
+cScripted = 0x8;llcScripted :: RealFloat a => LSLValue a; llcScripted = IVal cScripted
 
 
-(cStatusPhysics,llcStatusPhysics) = mkIConst 1
-(cStatusRotateX,llcStatusRotateX) = mkIConst 2
-(cStatusRotateY,llcStatusRotateY) = mkIConst 4
-(cStatusRotateZ,llcStatusRotateZ) = mkIConst 8
-(cStatusPhantom,llcStatusPhantom) = mkIConst 16
-(cStatusSandbox,llcStatusSandbox) = mkIConst 32
-(cStatusBlockGrab,llcStatusBlockGrab) = mkIConst 64
-(cStatusDieAtEdge,llcStatusDieAtEdge) = mkIConst 128
-(cStatusReturnAtEdge,llcStatusReturnAtEdge) = mkIConst 256
-(cStatusCastShadows,llcStatusCastShadows) = mkIConst 512
+cStatusPhysics = 1;llcStatusPhysics :: RealFloat a => LSLValue a; llcStatusPhysics = IVal cStatusPhysics
+cStatusRotateX = 2;llcStatusRotateX :: RealFloat a => LSLValue a; llcStatusRotateX = IVal cStatusRotateX
+cStatusRotateY = 4;llcStatusRotateY :: RealFloat a => LSLValue a; llcStatusRotateY = IVal cStatusRotateY
+cStatusRotateZ = 8;llcStatusRotateZ :: RealFloat a => LSLValue a; llcStatusRotateZ = IVal cStatusRotateZ
+cStatusPhantom = 16;llcStatusPhantom :: RealFloat a => LSLValue a; llcStatusPhantom = IVal cStatusPhantom
+cStatusSandbox = 32;llcStatusSandbox :: RealFloat a => LSLValue a; llcStatusSandbox = IVal cStatusSandbox
+cStatusBlockGrab = 64;llcStatusBlockGrab :: RealFloat a => LSLValue a; llcStatusBlockGrab = IVal cStatusBlockGrab
+cStatusDieAtEdge = 128;llcStatusDieAtEdge :: RealFloat a => LSLValue a; llcStatusDieAtEdge = IVal cStatusDieAtEdge
+cStatusReturnAtEdge = 256;llcStatusReturnAtEdge :: RealFloat a => LSLValue a; llcStatusReturnAtEdge = IVal cStatusReturnAtEdge
+cStatusCastShadows = 512;llcStatusCastShadows :: RealFloat a => LSLValue a; llcStatusCastShadows = IVal cStatusCastShadows
 
-(cPrimBumpShiny,llcPrimBumpShiny) = mkIConst 19
-(cPrimColor,llcPrimColor) = mkIConst 18
-(cPrimTexture,llcPrimTexture) = mkIConst 17
-(cPrimTexgen,llcPrimTexgen) = mkIConst 22
-(cPrimFullbright,llcPrimFullbright) = mkIConst 20
+cPrimBumpShiny = 19;llcPrimBumpShiny :: RealFloat a => LSLValue a; llcPrimBumpShiny = IVal cPrimBumpShiny
+cPrimColor = 18;llcPrimColor :: RealFloat a => LSLValue a; llcPrimColor = IVal cPrimColor
+cPrimTexture = 17;llcPrimTexture :: RealFloat a => LSLValue a; llcPrimTexture = IVal cPrimTexture
+cPrimTexgen = 22;llcPrimTexgen :: RealFloat a => LSLValue a; llcPrimTexgen = IVal cPrimTexgen
+cPrimFullbright = 20;llcPrimFullbright :: RealFloat a => LSLValue a; llcPrimFullbright = IVal cPrimFullbright
 
-(cPrimMaterial,llcPrimMaterial) = mkIConst 2
-(cPrimPhantom,llcPrimPhantom) = mkIConst 5
-(cPrimPhysics,llcPrimPhysics) = mkIConst 3
-(cPrimFlexible,llcPrimFlexible) = mkIConst 21
-(cPrimPointLight,llcPrimPointLight) = mkIConst 23
-(cPrimPosition,llcPrimPosition) = mkIConst 6
-(cPrimRotation,llcPrimRotation) = mkIConst 8
-(cPrimSize,llcPrimSize) = mkIConst 7
-(cPrimTempOnRez,llcPrimTempOnRez) = mkIConst 4 
-(cPrimType,llcPrimType) = mkIConst 9
+cPrimMaterial = 2;llcPrimMaterial :: RealFloat a => LSLValue a; llcPrimMaterial = IVal cPrimMaterial
+cPrimPhantom = 5;llcPrimPhantom :: RealFloat a => LSLValue a; llcPrimPhantom = IVal cPrimPhantom
+cPrimPhysics = 3;llcPrimPhysics :: RealFloat a => LSLValue a; llcPrimPhysics = IVal cPrimPhysics
+cPrimFlexible = 21;llcPrimFlexible :: RealFloat a => LSLValue a; llcPrimFlexible = IVal cPrimFlexible
+cPrimPointLight = 23;llcPrimPointLight :: RealFloat a => LSLValue a; llcPrimPointLight = IVal cPrimPointLight
+cPrimPosition = 6;llcPrimPosition :: RealFloat a => LSLValue a; llcPrimPosition = IVal cPrimPosition
+cPrimRotation = 8;llcPrimRotation :: RealFloat a => LSLValue a; llcPrimRotation = IVal cPrimRotation
+cPrimSize = 7;llcPrimSize :: RealFloat a => LSLValue a; llcPrimSize = IVal cPrimSize
+cPrimTempOnRez = 4;llcPrimTempOnRez :: RealFloat a => LSLValue a; llcPrimTempOnRez = IVal cPrimTempOnRez 
+cPrimType = 9;llcPrimType :: RealFloat a => LSLValue a; llcPrimType = IVal cPrimType
 
-(cParcelDetailsName,llcParcelDetailsName) = mkIConst 0
-(cParcelDetailsDesc,llcParcelDetailsDesc) = mkIConst 1
-(cParcelDetailsOwner,llcParcelDetailsOwner) = mkIConst 2
-(cParcelDetailsGroup,llcParcelDetailsGroup) = mkIConst 3 
-(cParcelDetailsArea,llcParcelDetailsArea) = mkIConst 4
+cParcelDetailsName = 0;llcParcelDetailsName :: RealFloat a => LSLValue a; llcParcelDetailsName = IVal cParcelDetailsName
+cParcelDetailsDesc = 1;llcParcelDetailsDesc :: RealFloat a => LSLValue a; llcParcelDetailsDesc = IVal cParcelDetailsDesc
+cParcelDetailsOwner = 2;llcParcelDetailsOwner :: RealFloat a => LSLValue a; llcParcelDetailsOwner = IVal cParcelDetailsOwner
+cParcelDetailsGroup = 3;llcParcelDetailsGroup :: RealFloat a => LSLValue a; llcParcelDetailsGroup = IVal cParcelDetailsGroup 
+cParcelDetailsArea = 4;llcParcelDetailsArea :: RealFloat a => LSLValue a; llcParcelDetailsArea = IVal cParcelDetailsArea
 
-(cClickActionNone,llcClickActionNone) = mkIConst 0
-(cClickActionTouch,llcClickActionTouch) = mkIConst 0
-(cClickActionSit,llcClickActionSit) = mkIConst 1
-(cClickActionBuy,llcClickActionBuy) = mkIConst 2
-(cClickActionPay,llcClickActionPay) = mkIConst 3
-(cClickActionOpen,llcClickActionOpen) = mkIConst 4
-(cClickActionPlay,llcClickActionPlay) = mkIConst 5
-(cClickActionOpenMedia,llcClickActionOpenMedia) = mkIConst 6
+cClickActionNone = 0;llcClickActionNone :: RealFloat a => LSLValue a; llcClickActionNone = IVal cClickActionNone
+cClickActionTouch = 0;llcClickActionTouch :: RealFloat a => LSLValue a; llcClickActionTouch = IVal cClickActionTouch
+cClickActionSit = 1;llcClickActionSit :: RealFloat a => LSLValue a; llcClickActionSit = IVal cClickActionSit
+cClickActionBuy = 2;llcClickActionBuy :: RealFloat a => LSLValue a; llcClickActionBuy = IVal cClickActionBuy
+cClickActionPay = 3;llcClickActionPay :: RealFloat a => LSLValue a; llcClickActionPay = IVal cClickActionPay
+cClickActionOpen = 4;llcClickActionOpen :: RealFloat a => LSLValue a; llcClickActionOpen = IVal cClickActionOpen
+cClickActionPlay = 5;llcClickActionPlay :: RealFloat a => LSLValue a; llcClickActionPlay = IVal cClickActionPlay
+cClickActionOpenMedia = 6;llcClickActionOpenMedia :: RealFloat a => LSLValue a; llcClickActionOpenMedia = IVal cClickActionOpenMedia
 cClickActions = [cClickActionTouch,cClickActionSit,cClickActionBuy,cClickActionPay,cClickActionOpen,cClickActionPlay,cClickActionOpenMedia]
 
-(cDataBorn,llcDataBorn) = mkIConst 3
-(cDataName,llcDataName) = mkIConst 2
-(cDataOnline,llcDataOnline) = mkIConst 1
-(cDataPayinfo,llcDataPayinfo) = mkIConst 8
-(cDataRating,llcDataRating) = mkIConst 4
-(cDataSimPos,llcDataSimPos) = mkIConst 5
-(cDataSimRating,llcDataSimRating) = mkIConst 7
-(cDataSimStatus,llcDataSimStatus) = mkIConst 6
+cDataBorn = 3;llcDataBorn :: RealFloat a => LSLValue a; llcDataBorn = IVal cDataBorn
+cDataName = 2;llcDataName :: RealFloat a => LSLValue a; llcDataName = IVal cDataName
+cDataOnline = 1;llcDataOnline :: RealFloat a => LSLValue a; llcDataOnline = IVal cDataOnline
+cDataPayinfo = 8;llcDataPayinfo :: RealFloat a => LSLValue a; llcDataPayinfo = IVal cDataPayinfo
+cDataRating = 4;llcDataRating :: RealFloat a => LSLValue a; llcDataRating = IVal cDataRating
+cDataSimPos = 5;llcDataSimPos :: RealFloat a => LSLValue a; llcDataSimPos = IVal cDataSimPos
+cDataSimRating = 7;llcDataSimRating :: RealFloat a => LSLValue a; llcDataSimRating = IVal cDataSimRating
+cDataSimStatus = 6;llcDataSimStatus :: RealFloat a => LSLValue a; llcDataSimStatus = IVal cDataSimStatus
 
-(cHTTPBodyMaxlength,llcHTTPBodyMaxlength) = mkIConst 2
-(cHTTPBodyTruncated,llcHTTPBodyTruncated) = mkIConst 0
-(cHTTPMethod,llcHTTPMethod) = mkIConst 0
-(cHTTPMimetype,llcHTTPMimetype) = mkIConst 1
-(cHTTPVerifyCert,llcHTTPVerifyCert) = mkIConst 3
+cHTTPBodyMaxlength = 2;llcHTTPBodyMaxlength :: RealFloat a => LSLValue a; llcHTTPBodyMaxlength = IVal cHTTPBodyMaxlength
+cHTTPBodyTruncated = 0;llcHTTPBodyTruncated :: RealFloat a => LSLValue a; llcHTTPBodyTruncated = IVal cHTTPBodyTruncated
+cHTTPMethod = 0;llcHTTPMethod :: RealFloat a => LSLValue a; llcHTTPMethod = IVal cHTTPMethod
+cHTTPMimetype = 1;llcHTTPMimetype :: RealFloat a => LSLValue a; llcHTTPMimetype = IVal cHTTPMimetype
+cHTTPVerifyCert = 3;llcHTTPVerifyCert :: RealFloat a => LSLValue a; llcHTTPVerifyCert = IVal cHTTPVerifyCert
 
-(cRemoteDataChannel,llcRemoteDataChannel) = mkIConst 1
-(cRemoteDataRequest,llcRemoteDataRequest) = mkIConst 2
-(cRemoteDataReply,llcRemoteDataReply) = mkIConst 3
+cRemoteDataChannel = 1;llcRemoteDataChannel :: RealFloat a => LSLValue a; llcRemoteDataChannel = IVal cRemoteDataChannel
+cRemoteDataRequest = 2;llcRemoteDataRequest :: RealFloat a => LSLValue a; llcRemoteDataRequest = IVal cRemoteDataRequest
+cRemoteDataReply = 3;llcRemoteDataReply :: RealFloat a => LSLValue a; llcRemoteDataReply = IVal cRemoteDataReply
 
 llcZeroVector = VVal 0 0 0
 llcZeroRotation = RVal 0 0 0 1
 
-mkIConst :: Int -> (Int,LSLValue)
+mkIConst :: RealFloat a => Int -> (Int,LSLValue a)
 mkIConst i = (i,IVal i)
 
-allConstants :: [Constant]
+allConstants :: RealFloat a => [Constant a]
 allConstants = [
     Constant "ACTIVE" llcActive,
     Constant "AGENT" llcAgent,
@@ -248,7 +249,7 @@ allConstants = [
     Constant "DATA_SIM_STATUS" llcDataSimStatus,
     Constant "DEBUG_CHANNEL" llcDebugChannel,
     Constant "DEG_TO_RAD" (FVal 0.01745329238),
-    Constant "EOF" llcEOF,
+    Constant "EOF" $ SVal cEOF,
     Constant "FALSE" (IVal 0),
     Constant "HTTP_BODY_MAXLENGTH" llcHTTPBodyMaxlength,
     Constant "HTTP_BODY_TRUNCATED" llcHTTPBodyTruncated,

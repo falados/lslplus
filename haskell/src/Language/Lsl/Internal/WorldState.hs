@@ -203,7 +203,7 @@ data World m = World {
                     randGen :: !StdGen,
                     wlibrary :: ![(String,Validity LModule)],
                     wscripts :: ![(String,Validity CompiledLSLScript)],
-                    worldEventHandler :: !(Maybe (String, [(String,LSLValue)])),
+                    worldEventHandler :: !(Maybe (String, [(String,LSLValue Float)])),
                     worldAvatars :: !(Map String Avatar),
                     worldBreakpointManager :: !BreakpointManager,
                     worldSuspended :: !(Maybe (String,String)), -- prim-key, script-name, image
@@ -285,7 +285,7 @@ getWorldPendingHTTPRequests :: Monad m => WorldM m [String]
 getWorldPendingHTTPRequests = queryWorld worldPendingHTTPRequests
 getWorldOpenDataChannels :: Monad m => WorldM m (Map String (String,String), Map (String,String) String)
 getWorldOpenDataChannels = queryWorld worldOpenDataChannels
-getWorldEventHandler :: Monad m => WorldM m (Maybe (String,[(String,LSLValue)]))
+getWorldEventHandler :: Monad m => WorldM m (Maybe (String,[(String,LSLValue Float)]))
 getWorldEventHandler = queryWorld worldEventHandler
 getWorldXMLRequestRegistry :: Monad m => WorldM m (Map String XMLRequestSourceType)
 getWorldXMLRequestRegistry = queryWorld worldXMLRequestRegistry
@@ -465,7 +465,7 @@ data WorldEventType = CreatePrim { wePrimName :: String, wePrimKey :: String }
                     | ResetScript String String -- prim key, script name
                     | ResetScripts String -- object name
                     | WorldSimEvent { worldSimEventName :: String, worldSimEventArgs :: [SimEventArg] }
-                    | DeferredScriptEvent { deferredScriptEvent :: Event, deferredScriptEventTarget :: DeferredScriptEventTarget }
+                    | DeferredScriptEvent { deferredScriptEvent :: Event Float, deferredScriptEventTarget :: DeferredScriptEventTarget }
                     | Chat { chatChannel :: Int, chatterName :: String, chatterKey :: String, chatMessage :: String,
                              chatLocation :: ((Int,Int),(Float,Float,Float)),
                              chatRange :: Maybe Float }
@@ -567,12 +567,12 @@ data Listener = Listener {
     
 data PredefFunc m = PredefFunc { predefFuncName :: String, 
                                    predefFuncResultType :: LSLType, 
-                                   predef :: ScriptInfo -> [LSLValue] -> ErrorT String (WorldM m) (EvalResult,LSLValue) }
+                                   predef :: ScriptInfo Float -> [LSLValue Float] -> ErrorT String (WorldM m) (EvalResult,LSLValue Float) }
      deriving (Show)
 
-instance Monad m => Show (ScriptInfo -> [LSLValue] -> WorldM m (EvalResult,LSLValue)) where
+instance Monad m => Show (ScriptInfo Float -> [LSLValue Float] -> WorldM m (EvalResult,LSLValue Float)) where
     showsPrec _ _ = showString "(function :: ScriptInfo -> [LSLValue] -> WorldM m (EvalResult,LSLValue))"
-instance Monad m => Show (ScriptInfo -> [LSLValue] -> ErrorT String (WorldM m) (EvalResult,LSLValue)) where
+instance Monad m => Show (ScriptInfo Float -> [LSLValue Float] -> ErrorT String (WorldM m) (EvalResult,LSLValue Float)) where
     showsPrec _ _ = showString "(function :: ScriptInfo -> [LSLValue] -> ErrorT String (WorldM m) (EvalResult,LSLValue))"
 
 evalErrorT :: ErrorT String m v -> m (Either String v)

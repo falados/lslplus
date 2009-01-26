@@ -1,6 +1,7 @@
 module Language.Lsl.UnitTestEnv(
     simStep,
     simFunc,
+    simSFunc,
     hasFunc,
     SimpleWorld,
     TestEvent(..),
@@ -32,31 +33,31 @@ import Language.Lsl.Internal.Util(findM,ctx)
 
 --trace1 v = trace ("->>" ++ (show v)) v
 
-data SimpleWorld = SimpleWorld {
+data SimpleWorld a = SimpleWorld {
         maxTick :: Int,
         tick :: Int,
         msgLog :: [(Int,String)],
         wScripts :: [(String,Validity CompiledLSLScript)],
         wLibrary :: [(String,Validity LModule)],
-        expectations :: FuncCallExpectations,
+        expectations :: FuncCallExpectations a,
         breakpointManager :: BreakpointManager
     }
 
-type SimpleWorldM = ErrorT String (State SimpleWorld)
+type SimpleWorldM a = ErrorT String (State (SimpleWorld a))
 simpleWorldM = ErrorT . State
-getTick :: SimpleWorldM Int
+getTick :: SimpleWorldM a Int
 getTick = get >>= return . tick
-getMaxTick :: SimpleWorldM Int
+getMaxTick :: SimpleWorldM a Int
 getMaxTick = get >>= return . maxTick
-getMsgLog :: SimpleWorldM [(Int,String)]
+getMsgLog :: SimpleWorldM a [(Int,String)]
 getMsgLog = get >>= return . msgLog
-getWScripts :: SimpleWorldM [(String, Validity CompiledLSLScript)]
+getWScripts :: SimpleWorldM a [(String, Validity CompiledLSLScript)]
 getWScripts = get >>= return . wScripts
-getWLibrary :: SimpleWorldM [(String, Validity LModule)]
+getWLibrary :: SimpleWorldM a [(String, Validity LModule)]
 getWLibrary = get >>= return . wLibrary
-getExpectations :: SimpleWorldM FuncCallExpectations
+getExpectations :: SimpleWorldM a (FuncCallExpectations a)
 getExpectations = get >>= return . expectations
-getBreakpointManager :: SimpleWorldM BreakpointManager
+getBreakpointManager :: SimpleWorldM a BreakpointManager
 getBreakpointManager = get >>= return . breakpointManager
 
 setTick t = do w <- get; put (w { tick = t })
@@ -75,6 +76,7 @@ logMsg s = do
     tick <- getTick
     modifyMsgLog ((tick,s):)
 
+doPredef :: (Read a, RealFloat a) => String -> b -> [LSLValue a] -> ErrorT String (State (SimpleWorld a)) (EvalResult,LSLValue a)
 doPredef n i a = 
     do  logMsg $ "call: "  ++ renderCall n a
         case lookup n internalLLFuncs of
@@ -108,6 +110,27 @@ getValidScript name =
             Nothing -> return (Left $ "No such script: " ++ name)
             Just (Left s) -> return $ Left $ "Invalid script: " ++ name    
             Just (Right script) -> return $ Right script
+
+findValidScript scripts name =
+    case lookup name scripts of
+        Nothing -> Left $ "No such script: " ++ name
+        Just (Left s) -> Left $ "Invalid script: " ++ name
+        Just (Right script) -> Right script
+        
+convertEntryPoint' scripts _ (ScriptFunc scriptName funcName) = do
+    script <- findValidScript scripts scriptName
+    return (script,[funcName])
+convertEntryPoint' scripts _ (ScriptHandler scriptName stateName handlerName) = do
+    script <- findValidScript scripts scriptName
+    return (script,[stateName,handlerName])
+convertEntryPoint' _ modules (ModuleFunc moduleName funcName) =
+    case lookup moduleName modules of
+        Nothing -> Left $ "No such module: " ++ moduleName
+        Just (Left s) -> Left $ "Invalid module: " ++ moduleName
+        Just (Right lmodule) ->
+            case compileLSLScript' modules (mkScript lmodule) of
+                Left _ -> Left "Invalid entry point (internal error?)"
+                Right script -> Right (script,[funcName])
         
 convertEntryPoint (ScriptFunc scriptName funcName) =
     do  script <- getValidScript scriptName
@@ -164,7 +187,7 @@ checkResults (ms1, val, globs, w) unitTest =
 --------------------------------------------------
 -- 'Interactive' testing
 
-data TestEvent = TestComplete TestResult | TestSuspended  ExecutionInfo | AllComplete
+data TestEvent a = TestComplete TestResult | TestSuspended  (ExecutionInfo a) | AllComplete
 
 data ExecCommand = ExecContinue [Breakpoint] | ExecStep [Breakpoint] | ExecStepOver [Breakpoint] | 
                    ExecStepOut [Breakpoint]
@@ -184,22 +207,17 @@ hasFunc lib (moduleName,functionName) =
           ep = ModuleFunc moduleName functionName
           world = SimpleWorld { maxTick = 10000, tick = 0, msgLog = [], wScripts = [], wLibrary = lib, 
                                 expectations = FuncCallExpectations Nice [], breakpointManager = emptyBreakpointManager }
-                                
-simFunc :: [(String,Validity LModule)] -> (String,String) -> [(String,LSLValue)] -> [LSLValue] -> Either String (LSLValue,[(String,LSLValue)])
-simFunc lib (moduleName,functionName) globs args =
-   let world = SimpleWorld { maxTick = 10000, tick = 0, msgLog = [], wScripts = [], wLibrary = lib, 
+
+simSFunc :: (Read a, RealFloat a) => (CompiledLSLScript,[String]) -> [(String,LSLValue a)] -> [LSLValue a] -> Either String (LSLValue a,[(String,LSLValue a)])
+simSFunc (script,path) globs args =
+   let world = SimpleWorld { maxTick = 10000, tick = 0, msgLog = [], wScripts = [], wLibrary = [], 
                              expectations = FuncCallExpectations Nice [], breakpointManager = emptyBreakpointManager }
-       ep = ModuleFunc moduleName functionName
+       exec = initStateSimple script doPredef logMsg getTick setTick checkBp
        init = runState (runErrorT (
-           do converted <- convertEntryPoint ep
-              case converted of
-                  Left s -> fail s
-                  Right (script,path) ->
-                      do result <- runEval (setupSimple path globs args) exec
-                         case result of
-                             (Left s, _) -> fail s
-                             (Right (), exec') -> return exec'
-                      where exec = initStateSimple script doPredef logMsg getTick setTick checkBp)) world
+           do result <- runEval (setupSimple path globs args) exec
+              case result of
+                 (Left s, _) -> fail s
+                 (Right (), exec') -> return exec')) world
     in case init of
         (Left s, world') -> Left s
         (Right exec,world') ->
@@ -212,6 +230,42 @@ simFunc lib (moduleName,functionName) globs args =
                         (Right (EvalComplete newState, _),_) -> Left "execution error"
                         (Right (EvalIncomplete,_),_) -> Left "execution error: timeout"
                         (Right _,_) -> Left "execution error"
+
+-- simFunc' lib (moduleName,functionName) globs args =
+--     let ep = ModuleFunc moduleName functionName
+simFunc :: (Read a, RealFloat a) => [(String,Validity LModule)] -> (String,String) -> [(String,LSLValue a)] -> [LSLValue a] -> Either String (LSLValue a,[(String,LSLValue a)])
+simFunc lib (moduleName,functionName) globs args = 
+   case convertEntryPoint' [] lib (ModuleFunc moduleName functionName) of
+       Left s -> Left s
+       Right (script,path) -> simSFunc (script,path) globs args
+       
+-- simFunc :: (Read a, RealFloat a) => [(String,Validity LModule)] -> (String,String) -> [(String,LSLValue a)] -> [LSLValue a] -> Either String (LSLValue a,[(String,LSLValue a)])
+-- simFunc lib (moduleName,functionName) globs args =
+--    let world = SimpleWorld { maxTick = 10000, tick = 0, msgLog = [], wScripts = [], wLibrary = lib, 
+--                              expectations = FuncCallExpectations Nice [], breakpointManager = emptyBreakpointManager }
+--        ep = ModuleFunc moduleName functionName
+--        init = runState (runErrorT (
+--            do converted <- convertEntryPoint ep
+--               case converted of
+--                   Left s -> fail s
+--                   Right (script,path) ->
+--                       do result <- runEval (setupSimple path globs args) exec
+--                          case result of
+--                              (Left s, _) -> fail s
+--                              (Right (), exec') -> return exec'
+--                       where exec = initStateSimple script doPredef logMsg getTick setTick checkBp)) world
+--     in case init of
+--         (Left s, world') -> Left s
+--         (Right exec,world') ->
+--             case (runState $ runErrorT $ (runStateT $ runErrorT $ evalSimple 10000) exec) world of
+--                 (Left s,_) -> Left s
+--                 (Right r, _) ->
+--                     case r of
+--                         (Left s,_) -> Left s
+--                         (Right (EvalComplete newState, Just val), exec') -> Right (val,glob $ scriptImage exec')
+--                         (Right (EvalComplete newState, _),_) -> Left "execution error"
+--                         (Right (EvalIncomplete,_),_) -> Left "execution error: timeout"
+--                         (Right _,_) -> Left "execution error"
                             
 simSome exec world = runState (runErrorT (
     do maxTick <- getMaxTick

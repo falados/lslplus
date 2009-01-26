@@ -13,9 +13,9 @@ import Language.Lsl.Internal.Type(LSLValue(..))
 import Language.Lsl.Internal.Exec(Binding(..))
 import Language.Lsl.Internal.Util(removeLookup)
    
-data FuncCallExpectations = FuncCallExpectations {
+data FuncCallExpectations a = FuncCallExpectations {
     expectationMode :: ExpectationMode,
-    callList :: [((String, [Maybe LSLValue]),LSLValue)] } deriving (Show)
+    callList :: [((String, [Maybe (LSLValue a)]),LSLValue a)] } deriving (Show)
     
 data ExpectationMode = Nice | Normal | Exhaust | Strict deriving (Show,Eq)
 
@@ -25,11 +25,11 @@ data EntryPoint = ModuleFunc String String | ScriptFunc String String | ScriptHa
 data LSLUnitTest = LSLUnitTest {
         unitTestName :: String,
         entryPoint :: EntryPoint,
-        initialGlobs :: [Binding],
-        arguments :: [LSLValue],
-        expectedCalls :: FuncCallExpectations,
-        expectedReturn :: Maybe LSLValue,
-        expectedGlobalVals :: [Binding],
+        initialGlobs :: [Binding Float],
+        arguments :: [LSLValue Float],
+        expectedCalls :: FuncCallExpectations Float,
+        expectedReturn :: Maybe (LSLValue Float),
+        expectedGlobalVals :: [Binding Float],
         expectedNewState :: Maybe String
     } deriving (Show)
 
@@ -47,7 +47,7 @@ lslValuesMatch x y = x == y
 matchFail :: Monad m => m a
 matchFail = fail "no matching call"
 
-expectedReturns :: (Monad m) => String -> [LSLValue] -> FuncCallExpectations -> m ((String,[Maybe LSLValue]),LSLValue)
+expectedReturns :: (RealFloat a,Monad m) => String -> [LSLValue a] -> FuncCallExpectations a -> m ((String,[Maybe (LSLValue a)]),LSLValue a)
 expectedReturns name args (FuncCallExpectations Strict (match@((name',expectArgs),returns):_)) =
     if name /= name' || argsMatch expectArgs args == Nothing then matchFail
     else return match
@@ -69,5 +69,5 @@ expectedReturns n a (FuncCallExpectations mode callList) =
             (Nothing,_) -> matchFail
             (_,e) -> return e
 
-removeExpectation :: (String,[Maybe LSLValue]) -> FuncCallExpectations -> FuncCallExpectations
+removeExpectation :: (RealFloat a) => (String,[Maybe (LSLValue a)]) -> FuncCallExpectations a -> FuncCallExpectations a
 removeExpectation m fce = fce { callList = removeLookup m (callList fce) }
