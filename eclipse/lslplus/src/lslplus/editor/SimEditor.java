@@ -32,6 +32,7 @@ import org.eclipse.jface.action.Action;
 import org.eclipse.jface.action.IMenuListener;
 import org.eclipse.jface.action.IMenuManager;
 import org.eclipse.jface.action.MenuManager;
+import org.eclipse.jface.action.Separator;
 import org.eclipse.jface.viewers.CellEditor;
 import org.eclipse.jface.viewers.CellLabelProvider;
 import org.eclipse.jface.viewers.ColumnViewer;
@@ -56,6 +57,7 @@ import org.eclipse.swt.widgets.Tree;
 import org.eclipse.swt.widgets.TreeColumn;
 import org.eclipse.ui.IEditorInput;
 import org.eclipse.ui.IEditorSite;
+import org.eclipse.ui.IWorkbenchActionConstants;
 import org.eclipse.ui.PartInitException;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.operations.UndoRedoActionGroup;
@@ -659,12 +661,16 @@ public class SimEditor extends EditorPart implements NodeListener {
 				    }
 				}
 				if (n != null && n.isDeletable()) manager.add(fDeleteNodeAction);
+				
+		        manager.add(new Separator(IWorkbenchActionConstants.MB_ADDITIONS));
+
 			}
 		};
 		popupMenuManager.addMenuListener(listener);
 		popupMenuManager.setRemoveAllWhenShown(true);
 		//getSite().registerContextMenu(popupMenuManager, getSite().getSelectionProvider());
 		Menu menu = popupMenuManager.createContextMenu(fTree);
+		
 		fTree.setMenu(menu);
 
 	}
