@@ -42,7 +42,9 @@ import com.thoughtworks.xstream.io.xml.DomDriver;
  *
  */
 public class LslProjectNature implements IProjectNature, IResourceChangeListener {
-	private class DeltaVisitor implements IResourceDeltaVisitor {
+	public static final String OPTIMIZE = "optimize"; //$NON-NLS-1$
+
+    private class DeltaVisitor implements IResourceDeltaVisitor {
 		private boolean lslContentChange = false;
 		private LinkedList newDerivedResources = new LinkedList();
 		public List getNewDerivedResources() {
@@ -146,6 +148,12 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 		private HashMap moduleNameToPath = new HashMap();
 		private HashMap scriptMap = new HashMap();
 		private HashMap scriptNameToPath = new HashMap();
+		private boolean optimize;
+		
+		public SourceListBuilder(boolean addOptimizeOption) {
+		    optimize = addOptimizeOption;
+		}
+		
 		private void buildItemList(StringBuilder buf, Map m) {
 			for (Iterator i = m.entrySet().iterator(); i.hasNext();) {
 				Map.Entry e = (Map.Entry) i.next();
@@ -190,6 +198,7 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 		public String xmlDescriptor() {
 			StringBuilder buf = new StringBuilder();
 			buf.append(SOURCE_LIST_BEGIN);
+			if (optimize) buf.append("<optimize>true</optimize>"); //$NON-NLS-1$
 			buf.append(MODULES_BEGIN);
 			buildItemList(buf, moduleMap);
 			buf.append(MODULES_END);
@@ -238,7 +247,8 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 	private synchronized void checkForErrors() {
 		
 		try {
-			final SourceListBuilder builder = new SourceListBuilder();
+		    boolean optimize = LslPlusPlugin.getDefault().getPreferenceStore().getBoolean(OPTIMIZE);
+			final SourceListBuilder builder = new SourceListBuilder(optimize);
 			project.accept(builder);
 			String descriptor = builder.xmlDescriptor();
 			if (LslPlusPlugin.DEBUG) Util.log("descriptor: " + descriptor); //$NON-NLS-1$
@@ -507,7 +517,7 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 	 * @throws CoreException 
 	 */
 	public String projectSourceList() throws CoreException {
-        final SourceListBuilder builder = new SourceListBuilder();
+        final SourceListBuilder builder = new SourceListBuilder(false);
         project.accept(builder);
         return builder.xmlDescriptor();
 	}
