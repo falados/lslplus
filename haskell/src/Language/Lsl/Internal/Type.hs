@@ -7,6 +7,8 @@ module Language.Lsl.Internal.Type(
     typeOfLSLComponent,
     parseFloat,
     parseInt,
+    parseVector,
+    parseRotation,
     lslValueComponent,
     replaceLslValueComponent,
     lslValString,

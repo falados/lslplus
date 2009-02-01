@@ -5,10 +5,13 @@
 module Language.Lsl.Internal.Compiler(compile,main0) where
 
 import Control.Monad(when)
+import qualified Data.ByteString as B
+import qualified Data.ByteString.UTF8 as UTF8
 import IO(Handle,hGetContents,stdin)
 import Language.Lsl.Internal.DOMSourceDescriptor(sourceFiles)
 import Language.Lsl.Internal.Load(loadModules,loadScripts)
 import Language.Lsl.Render(renderCompiledScript)
+import Language.Lsl.Internal.OptimizerOptions(OptimizerOption(..))
 import Language.Lsl.Syntax(AugmentedLibrary(..),CompiledLSLScript(..),Ctx(..),Func(..),Global(..),
                      GlobDef(..),Handler(..),LModule(..),SourceContext(..),State(..),Validity,Var(..),
                      TextLocation(..),funcName,funcParms,funcType,libFromAugLib)
@@ -26,15 +29,15 @@ emit s = E.emit s []
 
 readCompileEmit :: Handle -> IO ()
 readCompileEmit h =
-    do sourceInfo@(_,scriptInfo) <- readSourceList h
+    do sourceInfo@(optimize,_,scriptInfo) <- readSourceList h
        results@(_,compiledScripts) <- compile sourceInfo
-       renderScriptsToFiles compiledScripts scriptInfo
+       renderScriptsToFiles optimize compiledScripts scriptInfo
        putStr $ formatCompilationSummary results
 
 main0 = readCompileEmit stdin
       
-compile :: ([(String,String)],[(String,String)]) -> IO (AugmentedLibrary,[(String,Validity CompiledLSLScript)])
-compile (moduleInfo,scriptInfo) =
+compile :: (Bool,[(String,String)],[(String,String)]) -> IO (AugmentedLibrary,[(String,Validity CompiledLSLScript)])
+compile (_,moduleInfo,scriptInfo) =
     do augLib <- loadModules moduleInfo
        scripts <- loadScripts (libFromAugLib augLib) scriptInfo
        return (augLib,scripts)
@@ -109,20 +112,20 @@ formatCtx (Just (SourceContext { srcTextLocation = TextLocation { textLine0 = l0
                    ("lineEnd",show l1),
                    ("columnEnd",show c1)])
 
-readSourceList :: Handle -> IO ([(String,String)],[(String,String)])
+readSourceList :: Handle -> IO (Bool,[(String,String)],[(String,String)])
 readSourceList handle = do
     input <- hGetContents handle
     let doc = xmlParse "" input
     return $ processCompileList doc
     
-processCompileList :: Document Posn -> ([(String,String)],[(String,String)])
+processCompileList :: Document Posn -> (Bool,[(String,String)],[(String,String)])
 processCompileList (Document _ _ root _) = 
     case sourceFiles root of
         Left s -> error s
         Right v -> v
 
-renderScriptsToFiles :: [(String,Validity CompiledLSLScript)] -> [(String,String)] -> IO ()
-renderScriptsToFiles compiledScripts pathTable = 
+renderScriptsToFiles :: Bool -> [(String,Validity CompiledLSLScript)] -> [(String,String)] -> IO ()
+renderScriptsToFiles opt compiledScripts pathTable = 
     let scriptsToRender = 
          [(path,script) | (Just path,Right script) <- map (\ (name,vs) -> (lookup name pathTable,vs)) compiledScripts]
         scriptsToRemove =
@@ -131,12 +134,13 @@ renderScriptsToFiles compiledScripts pathTable =
         clockTime <- getClockTime
         calTime <- toCalendarTime clockTime
         let stamp = calendarTimeToString calTime
-        mapM_ (\ (path,script) -> renderScriptToFile stamp path script) scriptsToRender
+        mapM_ (\ (path,script) -> renderScriptToFile opt stamp path script) scriptsToRender
         mapM_ (removeOutputScript) scriptsToRemove
 
-renderScriptToFile stamp path script =
+renderScriptToFile opt stamp path script =
    let newPath = replaceExtension path ".lsl"
-       text = renderCompiledScript stamp (optimizeScript [] script) in writeFile newPath text
+       options = if opt then [OptimizationInlining] else []
+       text = renderCompiledScript stamp (optimizeScript options script) in B.writeFile newPath (UTF8.fromString text)
        
 removeOutputScript path = 
     do exists <- doesFileExist outpath

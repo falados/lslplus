@@ -20,7 +20,7 @@ import Text.XML.HaXml(Element(..),Content(..),Document(..),xmlParse)
 
 -- trace1 x = trace (show x) x
 
-testExecutionElement :: MonadError String m => ElemAcceptor m (([(String,String)],[(String,String)]),[LSLUnitTest])
+testExecutionElement :: MonadError String m => ElemAcceptor m ((Bool,[(String,String)],[(String,String)]),[LSLUnitTest])
 testExecutionElement =
     let f (Elem _ _ contents) =
             do (sources,contents1) <- findElement sourceFilesElement [ e | e@(CElem _ _) <- contents]

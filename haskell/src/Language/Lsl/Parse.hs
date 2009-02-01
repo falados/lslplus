@@ -9,6 +9,8 @@ module Language.Lsl.Parse(
         parseModuleFromStringAQ
     ) where
 
+import qualified Data.ByteString as B
+import qualified Data.ByteString.UTF8 as UTF8
 import Data.Char(digitToInt)
 import Data.List(intersperse)
 import Language.Lsl.Internal.Pragmas(Pragma(..))
@@ -675,7 +677,7 @@ fromParseError err =
             msg)
 
 parseFile p file =
-    do s <- liftIO $ readFile file
+    do s <- (liftIO $ B.readFile file) >>= return . UTF8.toString
        case parser s of
            Left err -> return $ Left (fromParseError err)
            Right x -> return $ Right x

@@ -43,6 +43,7 @@ module Language.Lsl.Syntax (
     goodHandlers,
     libFromAugLib,
     isTextLocation,
+    isCastValid,
     compileLSLScript,
     compileLSLScript',
     compileLibrary,

@@ -118,6 +118,10 @@ validPrimitiveExpr (Lt e0 e1) = validRelExpr e0 e1
 validPrimitiveExpr (Le e0 e1) = validRelExpr e0 e1
 validPrimitiveExpr (Gt e0 e1) = validRelExpr e0 e1
 validPrimitiveExpr (Ge e0 e1) = validRelExpr e0 e1
+validPrimitiveExpr (Cast t e) = do
+    t' <- validPrimitiveCtxExpr e
+    when (not $ isCastValid t' t) $ fail "invalid cast"
+    return t
 validPrimitiveExpr expr = fail "expression not valid in this context"
 
 validPrimEach e0 e1 =
@@ -280,6 +284,29 @@ evalExpr (Lt e0 e1) = evalRelExpr (<) (<) e0 e1
 evalExpr (Le e0 e1) = evalRelExpr (<=) (<=) e0 e1
 evalExpr (Gt e0 e1) = evalRelExpr (>) (>) e0 e1
 evalExpr (Ge e0 e1) = evalRelExpr (>=) (>=) e0 e1
+evalExpr (Cast t e) = do
+    v <- evalCtxExpr e
+    case (t,v) of
+       (LLInteger,IVal i) -> return $ IVal i
+       (LLInteger,FVal f) -> return $ IVal (truncate f)
+       (LLInteger,SVal s) -> return $ IVal (parseInt s)
+       -- TODO: can you cast a key to an int?
+       (LLFloat,FVal f) -> return $ FVal f
+       (LLFloat,IVal i) -> return $ FVal (fromInteger $ toInteger i)
+       (LLFloat,SVal s) -> return $ FVal (parseFloat s)
+       -- TODO: can you cast a key to a float?
+       (LLString,v) -> return $ toSVal v
+       -- TODO: can you cast anything but a string to a key?
+       (LLVector,SVal s) -> return $ parseVector s
+       (LLRot,SVal s) -> return $ parseRotation s
+       (LLList,SVal s) -> return $ LVal [SVal s]
+       (LLKey,SVal s) -> return $ KVal s
+       (LLKey,KVal s) -> return $ KVal s
+       (LLVector, (VVal _ _ _)) -> return $ v
+       (LLRot, (RVal _ _ _ _)) -> return $ v
+       (LLList, LVal l) -> return $ v
+       _ -> fail "invalid cast!"
+       
 evalExpr expr = fail "expression not valid in this context"
 
 evalArithExpr fi ff e0 e1 =

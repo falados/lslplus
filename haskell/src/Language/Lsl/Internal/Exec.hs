@@ -51,7 +51,7 @@ import Language.Lsl.Syntax(Expr(..),
                   predefFuncs,
                   isTextLocation)
 import Language.Lsl.Internal.Type(LSLType(..),LSLValue(..),typeOfLSLComponent,typeOfLSLValue,toFloat,toSVal,
-                lslShowVal,replaceLslValueComponent,vecMulScalar,rotMulVec,
+                lslShowVal,replaceLslValueComponent,vecMulScalar,rotMulVec,parseVector,parseRotation,
                 parseInt,parseFloat,invRot,rotMul,vcross,Component(..),lslValueComponent)
 import Language.Lsl.Internal.Key(nullKey,nextKey)
 import Language.Lsl.Internal.Evaluation(EvalResult(..),Event(..),ScriptInfo(..))
@@ -1044,29 +1044,6 @@ trueCondition (KVal k) = k /= nullKey &&
         "ffffffff-ffff-ffff-ffff-ffffffffffff" -> True
         _ -> False
     where tr c = if c `elem` "0123456789abcdef" then 'f' else c
--- TODO: LSL also will parse hex notation for strings and floats...
-parseVector s =
-    case [(VVal x y z,t) | ("<",t0) <- lex s,
-	                       (x,t1) <- reads t0,
-	                       (",",t2) <- lex t1,
-	 					   (y,t3) <- reads t2,
-						   (",",t4) <- lex t3,
-		                   (z,t5) <- reads t4,
-		                   (">",t) <- lex t5] of
-        [] -> VVal 0.0 0.0 0.0
-        (v,_):_ -> v
-parseRotation s =
-    case [(RVal x y z w,t) | ("<",t0) <- lex s,
-	                       (x,t1) <- reads t0,
-	                       (",",t2) <- lex t1,
-	 					   (y,t3) <- reads t2,
-						   (",",t4) <- lex t3,
-		                   (z,t5) <- reads t4,
-						   (",",t6) <- lex t5,
-		                   (w,t7) <- reads t6,
-		                   (">",t) <- lex t7] of
-        [] -> RVal 0.0 0.0 0.0 0.0
-        (v,_):_ -> v
 
 toLslBool bool = IVal (if bool then 1 else 0)
 evalBinary f = 

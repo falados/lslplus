@@ -123,7 +123,13 @@ renderCtxExprs prefix (e:es) = renderString prefix . renderCtxExpr e . renderCtx
 
 renderExpression (IntLit i) = shows i
 renderExpression (FloatLit f) = shows f
-renderExpression (StringLit s) = shows s
+renderExpression (StringLit s) = renderString ('"':go s)
+     where go [] = "\""
+           go ('\\':s) = '\\':'\\':go s
+           go ('\t':s) = '\\':'t':go s
+           go ('\n':s) = '\\':'n':go s
+           go ('"':s) = '\\':'"':go s
+           go (c:s) = c:go s
 renderExpression (KeyLit k) = shows k
 renderExpression (VecExpr x y z) = 
     renderChar '<' . renderCtxExpr x . renderChar ',' .

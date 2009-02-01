@@ -19,6 +19,7 @@ import Language.Lsl.Parse
 import Language.Lsl.Internal.Constants(allConstants,Constant(..),findConstVal)
 import Language.Lsl.Internal.FuncSigs(funcSigs)
 import Language.Lsl.Internal.InternalLLFuncs(internalLLFuncs,internalLLFuncNames)
+import Language.Lsl.Internal.OptimizerOptions(OptimizerOption(..))
 import Language.Lsl.Syntax(CompiledLSLScript(..),Expr(..),Statement(..),Var(..),
                            Func(..),FuncDec(..),State(..),Ctx(..),Handler(..),
                            Global(..),Component(..),SourceContext(..),rewriteCtxExpr)
@@ -27,14 +28,12 @@ import Language.Lsl.Internal.Pragmas(Pragma(..))
 import Language.Lsl.Internal.Type(LSLValue(..))
 import Language.Lsl.UnitTestEnv(simSFunc)
 
-data OptimizerOption = OptimizationInlining deriving (Show,Eq)
-
 optionInlining = elem OptimizationInlining
 
 -- deriving instance (Show a) => Show (SCC a)
 
 optimizeScript :: [OptimizerOption] -> CompiledLSLScript -> CompiledLSLScript
-optimizeScript options script@(CompiledLSLScript gs fsIn ss) = (CompiledLSLScript gs (simp fsReachable) (simp ss'))
+optimizeScript options script@(CompiledLSLScript gs fsIn ss) = CompiledLSLScript gsReachable fsReachable ss1
    where inline = optionInlining options
          gcs = globalConstants gs fsIn ss
          scc = graphInfo fsIn
@@ -43,19 +42,15 @@ optimizeScript options script@(CompiledLSLScript gs fsIn ss) = (CompiledLSLScrip
          --pure = trace (show pure') pure'
          ifs = [ f | AcyclicSCC f <- scc, inlineable f]  -- inlineables
          nifs = [ f | f <- fsIn, fname f `notElem` (map fname ifs)] -- non-inlineables
-         ss' = if inline then map runInliningOnState ss else ss
+         ss1 = if inline then simp $ map runInliningOnState (simp ss) else ss
          ifs' = foldl (\ fs f -> let f' = runInliningOnFunc funFacts fs gs f in f':fs) [] ifs -- inlineables that have had any inlining done
          nifs' = map (runInliningOnFunc funFacts ifs' gs) nifs -- non-inlineables that have had any inlining done
          fs' = if inline then (nifs' ++ ifs') else fsIn
-         fsReachable = reachableFuncs ss' fs' -- funcs that are still reachable from handlers
+         fsReachable = reachableFuncs ss1 (simp fs') -- funcs that are still reachable from handlers
+         gsReachable = reachableGlobs gs fsReachable ss1 -- globals that are still reachable from handlers/funcs
          simp = if inline then simplify script pure gcs else id
          runInliningOnState s@(State nm hs) = if noinlining nm then s
              else (State nm (map (runInliningOnHandler funFacts ifs' gs) hs))
-          
--- optimizeScript :: CompiledLSLScript -> CompiledLSLScript
--- optimizeScript (CompiledLSLScript gs fs ss) = (CompiledLSLScript gs fs' ss)
---     where usedFuncs = concatMap stateCallsFuncs ss ++ concatMap funcCallsFuncs fs
---           fs' = [ f | f@(Ctx ctx (Func fd _)) <- fs, (ctxItem . funcName) fd `elem` usedFuncs ]
 
 hasPragma p (Ctx (Just SourceContext { srcPragmas = l }) _) | p `elem` l = True
                                                             | otherwise  = False
@@ -143,9 +138,11 @@ data OptimizerState = OptimizerState {
     optAllFuncs :: !(M.Map String (Ctx Func)),
     optFunFacts :: !(M.Map String FunctionFacts),
     optNameIndex :: Int, 
+    optGlobalNames :: !(Set.Set String),
     optVerbotenNames :: !(Set.Set String),
     optLocals :: ![[String]],
-    optRenames :: !(M.Map String String),
+    optInlinerRenames :: ![M.Map String String], -- names that must be renamed in the 'destination' function/handler
+    optRenames :: !(M.Map String String), -- names that must be renamed in the function to-be-inlined
     optRewrites :: !(M.Map String Expr),
     optRetVar :: !(Maybe String),
     optStmts :: ![[Ctx Statement]] }
@@ -155,12 +152,14 @@ type OState a = State.State OptimizerState a
 basicFunctionFacts = M.fromList (zip internalLLFuncNames (repeat (FunctionFacts { isPureFunction = True }))) `M.union`
                      M.fromList [(nm,FunctionFacts False) | (nm,_,_) <- funcSigs]
 
-freshOptimizerState funFacts fs vnames = OptimizerState { 
+freshOptimizerState funFacts fs gnames = OptimizerState { 
     optAllFuncs = M.fromList (map (\ f@(Ctx _ (Func (FuncDec nm _ _) _)) -> (ctxItem nm,f)) fs),
     optFunFacts = funFacts,
     optNameIndex = 0, 
-    optVerbotenNames = (Set.fromList vnames),
+    optGlobalNames = (Set.fromList gnames),
+    optVerbotenNames = Set.empty,
     optLocals = [],
+    optInlinerRenames = [],
     optRenames = M.empty,
     optRewrites = M.empty,
     optRetVar = Nothing,
@@ -216,7 +215,7 @@ renameToNew s = do
    verboten <- isVerboten s
    if verboten 
        then do
-           s' <- mkName "v"
+           s' <- mkName s
            addRename s s'
            return s'
        else do
@@ -224,6 +223,39 @@ renameToNew s = do
            put st { optVerbotenNames = Set.insert s (optVerbotenNames st) }
            return s
    
+pushInlinerScope = do
+    st <- get
+    put st { optInlinerRenames = M.empty : (optInlinerRenames st) }
+popInlinerScope = do
+    st <- get
+    case optInlinerRenames st of
+        [] -> error "cannot pop inliner scope"
+        (top:rest) -> put st { optInlinerRenames = rest }
+        
+renameToNewInInliner s = do
+   --verboten <- isVerboten s
+   verboten <- get >>= return . (Set.member s) . optGlobalNames
+   if verboten 
+       then do
+           s' <- mkName s
+           st <- get
+           case optInlinerRenames st of
+               [] -> error "empty inliner rename stack"
+               (top:rest) -> put st { optInlinerRenames = M.insert s s' top : rest }
+           return s'
+       else do
+           st <- get
+           put st { optVerbotenNames = Set.insert s (optVerbotenNames st) }
+           return s
+   
+inlinerRenamingFor s = do
+        renameStack <- get >>= return . optInlinerRenames
+        return $ renamingFor renameStack s
+   where renamingFor [] s = s
+         renamingFor (top:rest) s = case M.lookup s top of
+             Just s' -> s'
+             Nothing -> renamingFor rest s
+             
 renameVar (Var s t) = do
    s' <- renameToNew s
    return (Var s' t)
@@ -233,13 +265,8 @@ getRewriteInfo = get >>= ( \ st -> return (optRenames st, optRewrites st))
 
 isVerboten s = do
     verbotenNames <- get >>= return . optVerbotenNames
-    return (s `Set.member` verbotenNames)
-
--- simplifyStatement :: Ctx Statement -> Ctx Statement
--- simplifyStatement = everywhere (mkT simp)
---     where simp s@(Compound [Ctx _ (Decl _ _)]) = s
---           simp s@(Compound [s']) = ctxItem s'
---           simp s = s
+    globalNames <- get >>= return . optGlobalNames
+    return (s `Set.member` (verbotenNames `Set.union` globalNames))
           
 inlineProc :: 
     Ctx Func -> -- the function to inline
@@ -268,10 +295,11 @@ mkParmVar ss (Ctx _ v@(Var nm _),arg) = do
         else do
             v' <- renameVar v
             return [nullCtx $ Decl v' $ Just arg]
-   where trace1 s v = trace (s ++ show v) v
-         simpleRef (Ctx _ (Get (_,All))) = True
+   where simpleRef (Ctx _ (Get (_,All))) = True
          simpleRef _                     = False
          
+printStatement s = show s ++ "\n"
+
 inlineFunc :: Ctx Func -> [Ctx Expr] -> OState (Expr,[Ctx Statement])
 inlineFunc f@(Ctx _ (Func (FuncDec _ t _) _)) args 
     | t == LLVoid = error "cannot inline a void function in a context that requires a value (internal error!)"
@@ -304,8 +332,8 @@ inlineStmts endLabel (Return (Just expr):stmts) = do
             return (Do (nullCtx (Set (nullCtx rv,All) (rewriteCtxExpr' renames rewrites expr))):Jump endLabel:stmts')
 inlineStmts endLabel (Decl v mexpr:stmts) = do
     v' <- renameVar v
-    stmts' <- inlineStmts endLabel stmts
     (renames,rewrites) <- getRewriteInfo
+    stmts' <- inlineStmts endLabel stmts
     return (Decl v' (fmap (rewriteCtxExpr' renames rewrites) mexpr):stmts')
 inlineStmts endLabel (Do expr:stmts) = do
     stmts' <- inlineStmts endLabel stmts
@@ -359,12 +387,17 @@ runInliningOnFunc ff fs gs f = if noinlining f then f else
     
 performInliningOnFunc :: Ctx Func -> OState (Ctx Func)
 performInliningOnFunc f@(Ctx ctx (Func (FuncDec nm t parms) stmts)) = do
+        pushInlinerScope
+        parms' <- mapM renameParm parms
         st <- get
-        put st { optVerbotenNames = (Set.fromList verbotenNames `Set.union` (optVerbotenNames st)),
-                 optLocals = [map (\ (Ctx _ v) -> varName v) parms] }
+        put st { optVerbotenNames = Set.fromList verbotenNames, optLocals = [map (\ (Ctx _ v) -> varName v) parms'] }
         stmts' <- mapM performInliningForStmt stmts
-        return (Ctx ctx (Func (FuncDec nm t parms) $ concat stmts'))
+        popInlinerScope
+        return (Ctx ctx (Func (FuncDec nm t parms') $ concat stmts'))
     where verbotenNames = namesDefinedByFunc f
+          renameParm (Ctx _ (Var nm t)) = do
+              nm' <- renameToNewInInliner nm
+              return (nullCtx $ Var nm' t)
     
 runInliningOnHandler :: M.Map String FunctionFacts -> [Ctx Func] -> [Global] -> Handler -> Handler
 runInliningOnHandler ff fs gs h = if noinlining (handlerName h) then h else
@@ -372,12 +405,17 @@ runInliningOnHandler ff fs gs h = if noinlining (handlerName h) then h else
     
 performInliningOnHandler :: Handler -> OState Handler
 performInliningOnHandler h@(Handler nm parms stmts) = do
+        pushInlinerScope
+        parms' <- mapM renameParm parms
         st <- get
-        put st { optVerbotenNames = (Set.fromList verbotenNames `Set.union` (optVerbotenNames st)),
-                 optLocals = [map (\ (Ctx _ v) -> varName v) parms] }
+        put st { optVerbotenNames = Set.fromList verbotenNames, optLocals = [map (\ (Ctx _ v) -> varName v) parms] }
         stmts' <- mapM performInliningForStmt stmts
-        return (Handler nm parms (concat stmts'))
+        popInlinerScope
+        return (Handler nm parms' (concat stmts'))
     where verbotenNames = namesDefinedByHandler h
+          renameParm (Ctx _ (Var nm t)) = do
+              nm' <- renameToNewInInliner nm
+              return (nullCtx $ Var nm' t)
     
 performInliningForStmt :: Ctx Statement -> OState [Ctx Statement]
 performInliningForStmt s@(Ctx _ (Do (Ctx _ (Call cnm exprs)))) = do
@@ -395,12 +433,14 @@ performInliningForStmt s@(Ctx _ (Do expr)) = do
     stmts <- removeOStateStmts
     return (stmts ++ [nullCtx (Do expr')])
 performInliningForStmt s@(Ctx _ (Compound ss)) = do
+    pushInlinerScope
     refreshOState
     st <- get
     let locals = optLocals st
     put st { optLocals = []:locals }
     sss <- mapM performInliningForStmt ss
     put st { optLocals = locals }
+    popInlinerScope
     return [(nullCtx (Compound (concat sss)))]
 performInliningForStmt (Ctx _ (While expr s)) = do
     refreshOState
@@ -414,15 +454,17 @@ performInliningForStmt (Ctx _ (While expr s)) = do
             [] -> [nullCtx $ If expr' (Jump bgnLoop) NullStmt]
             _ -> [nullCtx $ If expr' (Compound (ss ++ [nullCtx $ Jump bgnLoop])) NullStmt]))
 performInliningForStmt s@(Ctx _ NullStmt) = refreshOState >> return [nullCtx NullStmt]
-performInliningForStmt s@(Ctx _ (Decl v Nothing)) = do
+performInliningForStmt s@(Ctx _ (Decl (Var v t) Nothing)) = do
     refreshOState
-    pushLocal $ varName v
-    return [nullCtx (Decl v Nothing)]
-performInliningForStmt s@(Ctx _ (Decl v (Just expr))) = do
+    v' <- renameToNewInInliner v
+    pushLocal $ v'
+    return [nullCtx (Decl (Var v' t) Nothing)]
+performInliningForStmt s@(Ctx _ (Decl (Var v t) (Just expr))) = do
     refreshOState
     (expr',stmts) <- inlineExpr' expr
-    pushLocal $ varName v
-    return (stmts ++ [nullCtx (Decl v (Just expr'))])
+    v' <- renameToNewInInliner v
+    pushLocal v'
+    return (stmts ++ [nullCtx (Decl (Var v' t) (Just expr'))])
 performInliningForStmt s@(Ctx _ (Return Nothing)) = refreshOState >> return [nullCtx (Return Nothing)]
 performInliningForStmt s@(Ctx _ (Return (Just expr))) = do
     refreshOState
@@ -455,8 +497,8 @@ performInliningForStmt (Ctx _ (For ies1 mte ses2 s)) = do
     let iss1 = concat iss1s
     let sss2 = concat sss2s
     case (iss1,tss,sss2,ss) of
-        ([],[],[],[s']) -> return [(nullCtx $ For ies1 mte' ses2 (ctxItem s'))]
-        ([],[],[],_) -> return [(nullCtx $ For ies1 mte' ses2 (Compound ss))]
+        ([],[],[],[s']) -> return [(nullCtx $ For ies1' mte' ses2' (ctxItem s'))]
+        ([],[],[],_) -> return [(nullCtx $ For ies1' mte' ses2' (Compound ss))]
         _ -> return (iss1 ++ (map (nullCtx . Do) ies1') ++ [nullCtx $ Label bgnLoop] ++ rest)
             where rest = case mte' of
                      Nothing -> ss ++ sss2 ++ (map (nullCtx . Do) ses2') ++ [nullCtx $ Jump bgnLoop]
@@ -488,10 +530,12 @@ inlineExpr' expr = do
     return (expr',stmts)
     
 inlineExpr :: Ctx Expr -> OState (Ctx Expr)
-inlineExpr = everywhereM (mkM inlineCall)
+inlineExpr = everywhereM (mkM inlineCall `extM` renameRef)
 
 inlineCall c@(Call (Ctx _ nm) es) = do
     fs <- get >>= return . optAllFuncs
+    tmp <- get >>= return . optInlinerRenames
+    tmp1 <- get >>= return . optRenames
     case M.lookup nm fs of
         Nothing -> return c
         Just f -> do
@@ -500,7 +544,11 @@ inlineCall c@(Call (Ctx _ nm) es) = do
             put st { optStmts = (stmts:(optStmts st)) }
             return e
 inlineCall e = return e
-
+renameRef :: (Ctx String, Component) -> OState (Ctx String,Component)
+renameRef (Ctx ctx nm, v) = do
+    nm' <- inlinerRenamingFor nm
+    return (Ctx ctx nm', v)
+    
 isRelativelyPure :: [String] -> (M.Map String FunctionFacts) -> Ctx Expr -> Bool
 isRelativelyPure locals ff = everything (&&) (True `mkQ` go)
     where
@@ -626,13 +674,13 @@ sccPurity gcs ff scc =
    
 stmtIn sfs s@(Compound _) = (sfPushFrame sfs) >> return s
 stmtIn _ s = return s
-funcDecIn sfs fd@(FuncDec _ _ parms) = (sfPushFrame sfs) >> mapM_ (\ cv -> (sfPushVar sfs) $ (varName . ctxItem) cv) parms >> return fd
+funcDecIn sfs fd@(Func (FuncDec _ _ parms) _) = (sfPushFrame sfs) >> mapM_ (\ cv -> (sfPushVar sfs) $ (varName . ctxItem) cv) parms >> return fd
 stmtOut sfs s@(Compound _) = (sfPopFrame sfs) >> return s
 stmtOut sfs s@(Decl v _) = ((sfPushVar sfs) $ varName v) >> return s
 stmtOut _ s = return s
 handlerDecIn sfs h@(Handler _ parms _) = (sfPushFrame sfs) >> mapM_ (\ cv -> (sfPushVar sfs) $ (varName . ctxItem) cv) parms >> return h
 handlerDecOut sfs h@(Handler _ _ _) = (sfPopFrame sfs) >> return h
-funcDecOut sfs f@(FuncDec _ _ _) = (sfPopFrame sfs) >> return f
+funcDecOut sfs f@(Func (FuncDec _ _ _) _) = (sfPopFrame sfs) >> return f
 
 cvt :: Monad m => (a -> m a) -> b -> a -> m b
 cvt f v x = f x >> return v
@@ -677,6 +725,19 @@ isntConstantM s = everythingTwice (liftM2 (||)) (return False `mkQ` cvt (funcDec
           modified (PostInc (Ctx _ nm,_)) = checkNm nm
           modified _ = return False
 
+reachableGlobs gs fs ss = [ g | g@(GDecl (Var nm _) _) <- gs, (nm `isUsedIn` fs || nm `isUsedIn` ss)]
+
+isUsedIn :: Data a => String -> a -> Bool
+isUsedIn s v = 
+    evalState
+        (everythingTwice (liftM2 (||)) (return False `mkQ` cvt (funcDecIn sfs) False `extQ`
+                                        cvt (stmtIn sfs) False `extQ` used `extQ` cvt (handlerDecIn sfs) False)
+                                       (return False `mkQ` cvt (funcDecOut sfs) False `extQ`
+                                        cvt (handlerDecOut sfs) False `extQ` cvt (stmtOut sfs) False) v) []
+    where sfs = nameStateScopeFuncs
+          used :: (Ctx String,Component) -> NamesState Bool
+          used (Ctx _ nm,_) = (sfVars sfs) >>= return . ((nm == s) &&) . (notElem nm)
+          
 globalConstants :: [Global] -> [Ctx Func] -> [State] -> M.Map String Expr
 globalConstants gs fs ss =
         foldl globalConstant M.empty gs
@@ -713,7 +774,7 @@ data SimplificationInfo = SimplificationInfo {
       siScript :: !CompiledLSLScript,
       siPureFuncs :: !(Set.Set String),
       siConstants :: !(M.Map String Expr),
-      siLocalsInScope :: [[String]]
+      siLocalsInScope :: ![[String]]
     }
 
 simpInfoScopeFuncs = ScopeFuncs {

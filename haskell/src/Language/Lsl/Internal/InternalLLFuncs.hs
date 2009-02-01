@@ -510,9 +510,11 @@ llGetListEntryType _ [LVal l, IVal index] =
         if index < 0 || index >= length l then invalidType
         else let Just v = lookup (typeOfLSLValue $ l !! index) typeCodes in v
 
+elemAtM' i = if i >= 0 then elemAtM i else elemAtM ((-1) - i) . reverse
+
 llList2Float _ [LVal l, IVal index] = 
     continueWith $ FVal $
-        case elemAtM index l of
+        case elemAtM' index l of
             Just (SVal s) -> parseFloat s
             Just (IVal i) -> fromInt i
             Just (FVal f) -> f
@@ -520,7 +522,7 @@ llList2Float _ [LVal l, IVal index] =
 
 llList2Integer _ [LVal l, IVal index] =
     continueWith $ IVal $
-        case elemAtM index l of
+        case elemAtM' index l of
             Just (SVal s) -> parseInt s
             Just (IVal i) -> i
             Just (FVal f) -> truncate f
@@ -528,22 +530,22 @@ llList2Integer _ [LVal l, IVal index] =
 
 llList2Key _ [LVal l, IVal index] =
     continueWith $ 
-        case elemAtM index l of
+        case elemAtM' index l of
             Just v -> let (SVal v') = toSVal v in KVal v'
             _ -> let (Just (SVal v)) = findConstVal "NULL_KEY" in KVal v
 llList2Rot _ [LVal l, IVal index] =
-    continueWith $ case elemAtM index l of
+    continueWith $ case elemAtM' index l of
             Just r@(RVal _ _ _ _) -> r
             _ -> let (Just r) = findConstVal "ZERO_ROTATION" in r
 
 llList2String _ [LVal l, IVal index] =
     continueWith $
-        case elemAtM index l of
+        case elemAtM' index l of
             Nothing -> SVal ""
             Just v -> toSVal v
             
 llList2Vector _ [LVal l, IVal index] =
-    continueWith $ case elemAtM index l of
+    continueWith $ case elemAtM' index l of
             Just v@(VVal _ _ _) -> v
             _ -> let (Just v) = findConstVal "ZERO_VECTOR" in v
             

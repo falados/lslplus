@@ -5,6 +5,7 @@ module Language.Lsl.Internal.DOMProcessing(ElemAcceptor(..),
                          findSimple,
                          findSimpleOrDefault,
                          findValueOrDefault,
+                         findBoolOrDefault,
                          findValue,
                          valueAcceptor, -- String -> ElemAcceptor m t
                          ctxelem,
@@ -116,13 +117,21 @@ findValue name contents =
        value <- readM sval
        return (value,rest)
 
+findBoolOrDefault def name contents =
+    do (sval,rest) <- findOptionalElement (simpleElement name) contents
+       case sval of 
+            Nothing -> return (def,contents)
+            Just "true" -> return (True,rest)
+            Just "false" -> return (False,rest)
+            Just s -> fail ("unable to parse " ++ s)
+            
 findValueOrDefault def name contents =
     do (sval,rest) <- findOptionalElement (simpleElement name) contents
        case sval of
            Nothing -> return (def, contents)
            Just s -> do
                value <- readM s
-               return (value, contents)
+               return (value, rest)
                      
 -- for backwards compatibility
 attrString (AttValue v) = concatMap decode v
