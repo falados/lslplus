@@ -6,6 +6,7 @@ import lslplus.LslPlusPlugin;
 import lslplus.debug.LslLineBreakpoint;
 import lslplus.util.Util;
 
+import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IMarker;
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.runtime.CoreException;
@@ -123,6 +124,7 @@ public class LslPlusEditor extends TextEditor implements SourceViewerConfigurati
      * @param monitor the progress monitor
      */
     public void doSave(IProgressMonitor monitor) {
+        setCharSet();
         super.doSave(monitor);
     }
 
@@ -130,9 +132,18 @@ public class LslPlusEditor extends TextEditor implements SourceViewerConfigurati
      * doSaveAs specialization of the AbstractTextEditor's doSaveAs()...
      */
     public void doSaveAs() {
+        setCharSet();
         super.doSaveAs();
     }
 
+    private void setCharSet() {
+        IFile f = (IFile) getEditorInput().getAdapter(IFile.class);
+        try {
+            f.setCharset("UTF-8", null);
+        } catch (CoreException e) {
+            Util.log(e, "can't set charset");
+        }
+    }
     protected void editorContextMenuAboutToShow(IMenuManager menu) {
         super.editorContextMenuAboutToShow(menu);
         addAction(menu, "ContentAssistProposal"); //$NON-NLS-1$

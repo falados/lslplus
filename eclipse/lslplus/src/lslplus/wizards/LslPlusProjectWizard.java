@@ -48,6 +48,7 @@ public class LslPlusProjectWizard extends Wizard implements INewWizard {
 
 			p.create(desc, monitor);
 			p.open(monitor);
+            p.setDefaultCharset("UTF-8",monitor); //$NON-NLS-1$
 			IProjectDescription description = p.getDescription();
 			String[] natures = description.getNatureIds();
 			String[] newNatures = (String[]) Util.append(natures, new String[] { "lslplus.lslPlusNature" }); //$NON-NLS-1$

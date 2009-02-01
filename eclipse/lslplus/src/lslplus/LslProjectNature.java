@@ -482,6 +482,9 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 					     i.hasNext(); ) {
 						IResource r = (IResource) i.next();
 						r.setDerived(true);
+						if (r instanceof IFile) {
+						    ((IFile)r).setCharset("UTF-8", monitor); //$NON-NLS-1$
+						}
 					}
 					
 					return new Status(IStatus.OK, LSLPLUS, Messages.ProjectNature_MARK_DERIVED_COMPLETE);
