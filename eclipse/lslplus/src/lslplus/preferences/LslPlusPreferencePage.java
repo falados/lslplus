@@ -4,7 +4,11 @@ import java.io.IOException;
 
 import lslplus.LslPlusPlugin;
 import lslplus.LslProjectNature;
+import lslplus.util.Util;
 
+import org.eclipse.core.resources.IProject;
+import org.eclipse.core.resources.ResourcesPlugin;
+import org.eclipse.core.runtime.CoreException;
 import org.eclipse.jface.preference.BooleanFieldEditor;
 import org.eclipse.jface.preference.FieldEditorPreferencePage;
 import org.eclipse.jface.preference.FileFieldEditor;
@@ -36,4 +40,18 @@ public class LslPlusPreferencePage extends FieldEditorPreferencePage implements
                 Messages.getString(LSL_PLUS_PREFERENCE_PAGE_ENABLE_OPTIMIZATIONS), getFieldEditorParent()));
     }
 
+    public boolean performOk() {
+        if (super.performOk()) {
+            IProject[] p = ResourcesPlugin.getWorkspace().getRoot().getProjects();
+            for (int i = 0; i < p.length; i++) {
+                try {
+                    LslProjectNature nature = (LslProjectNature) p[i].getNature(LslProjectNature.ID);
+                    if (nature != null) nature.scheduleBuild();
+                } catch (CoreException e) {
+                    Util.log(e, "problem determining project nature"); //$NON-NLS-1$
+                }
+            }
+            return true;
+        } else return false;
+    }
 }

@@ -469,17 +469,7 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 		}
 		
 		if (checkErrors) {
-		    Util.log("check errors!");
-			WorkspaceJob job = new WorkspaceJob("EvaluateErrors") { //$NON-NLS-1$
-
-				public IStatus runInWorkspace(IProgressMonitor monitor) {
-					checkForErrors();
-					return new Status(IStatus.OK,LSLPLUS, Messages.ProjectNature_OK);
-				}
-				
-			};
-			
-			job.schedule();
+		    scheduleBuild();
 		}
 		
 		final List newDerivedResources = dv.getNewDerivedResources();
@@ -505,6 +495,20 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 			job.schedule();
 		}
 	}
+
+    public void scheduleBuild() {
+        Util.log("check errors!");
+        WorkspaceJob job = new WorkspaceJob("EvaluateErrors") { //$NON-NLS-1$
+
+        	public IStatus runInWorkspace(IProgressMonitor monitor) {
+        		checkForErrors();
+        		return new Status(IStatus.OK,LSLPLUS, Messages.ProjectNature_OK);
+        	}
+        	
+        };
+        
+        job.schedule();
+    }
 	
 	public void setProject(IProject project) {
 		this.project = project;
