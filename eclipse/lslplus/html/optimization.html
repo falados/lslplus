@@ -79,11 +79,12 @@ default {
 would be transformed and optimized into the following LSL script:
 
 <pre>
-// LSL script generated: Sun Feb  1 21:56:48 Eastern Standard Time 2009
+// LSL script generated: Mon Feb  2 22:41:00 Eastern Standard Time 2009
 default {
     state_entry() {
-        llOwnerSay(((string)3));
-        llOwnerSay(((string)89));
+        llOwnerSay("Hello Scripter");
+        llOwnerSay("3");
+        llOwnerSay("89");
         integer prev0 = 1;
         integer prev1 = 1;
         integer i;
@@ -153,10 +154,10 @@ default {
 
 <p>Optimized script:</p>
 <pre>
-// LSL script generated: Sun Feb  1 22:14:14 Eastern Standard Time 2009
+// LSL script generated: Mon Feb  2 22:41:00 Eastern Standard Time 2009
 default {
     state_entry() {
-        llOwnerSay(((string)1.2704931690339714));
+        llOwnerSay("1.270493");
     }
 }
 </pre>
