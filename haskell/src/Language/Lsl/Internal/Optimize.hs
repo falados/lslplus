@@ -23,7 +23,7 @@ import Language.Lsl.Internal.OptimizerOptions(OptimizerOption(..))
 import Language.Lsl.Syntax(CompiledLSLScript(..),Expr(..),Statement(..),Var(..),
                            Func(..),FuncDec(..),State(..),Ctx(..),Handler(..),
                            Global(..),Component(..),SourceContext(..),rewriteCtxExpr)
-import Language.Lsl.Internal.Type(LSLType(..))
+import Language.Lsl.Internal.Type(LSLType(..),toSVal)
 import Language.Lsl.Internal.Pragmas(Pragma(..))
 import Language.Lsl.Internal.Type(LSLValue(..))
 import Language.Lsl.UnitTestEnv(simSFunc)
@@ -928,6 +928,14 @@ simplifyE e@(Call (Ctx _ nm) exprs) =
                             Right (VoidVal,_) -> return e
                             Right (v,_) -> return $ valToExpr v
                         else return e
+simplifyE e@(Cast LLString (Ctx _ (IntLit i))) = return (StringLit (show i))
+simplifyE e@(Cast LLString (Ctx _ (FloatLit f))) = return (StringLit s)
+    where SVal s = toSVal (FVal f')
+          f' :: Float
+          f' = realToFrac f
+simplifyE e@(Cast LLFloat (Ctx _(IntLit i))) = return (FloatLit $ fromIntegral i)
+simplifyE e@(Cast LLInteger (Ctx _ (FloatLit f))) = return (IntLit $ truncate f)
+simplifyE e@(Add (Ctx _ (StringLit s0)) (Ctx _ (StringLit s1))) = return (StringLit (s0 ++ s1))
 simplifyE e = return e
   
 simplify :: Data a => CompiledLSLScript -> Set.Set String -> M.Map String Expr -> a -> a

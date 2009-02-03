@@ -1,5 +1,5 @@
 Name:           LslPlus
-version:        0.2.0
+version:        0.3.0
 Synopsis:	    An execution and testing framework for the Linden Scripting Language (LSL)
 Description:	
 	Provides a framework for executing Linden Scripting Language scripts offline,
@@ -27,14 +27,7 @@ Executable LslPlus
   Main-Is:        LslPlus.hs
   Hs-Source-Dirs: src
   Other-modules: 
-    Language.Lsl.Syntax
-    Language.Lsl.Parse
-    Language.Lsl.QQ
-    Language.Lsl.Sim
-    Language.Lsl.WorldDef
-    Language.Lsl.UnitTest
-    Language.Lsl.UnitTestEnv
-    Language.Lsl.Render
+    Data.Generics.Extras.Schemes
     Language.Lsl.Internal.AccessGenerator
     Language.Lsl.Internal.Animation
     Language.Lsl.Internal.AvEvents
@@ -61,7 +54,9 @@ Executable LslPlus
     Language.Lsl.Internal.MetaData
     Language.Lsl.Internal.NumberParsing
     Language.Lsl.Internal.Optimize
+    Language.Lsl.Internal.OptimizerOptions
     Language.Lsl.Internal.Physics
+    Language.Lsl.Internal.Pragmas
     Language.Lsl.Internal.SHA1
     Language.Lsl.Internal.SimMetaData
     Language.Lsl.Internal.SystemTester
@@ -71,8 +66,16 @@ Executable LslPlus
     Language.Lsl.Internal.Util
     Language.Lsl.Internal.WorldState
     Language.Lsl.Internal.XmlCreate
-    Language.Lsl.Internal.Pragmas
-    Data.Generics.Extras.Schemes
-    Text.ParserCombinators.ParsecExtras.Token
+    Language.Lsl.NewUnitTest
+    Language.Lsl.NewUnitTestEnv
+    Language.Lsl.Parse
+    Language.Lsl.QQ
+    Language.Lsl.Render
+    Language.Lsl.Sim
+    Language.Lsl.Syntax
+    Language.Lsl.UnitTest
+    Language.Lsl.UnitTestEnv
+    Language.Lsl.WorldDef
     Text.ParserCombinators.ParsecExtras.Language
+    Text.ParserCombinators.ParsecExtras.Token
   Ghc-Options: -fwarn-unused-imports
