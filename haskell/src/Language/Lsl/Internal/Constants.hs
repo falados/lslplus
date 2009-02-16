@@ -574,3 +574,10 @@ isConstant s =
     case findConstant s of
         Nothing -> False
         _ -> True
+
+        
+-- non LSL (lslPlus only) constants
+lslPlusAvatarKey = 0
+lslPlusAvatarPos = 1
+lslPlusAvatarRot = 2
+lslPlusAvatarName = 3

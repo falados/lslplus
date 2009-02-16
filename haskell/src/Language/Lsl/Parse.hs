@@ -281,12 +281,12 @@ var = try structAccess
 
 assignment = ctxify $ 
              do v <- var
-                op <- choice [reservedOp' "+=" >> (return $ IncBy),
-                              reservedOp' "-=" >> (return $ DecBy),
-                              reservedOp' "*=" >> (return $ MulBy),
-                              reservedOp' "/=" >> (return $ DivBy),
-                              reservedOp' "%=" >> (return $ ModBy),
-                              reservedOp' "="  >> (return $ Set)] <?> "assignment operator"
+                op <- choice [reservedOp' "+=" >> (return IncBy),
+                              reservedOp' "-=" >> (return DecBy),
+                              reservedOp' "*=" >> (return MulBy),
+                              reservedOp' "/=" >> (return DivBy),
+                              reservedOp' "%=" >> (return ModBy),
+                              reservedOp' "="  >> (return Set)] <?> "assignment operator"
                 e <- expr
                 return $ op v e
 
@@ -554,7 +554,7 @@ handler = choice $ map (\ (n,ts) -> handler' n ts) goodHandlers
 -------------------------------------------------------------
 -- STATE parsing
 
-stateName = choice [reserved "default" >> return "default" , reserved "state" >> identifier >>= return]
+stateName = choice [reserved "default" >> return "default" , reserved "state" >> identifier]
 
 stateDecl = do name <- ctxify stateName
                handlers <- braces $ many handler
@@ -613,7 +613,7 @@ params = commaSep param
 -- IMPORT (meta-lsl directive) parsing
 
 gimport = do reserved "$import" <?> "$import keyword"
-             ids <- (ctxify $ (char '$' >> identifier >>= return . (:[]) . ("$"++)))
+             ids <- (ctxify (char '$' >> identifier >>= return . (:[]) . ("$"++)))
                  <|>(ctxify $ sepBy identifier dot)
              let id = fmap (concat . intersperse ".") ids
              let binding = do id0 <- identifier

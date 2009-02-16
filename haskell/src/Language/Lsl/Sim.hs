@@ -3043,26 +3043,30 @@ avChat range msg key chan = runAndLogIfErr "problem processing chat" () $ do
 
 processAvatarInputEvent k inputEvent = runAndLogIfErr "problem processing event for avatar" () $ do
         av <- getWorldAvatar k
+        let avInfo = [ IVal lslPlusAvatarKey, KVal (avatarKey av), 
+                       IVal lslPlusAvatarPos, ((vec2VVal . avatarPosition) av),
+                       IVal lslPlusAvatarRot, ((rot2RVal . avatarRotation) av),
+                       IVal lslPlusAvatarName, SVal (avatarName av) ]
         flip (maybe (return ())) (avatarEventHandler av) $ (\ (moduleName,state) -> do
             lib <- lift getWLibrary
-            case callAvatarEventProcessor k moduleName inputEvent lib state of
+            case callAvatarEventProcessor k moduleName inputEvent lib state avInfo of
                 Nothing -> return ()
                 Just (Left s) -> throwError s
                 Just (Right (LVal events,result)) -> do
                     mapM_ (putAvatarOutputEvent k) events
                     lift $ setWorldAvatar k (av { avatarEventHandler = Just (moduleName,result) }))
 
-avEventProcCallInfo (AvatarOwnerSay key msg) = ("onOwnerSay",[SVal key, SVal msg])
-avEventProcCallInfo (AvatarHearsChat name key msg) = ("onChat",[SVal name, SVal key, SVal msg])
-avEventProcCallInfo (AvatarDialog msg buttons chan source) = ("onDialog",[SVal msg, LVal $ map SVal buttons, IVal chan, SVal source])
-avEventProcCallInfo (AvatarLoadURL msg url) = ("onLoadURL",[SVal msg, SVal url])
-avEventProcCallInfo (AvatarMapDestination simName position) = ("onMapDestination",[SVal simName, vec2VVal position])
-callAvatarEventProcessor k moduleName avEvent lib state = 
+avEventProcCallInfo (AvatarOwnerSay key msg) avInfo = ("onOwnerSay",[SVal key, SVal msg, LVal avInfo])
+avEventProcCallInfo (AvatarHearsChat name key msg) avInfo = ("onChat",[SVal name, SVal key, SVal msg, LVal avInfo])
+avEventProcCallInfo (AvatarDialog msg buttons chan source) avInfo = ("onDialog",[SVal msg, LVal $ map SVal buttons, IVal chan, SVal source, LVal avInfo])
+avEventProcCallInfo (AvatarLoadURL msg url) avInfo = ("onLoadURL",[SVal msg, SVal url, LVal avInfo])
+avEventProcCallInfo (AvatarMapDestination simName position) avInfo = ("onMapDestination",[SVal simName, vec2VVal position, LVal avInfo])
+callAvatarEventProcessor k moduleName avEvent lib state avInfo = 
     case hasFunc lib (moduleName,funcName) of
         Left s -> Just (Left s)
         Right True -> Just $ simFunc lib (moduleName, funcName) state args
         Right False -> Nothing
-    where (funcName,args) = avEventProcCallInfo avEvent
+    where (funcName,args) = avEventProcCallInfo avEvent avInfo
     
 putAvatarOutputEvent k (SVal s) =
     case reads s of

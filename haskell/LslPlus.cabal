@@ -1,5 +1,5 @@
 Name:           LslPlus
-version:        0.3.1
+version:        0.3.2
 Synopsis:	    An execution and testing framework for the Linden Scripting Language (LSL)
 Description:	
 	Provides a framework for executing Linden Scripting Language scripts offline,
@@ -66,8 +66,6 @@ Executable LslPlus
     Language.Lsl.Internal.Util
     Language.Lsl.Internal.WorldState
     Language.Lsl.Internal.XmlCreate
-    Language.Lsl.NewUnitTest
-    Language.Lsl.NewUnitTestEnv
     Language.Lsl.Parse
     Language.Lsl.QQ
     Language.Lsl.Render

@@ -3,6 +3,7 @@ module Language.Lsl.UnitTestEnv(
     simFunc,
     simSFunc,
     hasFunc,
+    hasFunc1,
     SimpleWorld,
     TestEvent(..),
     ExecutionInfo(..),
@@ -97,7 +98,7 @@ doPredef n i a =
               if allowed then 
                   do (_,rt,_) <- ctx ("finding predef  " ++ n) $ 
                                   findM (\ (n',_,_) -> n' == n) funcSigs
-                     return $ (EvalIncomplete, defaultValue rt)
+                     return (EvalIncomplete, defaultValue rt)
               else fail ("unexpected call: " ++ renderCall n a)
               
 mkScript (LModule globdefs vars) =
@@ -197,6 +198,22 @@ breakpointsFromCommand (ExecStep bps) = bps
 breakpointsFromCommand (ExecStepOver bps) = bps
 breakpointsFromCommand (ExecStepOut bps) = bps
 
+hasFunc1 :: [(String,Validity LModule)] -> (String,String) -> [LSLType] -> Either String Bool
+hasFunc1 lib (mn,fn) parms =
+        case converted of
+            Left s -> Left ("no such module: " ++ mn)
+            Right (Left s) -> Left ("no such module: " ++ mn)
+            Right (Right (script,path)) ->
+                case findFunc fn (map ctxItem $ scriptFuncs script) of
+                    Nothing -> Right False
+                    Just (Func (FuncDec _ _ ps) _) ->
+                        if parms == map (varType . ctxItem) ps 
+                            then Right True 
+                            else Left ("function " ++ fn ++ " has incorrect parameters")
+    where converted = evalState (runErrorT (convertEntryPoint (ModuleFunc mn fn))) world
+          world = SimpleWorld { maxTick = 10000, tick = 0, msgLog = [], wScripts = [], wLibrary = lib, 
+                                expectations = FuncCallExpectations Nice [], breakpointManager = emptyBreakpointManager }
+                                
 hasFunc :: [(String,Validity LModule)] -> (String,String) -> Either String Bool
 hasFunc lib (moduleName,functionName) =
         case converted of

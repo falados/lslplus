@@ -24,7 +24,7 @@ testElement =
                 (er,contents5) <- findElement expectedReturnElement contents4
                 (gb,contents6) <- findElement initialBindingsElement contents5
                 (fb,[]) <- findElement finalBindingsElement contents6
-                return $ LSLUnitTest {
+                return LSLUnitTest {
                         unitTestName = nm,
                         entryPoint = ep,
                         initialGlobs = gb,
@@ -136,7 +136,7 @@ expectationsElement =
                       "normal" -> return Normal
                       s -> fail ("illegal mode " ++ s)
           (calls,[]) <- findElement callsElement contents1
-          return $ FuncCallExpectations {
+          return FuncCallExpectations {
                   expectationMode = mode,
                   callList = filter (not . null . fst . fst) calls
               }

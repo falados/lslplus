@@ -302,9 +302,9 @@ evalExpr (Cast t e) = do
        (LLList,SVal s) -> return $ LVal [SVal s]
        (LLKey,SVal s) -> return $ KVal s
        (LLKey,KVal s) -> return $ KVal s
-       (LLVector, (VVal _ _ _)) -> return $ v
-       (LLRot, (RVal _ _ _ _)) -> return $ v
-       (LLList, LVal l) -> return $ v
+       (LLVector, (VVal _ _ _)) -> return v
+       (LLRot, (RVal _ _ _ _)) -> return v
+       (LLList, LVal l) -> return v
        _ -> fail "invalid cast!"
        
 evalExpr expr = fail "expression not valid in this context"

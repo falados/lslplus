@@ -1164,7 +1164,7 @@ compileModule m@(LModule globs freevars) = do
         [] -> do
             globals <- get'vsGlobals
             funcs <- get'vsFuncs
-            return $ Right $ (globals,funcs)
+            return $ Right (globals,funcs)
         _ -> return $ Left errs
 
 -- this function isn't partiuclarly efficient!

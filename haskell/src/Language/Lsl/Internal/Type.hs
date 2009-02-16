@@ -213,9 +213,9 @@ lslValueElement =
                 "key" -> simple e >>= return . KVal
                 "int" -> simple e >>= readM >>= return . IVal
                 "float" -> simple e >>= readM >>= return . FVal
-                "vector" -> acceptVector e >>= return
-                "rotation" -> acceptRotation e >>= return
-                "list" -> acceptLslList e >>= return
+                "vector" -> acceptVector e
+                "rotation" -> acceptRotation e
+                "list" -> acceptLslList e
                 _ -> fail "unrecognized value element"
     in ElemAcceptor "value" f
  

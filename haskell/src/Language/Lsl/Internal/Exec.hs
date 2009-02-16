@@ -105,7 +105,7 @@ executeLsl img oid pid sid pkey perfAction log qtick utick chkBp queue maxTick =
         result <- (runEval $ evalScript maxTick queue) state
         case result of
             (Left s,_) -> return $ Left s
-            (Right queue',evalState) -> return $ Right $ (scriptImage evalState, queue')
+            (Right queue',evalState) -> return $ Right (scriptImage evalState, queue')
 
 -- The state of evaluation for a script.
 data EvalState m a = EvalState {
@@ -545,7 +545,7 @@ unwindToLabel name =
                    [] -> fail ("label " ++ name ++ " not found")
                    ((m,l):ss') ->
                        case findLBlock name l of
-                           Just (LBlock _ stmts) -> return $ (n,stmts)
+                           Just (LBlock _ stmts) -> return (n,stmts)
                            Nothing ->
                                do setCallStack (frame { frameStacks = (ss',es) }:frames)
                                   f (n + 1)
@@ -657,7 +657,7 @@ evalScript maxTick queue =
                                       if curState /= newState
                                           -- the event queue gets cleared, with the state exit/entry events added.
                                           then return [Event "state_exit" [] $ M.singleton "last_state" (SVal curState),
-                                                       Event "state_entry" [] $ M.empty]
+                                                       Event "state_entry" [] M.empty]
                                           else return queue
                                EvalComplete _ -> setExecutionState Waiting >> return queue
                                YieldTil i -> setExecutionState (SleepingTil i) >> return queue
@@ -735,7 +735,7 @@ eval' =
                                       Nothing -> (IntLit 1)
                                       Just expr2 -> ctxItem expr2
                       pushElement (EvLoop expr (mexpr3) stmt)
-                      pushElement (EvExpr $ expr)
+                      pushElement (EvExpr expr)
                       pushElements [EvDiscard, EvExpr (ListExpr mexpr1)]
                       continue
                EvStatement (Compound ss) ->

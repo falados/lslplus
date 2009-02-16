@@ -542,7 +542,7 @@ worldElement =
         sliceSize <- readM sliceSizeStr
         (m,keyIndex) <- lift SM.get
         let webHandling = if isNothing handler then WebHandlingByDoingNothing else WebHandlingByFunction
-        return $ (FullWorldDef maxTime sliceSize webHandling handler objects prims avatars (defaultRegions "") keyIndex)
+        return (FullWorldDef maxTime sliceSize webHandling handler objects prims avatars (defaultRegions "") keyIndex)
     in ElemAcceptor "world-def" f
     
 activeScriptsElement :: ElemAcceptor KeyManagerM [((String,String),String)]
@@ -555,7 +555,7 @@ activeScriptElement = ElemAcceptor "script" $
             realPrimKey <- findRealKey primKey
             (scriptName, c2) <- findSimple "scriptName" c1
             (scriptId, []) <- findSimple "scriptId" c2
-            return $ ((realPrimKey,scriptName), scriptId)
+            return ((realPrimKey,scriptName), scriptId)
             
 objectsElement :: ElemAcceptor KeyManagerM [LSLObject]
 objectsElement = elementList "objects" objectElement
@@ -595,7 +595,7 @@ primElement = ElemAcceptor "prim" $
             (permissions, c16) <- findOrDefault [0] (elementList "permissions" (valueAcceptor "int")) c15
             (dropAllowed,c17) <- findValueOrDefault False "dropAllowed" c16
             (inventory,[]) <- findOrDefault [] (elementListWith "inventory" acceptInventoryItem) c17
-            return $ Prim { primName = name, 
+            return Prim {   primName = name, 
                             primKey = realKey, 
                             primParent = Nothing,
                             primDescription = description,
@@ -689,7 +689,7 @@ faceAcceptor s = ElemAcceptor s $
             (fullbright, c5) <- findValueOrDefault False "fullbright" c4
             (textureMode, c6) <- findValueOrDefault 0 "textureMode" c5
             (textureInfo, []) <- findOrDefault defaultTextureInfo (textureInfoAcceptor "textureInfo") c6
-            return $ PrimFace {
+            return  PrimFace {
                     faceAlpha = alpha,
                     faceColor = color,
                     faceShininess = shininess,
@@ -706,7 +706,7 @@ textureInfoAcceptor s = ElemAcceptor s $
         (repeats,c2) <- findOrDefault (1.0,1.0,1.0) (vecAcceptor "repeats") c1
         (offsets,c3) <- findOrDefault (0.0,0.0,0.0) (vecAcceptor "offsets") c2
         (rotation,[]) <- findValueOrDefault 0.0 "rotation" c3
-        return $ TextureInfo {
+        return TextureInfo {
                 textureKey = name,
                 textureRepeats = repeats,
                 textureOffsets = offsets,
@@ -722,7 +722,7 @@ flexibilityAcceptor s = ElemAcceptor s $
         (wind,c4) <- findValueOrDefault 0.0 "wind" c3
         (tension,c5) <- findValueOrDefault 1.0 "tension" c4
         (force, []) <- findOrDefault (0.0,0.0,0.0) (vecAcceptor "force") c5
-        return $ Flexibility {
+        return Flexibility {
                 flexSoftness =  softness,
                 flexGravity = gravity,
                 flexFriction = friction,
@@ -738,7 +738,7 @@ lightAcceptor s = ElemAcceptor s $
         (intensity,c2) <- findValueOrDefault 1.0 "intensity" c1
         (radius,c3) <- findValueOrDefault 10.0 "radius" c2
         (falloff,[]) <- findValueOrDefault 1.0 "falloff" c3
-        return $ LightInfo {
+        return LightInfo {
                 lightColor = color,
                 lightIntensity = intensity,
                 lightRadius = radius,
@@ -763,7 +763,7 @@ primTypeAcceptor s = ElemAcceptor s $
         (skew, c13) <- findValueOrDefault 0.0 "skew" c12
         (sculptTexture, c14) <- findOptionalElement (simpleElement "sculptTexture") c13
         (sculptType, []) <- findValueOrDefault 0 "sculptType" c14
-        return $ PrimType {
+        return PrimType {
                    primVersion = version, -- 1 or 9
                    primTypeCode = typeCode,
                    primHoleshape = holeshape,
@@ -804,7 +804,7 @@ vecAcceptor s = ElemAcceptor s $
         (x,c1) <- findValue "x" (elementsOnly contents)
         (y,c2) <- findValue "y" c1
         (z,[]) <- findValue "z" c2
-        return $ (x,y,z)
+        return (x,y,z)
         
 rotAcceptor s = ElemAcceptor s $
     \ (Elem _ _ contents) -> do
@@ -812,10 +812,10 @@ rotAcceptor s = ElemAcceptor s $
         (y,c2) <- findValue "y" c1
         (z,c3) <- findValue "z" c2
         (s,[]) <- findValue "s" c3
-        return $ (x,y,z,s)
+        return (x,y,z,s)
         
 regionAcceptor s = ElemAcceptor s $
     \ (Elem _ _ contents) -> do
         (x,c1) <- findValue "x" (elementsOnly contents)
         (y,[]) <- findValue "y" (c1)
-        return $ (x,y)
+        return (x,y)
