@@ -2,7 +2,7 @@
 <feature
       id="lslplus-part-win32-x86"
       label="Lslplus_part_win32_x86"
-      version="0.10.0"
+      version="0.10.1"
       os="win32"
       arch="x86">
 

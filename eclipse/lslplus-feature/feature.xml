@@ -2,7 +2,7 @@
 <feature
       id="lslplus"
       label="Lslplus"
-      version="0.10.0">
+      version="0.10.1">
    <install-handler library="" handler=""/>
 
    <description>

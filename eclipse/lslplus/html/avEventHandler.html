@@ -23,31 +23,49 @@ prim has taken the controls of a particular avatar and the avatar changes its co
 <tr><th>Event</th><th>Event Handler Entry Point</th><th>Notes</th></tr>
 <tr>
 <td>&quot;Owner Say&quot;</td>
-<td>list <em>onOwnerSay</em>(string primKey, string message)</td>
+<td>list <em>onOwnerSay</em>(string primKey, string message, list avinfo)</td>
 <td>Triggered when a script in a prim owned by the avatar calls <em>llOwnerSay</em></td>
 </tr>
 <tr>
 <td>&quot;Chat&quot;</td>
-<td>list <em>onChat</em>(string name, string chatterKey, string message)</td>
+<td>list <em>onChat</em>(string name, string chatterKey, string message, list avinfo)</td>
 <td>Triggered when any public (channel 0) chat occurs within range of the avatar.</td>
 </tr>
 <tr>
 <td>&quot;Load URL&quot;</td>
-<td>list <em>onLoadURL</em>(string message, string url)</td>
+<td>list <em>onLoadURL</em>(string message, string url, list avinfo)</td>
 <td>When <em>llLoadURL</em> is called for the avatar/agent.</td>
 </tr>
 <tr>
 <td>&quot;Dialog&quot;</td>
-<td>list <em>onDialog</em>(string message, list buttons, integer chan, string source)</td>
+<td>list <em>onDialog</em>(string message, list buttons, integer chan, string source, list avinfo)</td>
 <td>Triggered when <em>llDialog</em> is called.</td>
 </tr>
 <tr>
 <td>&quot;Map Destination&quot;</td>
-<td>list <em>onMapDestination</em>(string simName, vector position)</td>
+<td>list <em>onMapDestination</em>(string simName, vector position, list avinfo)</td>
 <td>Triggered when <em>llMapDestination</em> is called.</td>
 </tr>
 </table>
 
+<p>The <em>avInfo</em> parameter to the each entry point will contain a list of avatar 
+properties.  The list is of the format [ &lt;property-id&gt;, &lt;property&gt;, 
+&lt;property-id&gt;, &lt;property&gt;...],
+where <property-id> is an integer specifying which property follows in the list, and the property
+is a value (a key, a string, a vector, etc., depending on the property).  The following properties
+are currently supported:</p>
+
+<ul>
+<li>LSLPLUS_AVATAR_KEY (0): the key of the avatar on which the event was triggered.</li>
+<li>LSLPLUS_AVATAR_POS (1): the position (vector) of the avatar.</li>
+<li>LSLPLUS_AVATAR_ROT (2): the rotation (quaternion) of the avatar.</li>
+<li>LSLPLUS_AVATAR_NAME (3): the name of the avatar.</li>
+</ul>
+<p>These constants are defined in the built-in <a href="avEventGen.html">Avatar Event Generator Module</a>.
+This list argument is extensible: later versions of LSL Plus may add additional values to the list,
+which should not impact event handlers written for earlier versions of LSL Plus.  Event handlers 
+written for versions of LSL Plus for which this final <em>avinfo</em> argument should also continue
+to work (this final argument is optional).</p>
 <p>
 An event handler entry point returns a <em>list</em> of <em>string</em> values, each value representing 
 a new event to trigger.  For example, an event handler could decide to cause the avatar to touch a prim
@@ -62,11 +80,11 @@ $module
 
 $import $avEventGen (); // must import this built-in module
 
-list onOwnerSay(string key, string message) {
+list onOwnerSay(string key, string message, list avinfo) {
     return [mkTouch(key, 1.0)]; // touch the prim for 1 second
 }
 
-list onChat(string name, string key, string message) {
+list onChat(string name, string key, string message, list avinfo) {
 	return [mkPay(key, 5),mkSay(0,"hello")]; // pay a prim, say "hello"
 }
 </pre>
