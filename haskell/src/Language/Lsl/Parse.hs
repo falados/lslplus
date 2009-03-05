@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -XDeriveDataTypeable #-}
+{-# OPTIONS_GHC -XQuasiQuotes #-}
 module Language.Lsl.Parse(
         parseScript,
         parseModule,
@@ -11,6 +13,7 @@ module Language.Lsl.Parse(
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.UTF8 as UTF8
+import Data.Data
 import Data.Char(digitToInt)
 import Data.List(intersperse)
 import Language.Lsl.Internal.Pragmas(Pragma(..))
@@ -20,8 +23,8 @@ import Text.ParserCombinators.Parsec hiding (State)
 import qualified Text.ParserCombinators.ParsecExtras.Token as P
 import Text.ParserCombinators.ParsecExtras.Language( javaStyle, emptyDef )
 import Text.ParserCombinators.Parsec.Error
-import Control.Monad.Error(liftIO)
-import Control.Monad.Trans(MonadIO)
+import Text.ParserCombinators.Parsec.Pos
+import Text.Here
 
 import Debug.Trace
 
@@ -133,17 +136,18 @@ commaSep1        = P.commaSep1 lexer
 
 decimalFraction w = do char '.'
                        fracPart True w
-                
+                       
 fracPart reqDigit w = do digits <- (if reqDigit then many1 else many) digit <?> "fractional part of decimal"
                          p <- option 1.0 expon
                          return $ p * (w + (foldr (\ b d -> (b + d) / 10.0) 0 $ map (fromIntegral.digitToInt) digits))
 
+expon :: GenParser Char st Double
 expon = do oneOf "eE"
            s <- option '+' (oneOf "+-")
            let k x = if s == '+' then x else 1/x
            digits <- many1 digit <?> "exponent"
            let p = foldl (\ b d -> b * 10 + d) 0 $ map digitToInt digits
-           return ((k (10^p))::Float)
+           return (k (10^p))
 
 hex = do oneOf "xX"
          digits <- many1 hexDigit <?> "hex digit"
@@ -157,6 +161,7 @@ hex = do oneOf "xX"
 naturalOrFloat = do v <- natOrFloat <?> "number"
                     whiteSpace
                     return v
+
 natOrFloat =  (decimalFraction 0.0 >>= return . Right)
            <|> do char '0'
                   option  (Left 0) prefZeroNum
@@ -165,6 +170,7 @@ natOrFloat =  (decimalFraction 0.0 >>= return . Right)
 prefZeroNum = (hex >>= return . Left)
           <|> (decimalFraction 0.0 >>= return . Right)
           <|> decimalOrFloat
+          
 decimalOrFloat =
     do wholeDigits <- many1 digit <?> "number"
        let w = foldl (\ b d -> b * 10 + d) 0 $ map digitToInt wholeDigits
@@ -300,32 +306,6 @@ listExpr = do whiteSpace
               exprs <- (brackets $ commaSep expr) <?> "list expression"
               return $ ListExpr exprs
               
--- structExpr = do  whiteSpace
---                  char '<' <?> "vector/rotation expression"
---                  whiteSpace
---                  e1 <- expr
---                  mtrace "structExpr:1 " e1
---                  char ','
---                  whiteSpace
---                  e2 <- expr
---                  mtrace "structExpr:2 " e2
---                  char ','
---                  whiteSpace
---                  e3 <- expr
---                  mtrace "structExpr:3 " e3
---                  return (e1,e2,e3)
--- vecRotExpr = do  (x,y,z) <- structExpr
---                  mtrace "vec/rot" "hi"
---                  (do char '>'
---                      whiteSpace
---                      return $ VecExpr x y z) <|> 
---                         (do char ',' 
---                             whiteSpace
---                             e <- expr 
---                             char '>'
---                             whiteSpace
---                             return $ RotExpr x y z e)
-
 -- there's a conflict between a relational expression embedded in the last component of a vector/rotation and the
 -- the normal end of the expression... in particular:
 -- v = <1,1,1 > -<1,2,3>>; 
@@ -578,6 +558,8 @@ func t id pragmas pos0 = do ps <- parens params
                             stmts <- braces statements
                             pos1 <- getPosition
                             return $ GF $ Ctx (pos2Ctx (pos0, pos1) pragmas) $ Func (FuncDec id t ps) stmts
+---------------------------------------------------------------
+-- GLOBAL VARIABLES parsing
 gvar ctx t (Ctx _ id) = do mexpr <- option Nothing (reservedOp' "=" >> expr >>= return . Just)
                            semi
                            return $ GV (Ctx ctx (Var id t)) mexpr
@@ -590,25 +572,6 @@ param = ctxify $
            return $ Var id t
 params = commaSep param
 
--- function = do (t,id,ps) <- try $ do t <- option LLVoid typeName <?> "type name"
---                                     id <- ctxify identifier <?> "function name"
---                                     ps <- parens params
---                                     return (t,id,ps)
---               stmts <- braces statements
---               return $ GF $ Func (FuncDec id t ps) stmts
----------------------------------------------------------------
--- GLOBAL VARIABLES parsing
-
--- globals allow no initialization or initialization by 'constant' expressions... 
--- we can allow any expressions though and have semantic analysis catch problems
-
--- globvar = do var <- ctxify $ do
---                  t <- typeName <?> "type name"
---                  id <- identifier
---                  return (Var id t)
---              mexpr <- option Nothing (reservedOp "=" >> expr >>= return.Just)
---              semi
---              return $ GV var mexpr
 ----------------------------------------------------------------
 -- IMPORT (meta-lsl directive) parsing
 
@@ -624,10 +587,10 @@ gimport = do reserved "$import" <?> "$import keyword"
              prefix <- option "" identifier
              semi
              return $ GI id bindings prefix
-----------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
 -- all globals parsing             
-
-globals = many $ choice [gimport,varOrFunc]
+global = choice [gimport,varOrFunc]
+globals = many global
 
 lslParser = do whiteSpace
                globs <- globals
@@ -641,6 +604,131 @@ moduleParser = do whiteSpace
                   globs <- globals
                   eof
                   return $ LModule globs freevars
+
+-- error recovering parser?
+data PResult a = PResult {
+    resultInput :: !String,
+    resultPosition :: !SourcePos,
+    resultItem :: !a }
+
+stateInitial = do
+    name <- ctxify stateName
+    lexeme (char '{')
+    hs <- many $ try handler
+    return (State name hs)
+
+withRest a p = do
+    setPosition p
+    v <- a
+    st <- getParserState
+    return PResult { resultInput = stateInput st, resultPosition = statePos st, resultItem = v }
+
+parsePartialInitial = withRest $ do
+    whiteSpace
+    name <- ctxify stateName
+    lexeme (char '{')
+    hs <- many $ try handler
+    return (State name hs)
+-- parse as many globals then states without failing
+parseGreedy1 = withRest $
+    do whiteSpace
+       gs <- many $ try global
+       ss <- many $ try stateDecl
+       return (gs,ss)
+-- parse one global or state
+parseStrict1 = withRest $
+    do whiteSpace
+       v <- choice [global >>= return . Left, stateDecl >>= return . Right]
+       return v
+parsePartial = withRest $ do
+    do whiteSpace
+       name <- ctxify stateName
+       lexeme (char '{')
+       hs <- many $ try handler
+       return (State name hs)
+parseResume = withRest (
+    (do whiteSpace
+        hs <- many $ try handler
+        lexeme (char '}')
+        ss <- many $ try stateDecl
+        return (hs,ss)) <|> -- failed to find end of state
+    (do whiteSpace
+        s <- stateDecl
+        ss <- many $ try stateDecl
+        return ([],s:ss)))
+parseGreedy2 = withRest $
+    do whiteSpace
+       many $ try stateDecl
+parseStrict2 = withRest stateDecl
+
+anotherParser srcName string = goGreedy1 False ([],[],[]) (initialPos "") string
+    where doParse p pos = runParser (p pos) newNoAQState srcName
+          goGreedy1 _ (gs,ss,errs) pos [] = (LSLScript gs ss, reverse errs)
+          goGreedy1 skipErr (gs,ss,errs) pos s =
+              case doParse parseGreedy1 pos s of
+                 Left err -> error ("the greedy parser should never return an error, but returned: " ++ show err)
+                 Right (PResult [] _ (gs',ss')) -> (LSLScript (gs ++ gs') (ss ++ ss'),errs)
+                 Right (PResult rest pos' (gs',ss')) -> goStrict1 False (gs ++ gs',ss ++ ss',errs) pos' rest
+          goStrict1 skipErr (gs,ss,errs) _ [] = (LSLScript gs ss,reverse errs)
+          goStrict1 skipErr (gs,ss,errs) pos s@(c:cs) = 
+              case doParse parseStrict1 pos s of
+                 Left err -> goPartial1 True (gs,ss,if skipErr then errs else err:errs) pos s
+                 Right (PResult rest pos' (Left g)) -> goGreedy1 False (gs ++ [g],ss,errs) pos' rest
+                 Right (PResult rest pos' (Right s)) -> goGreedy2 False (gs,ss ++ [s], errs) pos' rest
+          goPartial1 skipErr (gs,ss,errs) _ [] = (LSLScript gs ss,reverse errs)
+          goPartial1 skipErr (gs,ss,errs) pos s@(c:cs) =
+              case doParse parsePartial pos s of
+                  Left err -> goStrict1 True (gs,ss,if skipErr then errs else err:errs) (updatePosChar pos c) cs
+                  Right (PResult rest pos' s) -> goResume True s (gs,ss, errs) pos' rest
+          goResume skipErr state (gs,ss,errs) _ [] = (LSLScript gs (ss ++ [state]),reverse errs)
+          goResume skipErr state@(State nm hs) (gs,ss,errs) pos s@(c:cs) =
+              case doParse parseResume pos s of
+                  Left err -> goResume True state (gs,ss,if skipErr then errs else err:errs) (updatePosChar pos c) cs
+                  Right (PResult rest pos' (hs',ss')) -> goGreedy2 False (gs,ss ++ (State nm (hs ++ hs'):ss'),errs) pos' rest
+          goGreedy2 skipErr (gs,ss,errs) _ [] = (LSLScript gs ss,reverse errs)
+          goGreedy2 skipErr (gs,ss,errs) pos s =
+              case doParse parseGreedy2 pos s of
+                 Left err -> error ("the greedy parser should never return an error, but returned: " ++ show err)
+                 Right (PResult [] _ ss') -> (LSLScript gs (ss ++ ss'),reverse errs)
+                 Right (PResult rest pos' ss') -> goStrict2 True (gs,ss ++ ss',errs) pos' rest
+          goStrict2 skipErr (gs,ss,errs) _ [] = (LSLScript gs ss,reverse errs)
+          goStrict2 skipErr (gs,ss,errs) pos s@(c:cs) =
+              case doParse parseStrict2 pos s of
+                  Left err -> goPartial2 True (gs,ss,if skipErr then errs else err:errs) pos s
+                  Right (PResult rest pos' s) -> goGreedy2 False (gs,ss ++ [s],errs) pos rest
+          goPartial2 skipErr (gs,ss,errs) _ [] = (LSLScript gs ss,reverse errs)
+          goPartial2 skipErr (gs,ss,errs) pos s@(c:cs) =
+              case doParse parsePartial pos s of
+                  Left err -> goStrict2 True (gs,ss,if skipErr then errs else err:errs) (updatePosChar pos c) cs
+                  Right (PResult rest pos' state) -> goResume True state (gs,ss,errs) pos' rest
+ 
+anotherModuleParser srcName string = goStart string
+    where doParse p pos = runParser (p pos) newNoAQState srcName
+          startPos = initialPos ""
+          goStart s =
+              case doParse parseStart startPos s of
+                  Left err -> goStrict True ([],[],[err]) startPos s
+                  Right (PResult rest pos freevars) -> goGreedy False (freevars,[],[]) pos rest
+          goGreedy _ (fv,gs,errs) _ [] = (LModule gs fv, errs)
+          goGreedy skip (fv,gs,errs) pos s =
+              case doParse parseGreedy pos s of
+                  Left err -> error ("the greedy parser should never return an error, but returned: " ++ show err)
+                  Right (PResult [] _ gs') -> (LModule gs fv, reverse errs)
+                  Right (PResult rest pos' gs') -> goStrict False (fv,gs ++ gs',errs) pos' rest
+          goStrict skip (fv,gs,errs) pos [] = (LModule gs fv, reverse errs)
+          goStrict skip (fv,gs,errs) pos s@(c:cs) = 
+              case doParse parseStrict pos s of
+                  Left err -> goStrict True (fv,gs,if skip then errs else err:errs) (updatePosChar pos c) cs
+                  Right (PResult rest pos' gs') -> goGreedy False (fv,gs ++ [gs'], errs) pos' rest
+          parseGreedy = withRest $ many (try global)
+          parseStrict = withRest global
+          parseStart = withRest $ do
+              whiteSpace
+              reserved "$module"
+              option [] $ parens params
+              
+          
+-----------------------------------------------------------------------------
 
 parseFromString parser string =
     case runParser parser newNoAQState "" string of
@@ -661,7 +749,7 @@ parseScriptFromStringAQ s = runParser lslParser newAQState "" s
 parseModuleFromStringAQ :: String -> Either ParseError LModule
 parseModuleFromStringAQ s = runParser moduleParser newAQState "" s
 
-parseModule :: (MonadIO m) => SourceName -> m (Either (Maybe SourceContext,String) LModule)
+parseModule :: SourceName -> IO (Either (Maybe SourceContext,String) LModule)
 parseModule file = parseFile moduleParser file
 parseScript file = parseFile lslParser file
 
@@ -677,7 +765,7 @@ fromParseError err =
             msg)
 
 parseFile p file =
-    do s <- (liftIO $ B.readFile file) >>= return . UTF8.toString
+    do s <- B.readFile file >>= return . UTF8.toString
        case parser s of
            Left err -> return $ Left (fromParseError err)
            Right x -> return $ Right x
@@ -702,3 +790,49 @@ combineContexts (Just (SourceContext (TextLocation l0 c0 l1 c1 n) pre post prag)
 combineContexts (_,pos,_,Just (SourceContext (TextLocation l0 c0 l1 c1 n) pre post prag)) =
     Just $ SourceContext (TextLocation (sourceLine pos) (sourceColumn pos) l1 c1 n) pre post prag
 
+tst = [$here|@
+    integer foo() {
+        return 1;
+    }
+    @
+    default {
+        state_entry() {
+        }
+    }
+    |]
+    
+tst1 = [$here|
+    integer foo() {
+        return 1;
+    }
+    
+    default {
+        @
+        state_entry() {
+        }
+    }
+    |]
+    
+tst2 = [$here|
+    @
+    $module (integer x)
+    
+    integer foo() {
+    }
+    
+    |]
+    
+tst3 = [$here|
+    integer foo() {
+        return 0;
+    }
+    
+    default {
+        state_entry() {
+            llOwnerSay();
+        }
+    }
+    
+    state boo {
+    }
+    |]

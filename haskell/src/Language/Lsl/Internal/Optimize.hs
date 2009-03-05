@@ -37,7 +37,6 @@ optimizeScript options script@(CompiledLSLScript gs fsIn ss) = CompiledLSLScript
          scc = graphInfo fsIn
          funFacts = sccsPurity gcs basicFunctionFacts scc
          pure = Set.fromList [ nm | (nm,ff) <- M.toList funFacts, isPureFunction ff]
-         --pure = trace (show pure') pure'
          ifs = [ f | AcyclicSCC f <- scc, inlineable f]  -- inlineables
          nifs = [ f | f <- fsIn, fname f `notElem` (map fname ifs)] -- non-inlineables
          ss1 = if inline then simp $ map runInliningOnState (simp ss) else ss
@@ -45,7 +44,7 @@ optimizeScript options script@(CompiledLSLScript gs fsIn ss) = CompiledLSLScript
          nifs' = map (runInliningOnFunc funFacts ifs' gs) nifs -- non-inlineables that have had any inlining done
          fs' = if inline then (nifs' ++ ifs') else fsIn
          fsReachable = reachableFuncs ss1 (simp fs') -- funcs that are still reachable from handlers
-         gsReachable = reachableGlobs gs fsReachable ss1 -- globals that are still reachable from handlers/funcs
+         gsReachable = reachableGlobs (simp gs) fsReachable ss1 -- globals that are still reachable from handlers/funcs
          simp = if inline then simplify script pure gcs else id
          runInliningOnState s@(State nm hs) = if noinlining nm then s
              else (State nm (map (runInliningOnHandler funFacts ifs' gs) hs))
@@ -120,7 +119,7 @@ newtype FunctionFacts = FunctionFacts { isPureFunction :: Bool } deriving (Show)
 data OptimizerState = OptimizerState { 
     optAllFuncs :: !(M.Map String (Ctx Func)),
     optFunFacts :: !(M.Map String FunctionFacts),
-    optNameIndex :: Int, 
+    optNameIndex :: !Int, 
     optGlobalNames :: !(Set.Set String),
     optVerbotenNames :: !(Set.Set String),
     optLocals :: ![[String]],
@@ -128,7 +127,7 @@ data OptimizerState = OptimizerState {
     optRenames :: !(M.Map String String), -- names that must be renamed in the function to-be-inlined
     optRewrites :: !(M.Map String Expr),
     optRetVar :: !(Maybe String),
-    optStmts :: ![[Ctx Statement]] }
+    optStmts :: ![[Ctx Statement]] } deriving Show
     
 type OState a = State.State OptimizerState a
 
@@ -158,7 +157,7 @@ removeOStateStmts = do
 refreshOState :: OState ()
 refreshOState = do
     st <- get
-    put st { optRenames = M.empty, optRetVar = Nothing, optStmts = [] }
+    put $ st { optRenames = M.empty, optRetVar = Nothing, optStmts = [] }
 
 pushLocal s = do
     st <- get
@@ -171,9 +170,8 @@ mkName s = do
     let i = optNameIndex st
     let name = "_" ++ s ++ show i
     put st { optNameIndex = i + 1 }
-    st <- get
     verboten <- isVerboten name
-    if  not verboten
+    if not verboten
         then do addVerboten name
                 return name
         else mkName s -- make another...
@@ -261,6 +259,11 @@ inlineProc (Ctx c (Func fd ss)) args = do
                -- simplify $ nullCtx (Compound (parmVars ++ stmts)))
     where ps = funcParms fd
     
+nullify :: Data a => a -> a
+nullify = everywhere (mkT doNullify)
+    where doNullify :: Maybe SourceContext -> Maybe SourceContext
+          doNullify _ = Nothing
+          
 mkParmVars :: [Ctx Statement] -> [(Ctx Var,Ctx Expr)] -> OState [Ctx Statement]
 mkParmVars ss ves = mapM (mkParmVar ss) ves >>= return . concat
 mkParmVar ss (Ctx _ v@(Var nm _),arg) = do
@@ -270,7 +273,9 @@ mkParmVar ss (Ctx _ v@(Var nm _),arg) = do
        (staticComplexity arg < 2 || usageCount nm ss == 1) && not (nm `isModifiedIn` ss) && (simpleRef arg || nm `isUsedOnlyWholeIn` ss)
         then do
             st <- get
-            put st { optRewrites = M.insert (varName v) (ctxItem arg) (optRewrites st) }
+            case arg of
+                (Ctx _ (Get (cnm,All))) -> addRename nm (ctxItem cnm)
+                _ -> put st { optRewrites = M.insert (varName v) (ctxItem arg) (optRewrites st) }
             return []
         else do
             v' <- renameVar v
@@ -353,11 +358,15 @@ inlineStmts endLabel (For es0 e es1 stmt:stmts) = do
                 _ -> Compound (map nullCtx ss)
         return (For (rewriteExprs es0) (fmap (rewriteCtxExpr renames rewrites) e) (rewriteExprs es1) body: stmts')
 inlineStmts endLabel (If e s0 s1:stmts) = do
-    (renames,rewrites) <- getRewriteInfo
-    stmts' <- inlineStmts endLabel stmts
-    s0s <- inlineStmts endLabel [s0]
-    s1s <- inlineStmts endLabel [s1]
-    return (If (rewriteCtxExpr renames rewrites e) (Compound (map nullCtx s0s)) (Compound (map nullCtx s1s)) : stmts')
+        (renames,rewrites) <- getRewriteInfo
+        stmts' <- inlineStmts endLabel stmts
+        s0s <- inlineStmts endLabel [s0]
+        s1s <- inlineStmts endLabel [s1]
+        return (If (rewriteCtxExpr renames rewrites e) (newS s0s) (newS s1s) : stmts')
+    where newS ss = 
+              case ss of
+                  [s] -> s
+                  _ -> Compound (map nullCtx ss)
     
 runInliningOnFunc :: M.Map String FunctionFacts -> [Ctx Func] -> [Global] -> Ctx Func -> Ctx Func
 runInliningOnFunc ff fs gs f = if noinlining f then f else
@@ -415,7 +424,8 @@ performInliningForStmt s@(Ctx _ (Compound ss)) = do
         let locals = optLocals st
         put st { optLocals = []:locals }
         sss <- mapM performInliningForStmt ss
-        put st { optLocals = locals }
+        st' <- get
+        put st' { optLocals = locals }
         return [(nullCtx (Compound (concat sss)))]
 performInliningForStmt (Ctx _ (While expr s)) = do
     refreshOState
@@ -555,7 +565,7 @@ staticComplexity = everything (+) (0 `mkQ` go)
          go e = 1
 
 rewriteCtxExpr :: (M.Map String String) -> (M.Map String Expr) -> Ctx Expr -> Ctx Expr
-rewriteCtxExpr renames rewrites = everywhere' (mkT rwName `extT` rwExpr)
+rewriteCtxExpr renames rewrites = everywhere (mkT rwName `extT` rwExpr)
     where 
           rwExpr e@(Get (Ctx _ nm,All)) =
               case M.lookup nm rewrites of
@@ -762,20 +772,8 @@ areUsedIn l v =
           comp _ = True
 
 reachableGlobs gs fs ss = [ g | g@(GDecl (Var nm _) _) <- gs, nm `elem` reachableNames]
-    where reachableNames = (gnms `areUsedIn` ss) ++ (gnms `areUsedIn` fs)
+    where reachableNames = (gnms `areUsedIn` ss) ++ (gnms `areUsedIn` fs) ++ (gnms `areUsedIn` gs)
           gnms = [ nm | g@(GDecl (Var nm _) _) <- gs]
---reachableGlobs gs fs ss = [ g | g@(GDecl (Var nm _) _) <- gs, (nm `isUsedIn` fs || nm `isUsedIn` ss)]
-
-isUsedIn :: Data a => String -> a -> Bool
-isUsedIn s v = 
-    evalState
-        (everythingTwice (liftM2 (||)) (return False `mkQ` cvt (funcDecIn sfs) False `extQ`
-                                        cvt (stmtIn sfs) False `extQ` used `extQ` cvt (handlerDecIn sfs) False)
-                                       (return False `mkQ` cvt (funcDecOut sfs) False `extQ`
-                                        cvt (handlerDecOut sfs) False `extQ` cvt (stmtOut sfs) False) v) []
-    where sfs = nameStateScopeFuncs
-          used :: (Ctx String,Component) -> NamesState Bool
-          used (Ctx _ nm,_) = (sfVars sfs) >>= return . ((nm == s) &&) . (notElem nm)
           
 globalConstants :: [Global] -> [Ctx Func] -> [State] -> M.Map String Expr
 globalConstants gs fs ss =
@@ -908,13 +906,11 @@ simplifyE (Ge (Ctx _ (FloatLit i)) (Ctx _ (FloatLit j)))  = return (IntLit (bb2i
 simplifyE (Le (Ctx _ (FloatLit i)) (Ctx _ (FloatLit j)))  = return (IntLit (bb2int (<=) i j))
 simplifyE (Equal (Ctx _ (FloatLit i)) (Ctx _ (FloatLit j)))  = return (IntLit (bb2int (==) i j))
 simplifyE (NotEqual (Ctx _ (FloatLit i)) (Ctx _ (FloatLit j)))  = return (IntLit (bb2int (==) i j))
-simplifyE e@(Div (Ctx _ (FloatLit i)) (Ctx _ (FloatLit j))) | j /= 0 = return (FloatLit ( i / j))
-                                                            | otherwise = return e
+simplifyE e@(Div (Ctx _ (FloatLit i)) (Ctx _ (FloatLit j))) = return $ checkVal e (FVal ( i / j))
 simplifyE (Add (Ctx _ (IntLit i)) (Ctx _ (FloatLit j))) = return (FloatLit (fromIntegral i + j))
 simplifyE (Mul (Ctx _ (IntLit i)) (Ctx _ (FloatLit j))) = return (FloatLit (fromIntegral i * j))
 simplifyE (Sub (Ctx _ (IntLit i)) (Ctx _ (FloatLit j))) = return (FloatLit (fromIntegral i - j))
-simplifyE e@(Div (Ctx _ (IntLit i)) (Ctx _ (FloatLit j))) | j /= 0 = return (FloatLit ( fromIntegral i / j))
-                                                          | otherwise = return e
+simplifyE e@(Div (Ctx _ (IntLit i)) (Ctx _ (FloatLit j))) = return $ checkVal e (FVal ( fromIntegral i / j))
 simplifyE (Equal (Ctx _ (IntLit i)) (Ctx _ (FloatLit j))) = return (IntLit (if fromIntegral i == j then 1 else 0))
 simplifyE (NotEqual (Ctx _ (IntLit i)) (Ctx _ (FloatLit j))) = return (IntLit (if fromIntegral i == j then 0 else 1))
 simplifyE (Lt (Ctx _ (IntLit i)) (Ctx _ (FloatLit j))) = return (IntLit (if fromIntegral i < j then 1 else 0))
@@ -946,6 +942,8 @@ simplifyE e@(Get (nm,c)) = do
                     (All,VecExpr _ _ _) -> e
                     (All,RotExpr _ _ _ _) -> e
                     (All,ListExpr _) -> e
+                    (All,StringLit _) -> e
+                    (All,KeyLit _) -> e
                     (All,_) -> e'
                     (X,VecExpr x _ _) -> ctxItem x
                     (X,RotExpr x _ _ _) -> ctxItem x
@@ -968,7 +966,7 @@ simplifyE e@(Call (Ctx _ nm) exprs) =
                         then case simSFunc (script,[nm]) [] vs of
                             Left _ -> return e
                             Right (VoidVal,_) -> return e
-                            Right (v,_) -> return $ valToExpr v
+                            Right (v,_) -> return $ checkVal e v
                         else return e
 simplifyE e@(Cast LLString (Ctx _ (IntLit i))) = return (StringLit (show i))
 simplifyE e@(Cast LLString (Ctx _ (FloatLit f))) = return (StringLit s)
@@ -982,6 +980,29 @@ simplifyE e@(VecExpr eX eY eZ) = return (VecExpr (toFloatLit eX) (toFloatLit eY)
 simplifyE e@(RotExpr eX eY eZ eS) = return (RotExpr (toFloatLit eX) (toFloatLit eY) (toFloatLit eZ) (toFloatLit eS))
 simplifyE e = return e
  
+infinity :: Double
+infinity = read "Infinity"
+maxFloat :: Double
+maxFloat = (1 + fromIntegral (2^23 - 1) / (2 ^23)) * fromIntegral (2^127)
+minFloat = -maxFloat
+
+invalidLLFloat f = isNaN f || f == infinity || f == -infinity || f < minFloat || f > maxFloat
+checkVal :: Expr -> LSLValue Double -> Expr
+checkVal expr v@(FVal f) | invalidLLFloat f = expr
+                         | otherwise = valToExpr v
+checkVal expr v@(VVal x y z) | invalidLLFloat x || invalidLLFloat y || invalidLLFloat z = expr
+                             | otherwise = valToExpr v
+checkVal expr v@(RVal x y z w) | invalidLLFloat x || invalidLLFloat y || invalidLLFloat z || invalidLLFloat w = expr
+                               | otherwise = valToExpr v
+checkVal _ v = valToExpr v
+
+-- could simplify for other types, but this should be sufficient for the main use case
+simplifyS (If (Ctx _ (IntLit 0)) _ stmt) = return stmt
+simplifyS (If (Ctx _ (IntLit _)) stmt _) = return stmt
+simplifyS (If (Ctx _ (FloatLit 0)) _ stmt) = return stmt
+simplifyS (If (Ctx _ (FloatLit _)) stmt _) = return  stmt
+simplifyS s = return s
+
 toFloatLit (Ctx c (IntLit i))  = (Ctx c (FloatLit $ fromIntegral i))
 toFloatLit e = e
 
@@ -991,7 +1012,7 @@ simplify script pureFuncs gcs v =
     where go :: Data a => a -> SimpState a
           go = downupSkipping (False `mkQ` string `extQ` srcContext)
                       (mkM (stmtIn simpInfoScopeFuncs) `extM` funcDecIn simpInfoScopeFuncs `extM` handlerDecIn simpInfoScopeFuncs)
-                      (mkM simplifyE `extM` stmtOut simpInfoScopeFuncs `extM` 
+                      (mkM simplifyE `extM` stmtOut simpInfoScopeFuncs `extM` simplifyS `extM` 
                        funcDecOut simpInfoScopeFuncs `extM` handlerDecOut simpInfoScopeFuncs)
           string :: String -> Bool
           string _ = True

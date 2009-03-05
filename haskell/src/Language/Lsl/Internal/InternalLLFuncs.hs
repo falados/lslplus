@@ -352,12 +352,15 @@ listStatStdDev l =
 listStatSumSquares l = sum $ map (**2.0) l
 listStatGeometricMean l = product l ** (1.0 / fromInt (length l))
 
-llRot2Angle _ [RVal _ _ _ w] = continueWith $ FVal (2.0 * acos w)
-llRot2Axis _ [RVal x y z w] =
-    let sinVal = sqrt (1.0 - w*w)
-        v = if sinVal == 0.0 then VVal 0.0 0.0 0.0
-            else VVal (x/sinVal) (y/sinVal) (z/sinVal) in
-        continueWith $ v
+normalizeQuaternion (x,y,z,w) = (x/mag,y/mag,z/mag,w/mag)
+    where mag = sqrt (x*x + y*y + z*z + w*w)
+llRot2Angle _ [RVal x y z w] = continueWith $ FVal (2.0 * acos w')
+    where (_,_,_,w') = normalizeQuaternion (x,y,z,w)
+llRot2Axis _ [RVal x y z w] = continueWith v
+    where (x',y',z',w') = normalizeQuaternion (x,y,z,w)
+          sinVal = sqrt (1.0 - w'*w')
+          v = if sinVal == 0.0 then VVal 0.0 0.0 0.0
+              else VVal (x'/sinVal) (y'/sinVal) (z'/sinVal)
 
 llAxisAngle2Rot _ [vval@(VVal x y z), FVal r] = (continueWith . rot2RVal) (axisAngleToRotation (vVal2Vec vval) r)
 
@@ -366,14 +369,14 @@ llAxes2Rot _ [VVal xf yf zf, VVal xl yl zl, VVal xu yu zu] =
         continueWith $ RVal x y z s
         
 llRot2Fwd _ [RVal x y z s] =
-    let ((x,_,_),(y,_,_),(z,_,_)) = quaternionToMatrix (x,y,z,s) in
-        continueWith $ VVal x y z
+    let ((x',_,_),(y',_,_),(z',_,_)) = quaternionToMatrix (x,y,z,s) in
+        continueWith $ VVal x' y' z'
 llRot2Left _ [RVal x y z s] =
-    let ((_,x,_),(_,y,_),(_,z,_)) = quaternionToMatrix (x,y,z,s) in
-        continueWith $ VVal x y z
+    let ((_,x',_),(_,y',_),(_,z',_)) = quaternionToMatrix (x,y,z,s) in
+        continueWith $ VVal x' y' z'
 llRot2Up _ [RVal x y z s] =
-    let ((_,_,x),(_,_,y),(_,_,z)) = quaternionToMatrix (x,y,z,s) in
-        continueWith $ VVal x y z
+    let ((_,_,x'),(_,_,y'),(_,_,z')) = quaternionToMatrix (x,y,z,s) in
+        continueWith $ VVal x' y' z'
    
 llRot2Euler _ [RVal x y z s] =
     let (x',y',z') = quaternionToRotations P123 False (x,y,z,s)

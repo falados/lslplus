@@ -2,7 +2,7 @@
 --   issue a report on all the errors it has found
 --   generate LSL scripts for those LSL+ scripts that successfully 'compiled'
 
-module Language.Lsl.Internal.Compiler(compile,main0) where
+module Language.Lsl.Internal.Compiler(compile,main0,compileEmitSummarize,formatCompilationSummary) where
 
 import Control.Monad(when)
 import qualified Data.ByteString as B
@@ -34,6 +34,11 @@ readCompileEmit h =
        renderScriptsToFiles optimize compiledScripts scriptInfo
        putStr $ formatCompilationSummary results
 
+compileEmitSummarize sourceInfo@(optimize,_,scriptInfo) = do
+   results <- compile sourceInfo
+   renderScriptsToFiles optimize (snd results) scriptInfo
+   return (results,formatCompilationSummary results)
+   
 main0 = readCompileEmit stdin
       
 compile :: (Bool,[(String,String)],[(String,String)]) -> IO (AugmentedLibrary,[(String,Validity CompiledLSLScript)])

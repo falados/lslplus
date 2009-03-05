@@ -19,8 +19,12 @@ module Language.Lsl.Internal.Util (
     unescape,
     processLines,
     processLinesS,
+    processLinesSIO,
     generatePermutation,
     fac,
+    fst3,
+    snd3,
+    thd3,
     module Language.Lsl.Internal.Math
     ) where
 
@@ -135,6 +139,15 @@ processLinesS state term f =
            processLinesS newState term f
     where escape = escapeURIString isUnescapedInURI
 
+processLinesSIO state term f =
+    do s <- getLine
+       when (term /= s) $ do
+           (newState,s') <- f state (unescape s)
+           putStrLn (escape s')
+           hFlush stdout
+           processLinesSIO newState term f
+    where escape = escapeURIString isUnescapedInURI
+    
 -- TODO: fix this definition!
 fac :: Integer -> Integer
 fac 0 = 1
@@ -159,3 +172,7 @@ generatePermutation l  i =
                 (xs,y:ys) -> y : (generatePermutation (xs ++ ys) (i `mod` modulus))
                 _ -> error ""
         else error "no such permutation!!!"
+
+fst3 (x,_,_) = x
+snd3 (_,y,_) = y
+thd3 (_,_,z) = z

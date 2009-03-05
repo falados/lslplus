@@ -49,7 +49,8 @@ module Language.Lsl.Syntax (
     compileLibrary,
     VState,
     emptyValidationState,
-    rewriteCtxExpr) where
+    rewriteCtxExpr,
+    rmCtx) where
 
 import Language.Lsl.Internal.Type(Component(..),LSLType(..),lslTypeString)
 import Language.Lsl.Internal.Constants(isConstant,findConstType)
@@ -58,8 +59,9 @@ import Language.Lsl.Internal.FuncSigs(funcSigs)
 import Language.Lsl.Internal.AccessGenerator(genAccessorsForType,genMAccessorsForType)
 import Language.Lsl.Internal.Pragmas(Pragma(..))
 import Data.Generics
+import Data.Generics.Extras.Schemes
 import Data.Data(Data,Typeable)
-import Data.List(find,sort,sortBy,nub,foldl')
+import Data.List(find,sort,sortBy,nub,foldl',nubBy,deleteFirstsBy)
 import qualified Data.Map as M
 import Data.Maybe(isJust,isNothing)
 import Language.Lsl.Internal.Util(ctx,findM,lookupM,filtMap,throwStrError)
@@ -78,6 +80,11 @@ data SourceContext = SourceContext { srcTextLocation :: TextLocation, srcPreText
 
 isTextLocation (Just (TextLocation _ _ _ _ _)) = True
 isTextLocation _ = False
+
+rmCtx :: Data a => a -> a
+rmCtx = everywhere (mkT doNullify)
+    where doNullify :: Maybe SourceContext -> Maybe SourceContext
+          doNullify _ = Nothing
 
 -- | A wrapper that can associate a source code context with a value (e.g. a syntax value).
 data Ctx a = Ctx { srcCtx :: Maybe SourceContext, ctxItem :: a } deriving (Show,Typeable,Data)
@@ -461,8 +468,32 @@ whenIsJust mv p action =
 safeHead [] = Nothing
 safeHead (x:_) = Just x
     
-compileLSLScript' :: Library ->LSLScript -> Validity CompiledLSLScript
+
+compileLSLScript' :: Library -> LSLScript -> Validity CompiledLSLScript
 compileLSLScript' library script = evalState (compileLSLScript script) (emptyValidationState { vsLib = library })
+
+collectLabels :: Data a => a -> [(String,Maybe SourceContext)]
+collectLabels = everythingBut (False `mkQ` string `extQ` sctx) (++) [] ([] `mkQ` lab)
+    where string :: String -> Bool
+          string = const True
+          sctx :: SourceContext -> Bool
+          sctx = const True
+          lab :: Ctx Statement -> [(String,Maybe SourceContext)]
+          lab (Ctx ctx (Label s)) = [(s,ctx)]
+          lab _ = []
+
+warnLabelsMany :: Data a => [a] -> [CodeErr]
+warnLabelsMany = concatMap warnLabels
+
+warnLabelsStates = concatMap warnLabelsState
+    where warnLabelsState (State _ hs) = warnLabelsMany hs
+    
+warnLabels :: Data a => a -> [CodeErr]
+warnLabels x = map (\ (name,ctx) -> (ctx,"label " ++ name ++ " is already defined (problem for LSL/Mono)")) problems
+    where problems = deleteFirstsBy fstEq labels uniques
+          labels = collectLabels x
+          uniques = nubBy fstEq labels
+          fstEq = flip ((==) . fst) . fst
 
 compileLSLScript :: LSLScript -> VState (Validity CompiledLSLScript)
 compileLSLScript (LSLScript globs states) = do
@@ -477,7 +508,10 @@ compileLSLScript (LSLScript globs states) = do
            globals <- get'vsGlobals
            funcs <- get'vsFuncs
            states <- get'vsStates
-           return $ Right $ CompiledLSLScript (reverse globals) (reverse funcs) (reverse states)
+           -- for now, error on label warnings since we have no warnings
+           return $ case warnLabelsStates states ++ warnLabelsMany funcs of
+               [] -> Right $ CompiledLSLScript (reverse globals) (reverse funcs) (reverse states)
+               errs -> Left errs
         _ -> return $ Left $ reverse err
 
 preprocessStates states = let snames = map (\ (State cn _) -> ctxItem cn) states in put'vsStateNames snames

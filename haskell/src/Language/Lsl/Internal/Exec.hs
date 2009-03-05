@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -XNoMonomorphismRestriction #-}
+{-# OPTIONS_GHC -XNoMonomorphismRestriction -XDeriveDataTypeable #-}
 module Language.Lsl.Internal.Exec(
     ScriptImage(..),
     EvalState,
@@ -22,7 +22,8 @@ module Language.Lsl.Internal.Exec(
 
 --import Debug.Trace
 import Data.Bits((.&.),(.|.),xor,shiftL,shiftR,complement)
-import Data.List(intersperse,find)
+import Data.List(intersperse,find,intercalate)
+import Data.Data
 import qualified Data.Map as M
 import Data.Maybe(isJust)
 
@@ -49,16 +50,20 @@ import Language.Lsl.Syntax(Expr(..),
                   findState,
                   fromMCtx,
                   predefFuncs,
-                  isTextLocation)
+                  isTextLocation,
+                  rmCtx)
 import Language.Lsl.Internal.Type(LSLType(..),LSLValue(..),typeOfLSLComponent,typeOfLSLValue,toFloat,toSVal,
                 lslShowVal,replaceLslValueComponent,vecMulScalar,rotMulVec,parseVector,parseRotation,
                 parseInt,parseFloat,invRot,rotMul,vcross,Component(..),lslValueComponent)
 import Language.Lsl.Internal.Key(nullKey,nextKey)
 import Language.Lsl.Internal.Evaluation(EvalResult(..),Event(..),ScriptInfo(..))
 import Language.Lsl.Internal.Constants(findConstVal,llcZeroRotation,llcZeroVector)
+import Language.Lsl.Render
 import Control.Monad(foldM_,when,mplus,msum,join,zipWithM)
 import Control.Monad.State(lift,StateT(..))
 import Control.Monad.Error(ErrorT(..))
+
+import Debug.Trace(trace)
 
 -- initialize a script for execution
 initLSLScript :: RealFloat a => CompiledLSLScript -> ScriptImage a
@@ -153,7 +158,7 @@ frameInfo scriptImage = FrameInfo (scriptImageName scriptImage) $
               [] -> (Nothing,Nothing)
               _ -> let (_,ctx,_,_) = last frames in (ctx,Just 1)
           collapseFrame (Frame name ctx line (ss,_)) =
-              (name,ctx,line,concat $ map fst ss)
+              (name,ctx,line,concat $ map scopeMem ss)
 -- a soft reset occurs when a script that has been running, but
 -- has been persisted to inventory, is reactivated.  The curState
 -- stays the same, but if the script was running or sleeping, the
@@ -304,13 +309,15 @@ data Frame a = Frame { frameName :: String, frameContext :: Maybe SourceContext,
                        frameStacks :: (ScopeStack a, EvalStack) }
      deriving (Show)
 type LabelSet = [LBlock]
-type Scope a = (MemRegion a,LabelSet)
+--type Scope a = (MemRegion a,LabelSet)
 type ScopeStack a = [Scope a]
 type CallStack a = [Frame a]
 
-
+data Scope a = Scope { scopeMem :: !(MemRegion a), scopeLabels :: !LabelSet, scopeMarks :: Int }
+    deriving (Show)
+    
 readVarScope :: String -> Scope a -> Maybe (LSLValue a)
-readVarScope name (mem,_) = readMem name mem
+readVarScope name (Scope { scopeMem = mem }) = readMem name mem
 readVarSStack :: String -> ScopeStack a -> Maybe (LSLValue a)
 readVarSStack name ss = foldl mplus Nothing $ map (readVarScope name) ss
 readVarFrame :: String -> Frame a -> Maybe (LSLValue a)
@@ -319,7 +326,7 @@ readVarCallStack :: String -> CallStack a -> Maybe (LSLValue a)
 readVarCallStack name = (readVarFrame name) . head
 
 writeVarScope :: String -> LSLValue a -> Scope a -> Maybe (Scope a)
-writeVarScope name val (mem,l) = writeMem name val mem >>= return . (flip (,) l)
+writeVarScope name val s@(Scope { scopeMem = mem} ) = writeMem name val mem >>= \ mem' -> return s { scopeMem = mem' }
 writeVarSStack rs name val [] = Nothing
 writeVarSStack rs name val (s:ss) =
     case writeVarScope name val s of
@@ -344,11 +351,9 @@ data EvalElement = EvBlock [Ctx Statement] | EvCtxStatement (Ctx Statement)
                  | EvCons | EvMkVec | EvMkRot | EvPop
                  | EvReturn | EvDiscard | EvBind String LSLType
                  | EvCond Statement Statement | EvCall String (Maybe SourceContext) [Var] [Ctx Statement] Bool
-                 | EvPredef String | EvLoop Expr [Ctx Expr] Statement
-    deriving (Show)
-    
--- Note: lifted from Hudak, p.273
---queryState :: Monad w => (EvalState w a -> a) -> Eval w b a
+                 | EvPredef String | EvLoop Expr [Ctx Expr] Statement | EvMark
+    deriving (Show,Data,Typeable)
+
 queryState q = evalT (\s -> (q s, s))
 updateState :: Monad w => (EvalState w a -> EvalState w a) -> Eval w a ()
 updateState u = evalT (\s -> ((), u s))
@@ -430,7 +435,7 @@ pushScope :: Monad w => MemRegion a -> LabelSet -> Eval w a ()
 pushScope mem labels =
     do (frame:frames) <- getCallStack
        let (ss,es) = frameStacks frame
-       setCallStack (frame { frameStacks = ((mem,labels):ss,es) }:frames)
+       setCallStack (frame { frameStacks = (Scope { scopeMem = mem, scopeLabels = labels, scopeMarks = 0}:ss,es) }:frames)
         
 pushVal value = 
     do vstack <- getVStack
@@ -468,11 +473,22 @@ popElement =
        let (ss,e:es) = frameStacks frame
        setCallStack (frame { frameStacks = (ss,es) }:frames)
        return e
+getEStack :: Monad w => Eval w a [EvalElement]
+getEStack = 
+    do (frame:frames) <- getCallStack
+       return $ snd $ frameStacks frame
        
 popElements 0 = return ()
 popElements n = 
     do popElement
        popElements (n - 1)
+
+popMarks 0 = return ()
+popMarks n = do
+    e <- popElement
+    case e of 
+       EvMark -> popMarks (n - 1) 
+       _ -> popMarks n
 
 pushElement element =
    do (frame:frames) <- getCallStack
@@ -529,8 +545,8 @@ initVar1 :: (RealFloat a, Read a, Monad w) => String -> LSLType -> Maybe (LSLVal
 initVar1 name t mval = 
     do --(((m,l):ss,es):cs) <- getCallStack
        (frame:frames) <- getCallStack
-       let ((m,l):ss,es) = frameStacks frame
-       let frame' = frame { frameStacks = (((initVar name t mval):m,l):ss,es) }
+       let (sc@Scope { scopeMem = m }:ss,es) = frameStacks frame
+       let frame' = frame { frameStacks = (sc { scopeMem = initVar name t mval:m }:ss,es) }
        setCallStack (frame':frames)
 
 initVars1 :: (RealFloat a, Read a, Monad w) => [Var] -> [LSLValue a] -> Eval w a ()
@@ -543,14 +559,23 @@ unwindToLabel name =
                let (ss,es) = frameStacks frame
                case ss of
                    [] -> fail ("label " ++ name ++ " not found")
-                   ((m,l):ss') ->
+                   (Scope {scopeLabels = l, scopeMarks = marks}:ss') ->
                        case findLBlock name l of
-                           Just (LBlock _ stmts) -> return (n,stmts)
+                           Just (LBlock _ stmts) -> return (n + marks,stmts)
                            Nothing ->
                                do setCallStack (frame { frameStacks = (ss',es) }:frames)
-                                  f (n + 1)
+                                  f (n + marks + 1)
     in f 1
 
+modMark f = do
+    (frame:frames) <- getCallStack
+    let (ss,es) = frameStacks frame
+    case ss of
+        [] -> return ()
+        (sc@Scope { scopeMarks = marks }:ss') -> do
+            let marks' = f marks
+            let sc' = sc { scopeMarks = marks' }
+            setCallStack (frame { frameStacks = (sc':ss',es) }:frames)
 
 data ExecutionState = Waiting | Executing | Halted | SleepingTil Int | Erroneous String | Crashed String | Suspended Breakpoint
                     | WaitingTil Int -- in a waiting state, but won't process new events until time t
@@ -590,7 +615,7 @@ setupSimple path globbindings args =
         initStacks
         pushFrame (concat $ intersperse "." path) ctx Nothing
         pushScope mem $ labelBlocks stmts
-        pushElement (EvBlock stmts)
+        pushElements [EvMark,EvBlock stmts]
         setExecutionState Executing
     where updateGlobals [] = return ()
           updateGlobals ((name,val):bs) =
@@ -644,7 +669,7 @@ evalScript maxTick queue =
                                     do  initStacks
                                         pushFrame name ctx Nothing
                                         pushScope mem $ labelBlocks stmts
-                                        pushElement (EvBlock stmts)
+                                        pushElements [EvMark,EvBlock stmts]
                                         setExecutionState Executing
                                         setCurrentEvent event
                                         evalScript maxTick queue'
@@ -698,6 +723,7 @@ eval' =
     in
     do cs <- getCallStack
        vs <- getVStack
+       es <- getEStack
        noMoreElements <- elementStackEmpty
        if noMoreElements then popAndCheck
          else do
@@ -708,9 +734,10 @@ eval' =
                    logMsg  ("return: " ++ lslShowVal val)
                    popAndCheck
                EvBlock [] -> popScope >> eval'
+               EvMark -> modMark ((-)1) >> continue
                EvBlock (s:ss) -> pushElements [EvBlock ss,EvCtxStatement s]
                EvCtxStatement s -> do
-                   pushElements [EvStatement $ ctxItem s]
+                   pushElement (EvStatement $ ctxItem s)
                    case srcCtx s of
                        Just (SourceContext { srcTextLocation = txtl }) -> 
                            let bp = mkBreakpoint (textName txtl) (textLine0 txtl) 0 in
@@ -727,26 +754,29 @@ eval' =
                       continue
                EvStatement (Decl (Var name t) mexpr) -> pushElements [EvBind name t,EvMexpr $ fromMCtx mexpr]
                EvStatement (If expr stmt1 stmt2) -> pushElements [EvCond stmt1 stmt2,EvExpr $ ctxItem expr]
-               EvStatement (While expr stmt) -> pushElements [EvLoop (ctxItem expr) [] stmt,EvExpr $ ctxItem expr]
-               EvStatement (DoWhile stmt expr) -> 
-                   pushElements [EvLoop (ctxItem expr) [] stmt, EvExpr (ctxItem expr),EvStatement stmt]
+               EvStatement (While expr stmt) -> modMark (+1) >> pushElements [EvMark,EvLoop (ctxItem expr) [] stmt,EvExpr $ ctxItem expr]
+               EvStatement (DoWhile stmt expr) -> modMark (+1) >>
+                   pushElements [EvMark,EvLoop (ctxItem expr) [] stmt, EvExpr (ctxItem expr),EvStatement stmt]
                EvStatement (For mexpr1 mexpr2 mexpr3 stmt) ->
                    do let expr =  case mexpr2 of
                                       Nothing -> (IntLit 1)
                                       Just expr2 -> ctxItem expr2
+                      modMark (+1)
+                      pushElement EvMark
                       pushElement (EvLoop expr (mexpr3) stmt)
                       pushElement (EvExpr expr)
                       pushElements [EvDiscard, EvExpr (ListExpr mexpr1)]
                       continue
                EvStatement (Compound ss) ->
                    do pushScope [] $ labelBlocks ss
+                      pushElement EvMark
                       pushElement (EvBlock ss)
                       continue
                EvStatement (Label _) -> eval'
                EvStatement (Jump name) ->
                    do (n,stmts) <- unwindToLabel name
-                      popElements n
-                      pushElement (EvBlock stmts)
+                      popMarks n
+                      pushElements [EvMark,EvBlock stmts]
                       continue
                EvMexpr Nothing ->  pushVal VoidVal >> continue
                EvMexpr (Just expr) -> pushElements [EvExpr expr]
@@ -845,7 +875,7 @@ eval' =
                       -- a void function may not have an explicit return; if it does, this
                       -- element will get popped off without being evaluated.
                       when voidFunc (pushElement EvReturn >> pushElement (EvMexpr Nothing))
-                      pushElement (EvBlock stmts)
+                      pushElements [EvMark,EvBlock stmts]
                       continue
                EvPredef name -> evalPredef' name
                EvGet (name,c) ->
@@ -962,7 +992,7 @@ eval' =
                     (IVal i1,FVal f2) -> toLslBool $ fromInt i1 == f2
                     (v1,v2) -> toLslBool $ v1 == v2
                EvNe -> evalBinary $ \ val1 val2 -> case (val1,val2) of
-                    (LVal l1, LVal l2) -> toLslBool $ length l1 /= length l2 -- special case of LSL weirdness
+                    (LVal l1, LVal l2) -> IVal (length l1 - length l2) -- special case of LSL weirdness
                     (SVal s, KVal k) -> toLslBool $ s /= k
                     (KVal k, SVal s) -> toLslBool $ k /= s
                     (FVal f1,IVal i2) -> toLslBool $ f1 /= fromInt i2
