@@ -852,6 +852,10 @@ constVarToLit m s = M.lookup s m
 nameToLit :: M.Map String Expr -> String -> Maybe Expr
 nameToLit m s = predefToLit s `mplus` constVarToLit m s
 
+nameToLitR m s = case nameToLit m s of
+    Just e@(Get (nm,All)) -> nameToLitR m (ctxItem nm) `mplus` (Just e)
+    v -> v
+
 exprsToVals :: [Ctx Expr] -> Maybe [LSLValue Double]
 exprsToVals es = mapM exprToVal es
     where exprToVal :: Ctx Expr -> Maybe (LSLValue Double)
@@ -871,7 +875,7 @@ exprsToVals es = mapM exprToVal es
               Nothing -> Nothing
               Just vs -> Just $ LVal vs
           exprToVal _ = Nothing
-              
+
 simplifyE :: Expr -> SimpState Expr
 simplifyE (Neg (Ctx _ (IntLit i))) = return (IntLit (-i))
 simplifyE (Not (Ctx _ (IntLit i))) = return (IntLit (fromBool (i == 0)))
@@ -936,7 +940,7 @@ simplifyE e@(Get (nm,c)) = do
     where name = ctxItem nm
           newExpr = do
             m <- get >>= return . siConstants
-            return $ case nameToLit m name of
+            return $ case nameToLitR m name of
                 Nothing -> e
                 Just e' -> case (c,e') of
                     (All,VecExpr _ _ _) -> e
