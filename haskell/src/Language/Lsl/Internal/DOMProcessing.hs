@@ -7,6 +7,8 @@ module Language.Lsl.Internal.DOMProcessing(ElemAcceptor(..),
                          findValueOrDefault,
                          findBoolOrDefault,
                          findValue,
+                         findOptionalValue,
+                         findOptionalBool,
                          valueAcceptor, -- String -> ElemAcceptor m t
                          ctxelem,
                          simple,
@@ -29,10 +31,11 @@ module Language.Lsl.Internal.DOMProcessing(ElemAcceptor(..),
                          --module Text.XML.HaXml.Posn
                          ) where
 
+import Data.Maybe
 import Control.Monad(MonadPlus(..),liftM2)
 import Control.Monad.Error(MonadError(..))
 import Language.Lsl.Internal.Util(readM)
-import Text.XML.HaXml(AttValue(..),Document(..),Element(..),Content(..),Reference(..),xmlParse)
+import Text.XML.HaXml(Attribute,AttValue(..),Document(..),Element(..),Content(..),Reference(..),xmlParse)
 import Text.XML.HaXml.Posn(Posn(..))
 
 data Monad m => ElemAcceptor m t = ElemAcceptor { acceptorTag :: String,  acceptorFunc :: (Element Posn -> m t) }
@@ -117,6 +120,22 @@ findValue name contents =
        value <- readM sval
        return (value,rest)
 
+findOptionalValue name contents =
+    do (v,rest) <- findOptionalElement (simpleElement name) contents
+       case v of
+           Nothing -> return (Nothing,contents)
+           Just s -> do
+               value <- readM s
+               return (value, rest)
+               
+findOptionalBool name contents =
+    do (v,rest) <- findOptionalElement (simpleElement name) contents
+       case v of 
+           Nothing -> return (Nothing,contents)
+           Just "true" -> return (Just True,rest)
+           Just "false" -> return (Just False,rest)
+           Just s -> fail ("unable to parse " ++ s)
+           
 findBoolOrDefault def name contents =
     do (sval,rest) <- findOptionalElement (simpleElement name) contents
        case sval of 
@@ -139,3 +158,82 @@ attrString (AttValue v) = concatMap decode v
       decode (Left  v)               = v
       decode (Right (RefEntity ent)) = "&"++ent++";"
       decode (Right (RefChar cref))  = "&"++show cref++";"
+
+-- type ContentAcceptor a = [Content Posn] -> Either String a
+-- type ContentFinder a = [Content Posn] -> Either String (Maybe a, [Content Posn])
+-- type ElementAcceptor a = Element Posn -> Either String a
+-- type ElementTester a = Element Posn -> Either String (Maybe a)
+-- type AttributeAcceptor a = [Attribute] -> Either String a
+
+-- mustBe :: String -> (b -> a) -> ContentAcceptor b -> ElementAcceptor a
+-- mustBe tag f cf (Elem name _ cs) | tag /= name = Left ("expected " ++ tag)
+--                                  | otherwise = case cf cs of
+--                                       Left s -> Left s
+--                                       Right v -> Right (f v)
+
+-- canBe :: String -> (b -> a) -> ContentAcceptor b -> ElementTester a
+-- canBe tag f cf (Elem name _ cs) | tag /= name = Right Nothing
+--                                 | otherwise = case cf cs of
+--                                       Left s -> Left s
+--                                       Right v -> Right (Just (f v))
+
+-- mustBeWith :: String -> (a -> b -> c) -> AttributeAcceptor a -> ContentAcceptor b -> ElementAcceptor c
+-- mustBeWith tag f af cf (Elem name attrs cs) | tag /= name = Left ("expected " ++ tag)
+--                                             | otherwise = do
+--                                                   av <- af attrs
+--                                                   cv <- cf cs
+--                                                   return (f av cv)
+
+-- canBeWith :: String -> (a -> b -> c) -> AttributeAcceptor a -> ContentAcceptor b -> ElementTester c
+-- canBeWith tag f af cf (Elem name attrs cs) | tag /= name = Right Nothing
+--                                            | otherwise = do
+--                                                   av <- af attrs
+--                                                   cv <- cf cs
+--                                                   return (Just (f av cv))
+
+-- liftElemTester :: ((Element Posn) -> Either String (Maybe a)) -> (Content Posn -> Either String (Maybe a))
+-- liftElemAcceptor ef (CElem e pos) = case ef e of
+--     Left s -> Left ("at " ++ show pos ++ ": " ++ s)
+--     Right v -> Right v
+--     
+-- canHaveElem :: ElementAcceptor a -> ContentFinder a
+-- canHaveElem ef cs = mapM (\ c -> liftElemAcceptor ef c >>= return . (,) c) cs >>= (\ vs -> case span (isNothing . snd) vs of
+--     (bs,[]) -> Right (Nothing,map fst bs)
+--     (bs,c:cs) -> Right (snd c,map fst $ bs ++ cs))
+--    
+-- mustHaveElem :: ElementAcceptor a -> ContentFinder a
+-- mustHaveElem ef cs = mapM (\ c -> liftElemAcceptor ef c >>= return . (,) c) cs >>= (\ vs -> case span (isNothing . snd) vs of
+--     (bs,[]) -> Left ("element not found")
+--     (bs,c:cs) -> Right (snd c,map fst $ bs ++ cs))
+
+-- boolContent cs = simpleContent cs >>= (\ v -> case v of
+--     "true" -> Right True
+--     "false" -> Right False
+--     s -> Left ("unrecognized bool " ++ s))
+--     
+-- readableContent :: Read a => ContentAcceptor a
+-- readableContent cs = simpleContent cs >>= readM
+
+-- simpleContent :: ContentAcceptor String
+-- simpleContent cs = mapM processContentItem cs >>= return . concat
+--     where
+--         processContentItem (CElem (Elem name _ _) _) = Left ("unexpected content element (" ++ name ++ ")")
+--         processContentItem (CString _ s _) = Right s
+--         processContentItem (CRef (RefEntity "lt") _) = Right "<"
+--         processContentItem (CRef (RefEntity "gt") _) = Right ">"
+--         processContentItem (CRef (RefEntity "amp") _) = Right "&"
+--         processContentItem (CRef (RefEntity "quot") _) = Right "\""
+--         processContentItem (CRef (RefEntity "apos") _) = Right "'"
+--         processContentItem (CMisc _ _) = Right "unexpected content"
+
+-- empty :: ContentAcceptor ()
+-- empty [] = Right ()
+-- empty _ = Left "unexpected content"
+
+-- data FooBar = FooBar { foo :: Int, bar :: String }
+
+-- fooE :: ElementAcceptor Int
+-- fooE = mustBe "foo" id readableContent
+
+-- -- foobar = mustBe "FooBar" (\ _ -> FooBar 0 "") ( \ cs -> do
+--      mustHave (mustBe "foo" 
