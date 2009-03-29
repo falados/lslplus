@@ -168,7 +168,7 @@ llSensor info@(ScriptInfo _ _ sn pk _) [SVal name, KVal key, IVal etype, FVal ra
     lift $ putWorldEvent 0 (SensorEvent (pk,sn) name key etype range arc Nothing) >> continueWith VoidVal
 llSensorRepeat info@(ScriptInfo _ _ sn pk _) [SVal name, KVal key, IVal etype, FVal range, FVal arc, FVal interval] =
     let interval' = if interval < 0 then 0 else interval in
-        lift $ putWorldEvent 0 (SensorEvent (pk,sn) name key etype range arc (Just interval')) >> continueWith VoidVal
+        lift $ putWorldEvent interval (SensorEvent (pk,sn) name key etype range arc (Just interval')) >> continueWith VoidVal
 llSensorRemove info@(ScriptInfo _ _ sn pk _) [] =
     do q <- lift getWQueue
        lift $ setWQueue [ qentry | qentry@(_,event) <- q, not (isSensorEvent event) || sensorAddress event /= (pk,sn)]

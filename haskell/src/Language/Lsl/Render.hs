@@ -108,6 +108,10 @@ renderStatement' n (If expr stmt1 stmt2) =
     renderString "if (" . renderCtxExpr expr . renderChar ')' . 
         (case stmt1 of
              NullStmt -> renderString ";\n"
+             If expr (Compound _) _ -> renderStatement True n stmt1
+             If expr _ NullStmt -> case stmt2 of
+                 NullStmt -> renderStatement True n stmt1
+                 _ -> renderStatement True n (Compound [Ctx Nothing stmt1])
              _ -> renderStatement True n stmt1) .
         case stmt2 of 
             NullStmt -> blank
