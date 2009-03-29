@@ -115,6 +115,10 @@ graphInfo funcs = scc
 nullCtx :: a -> Ctx a              
 nullCtx = Ctx Nothing 
 
+sminsert k v (m:ms) = M.insert k v m : ms
+
+unionall = foldl' M.union M.empty
+
 newtype FunctionFacts = FunctionFacts { isPureFunction :: Bool } deriving (Show)
 
 data OptimizerState = OptimizerState { 
@@ -125,8 +129,8 @@ data OptimizerState = OptimizerState {
     optVerbotenNames :: !(Set.Set String),
     optLocals :: ![[String]],
     optInlinerRenames :: ![M.Map String String], -- names that must be renamed in the 'destination' function/handler
-    optRenames :: !(M.Map String String), -- names that must be renamed in the function to-be-inlined
-    optRewrites :: !(M.Map String Expr),
+    optRenames :: ![M.Map String String], -- names that must be renamed in the function to-be-inlined
+    optRewrites :: ![M.Map String Expr],
     optRetVar :: !(Maybe String),
     optStmts :: ![[Ctx Statement]] } deriving Show
     
@@ -143,8 +147,8 @@ freshOptimizerState funFacts fs gnames = OptimizerState {
     optVerbotenNames = Set.empty,
     optLocals = [],
     optInlinerRenames = [],
-    optRenames = M.empty,
-    optRewrites = M.empty,
+    optRenames = [M.empty],
+    optRewrites = [M.empty],
     optRetVar = Nothing,
     optStmts = [] }
     
@@ -158,7 +162,7 @@ removeOStateStmts = do
 refreshOState :: OState ()
 refreshOState = do
     st <- get
-    put $ st { optRenames = M.empty, optRetVar = Nothing, optStmts = [] }
+    put $ st { optRenames = [M.empty], optRetVar = Nothing, optStmts = [] }
 
 pushLocal s = do
     st <- get
@@ -184,13 +188,27 @@ addVerboten name = do
     let s = optVerbotenNames st
     put st { optVerbotenNames = (Set.insert name s) }
     
+pushRewriteInfo = get >>= \ st -> put st { optRenames = M.empty:(optRenames st), optRewrites = M.empty:(optRewrites st) }
+
+withMoreRewriteInfo action = do
+    rns <- get >>= return . optRenames
+    rws <- get >>= return . optRewrites
+    pushRewriteInfo
+    v <- action
+    get >>= \ st -> put st { optRenames = rns, optRewrites = rws }
+    return v
+
 addRename s s' = do
     st <- get
-    put st { optRenames = M.insert s s' (optRenames st) }
+    put st { optRenames = sminsert s s' (optRenames st) }
+    
+addRewrite s e = do
+    st <- get
+    put st { optRewrites = sminsert s e (optRewrites st) }
     
 rewriteLabel s = do
     renames <- get >>= return . optRenames
-    return $ maybe s id (M.lookup s renames)
+    return $ maybe s id (M.lookup s $ unionall renames)
 
 renameToNew s = do
    verboten <- isVerboten s
@@ -241,7 +259,7 @@ renameVar (Var s t) = do
    return (Var s' t)
    
 getRewriteInfo :: OState (M.Map String String, M.Map String Expr)
-getRewriteInfo = get >>= ( \ st -> return (optRenames st, optRewrites st))
+getRewriteInfo = get >>= ( \ st -> return (unionall $ optRenames st, unionall $ optRewrites st))
 
 isVerboten s = do
     verbotenNames <- get >>= return . optVerbotenNames
@@ -253,11 +271,11 @@ inlineProc ::
     [Ctx Expr] -> -- the arguments to the call
     OState ([Ctx Statement],[Ctx Statement]) -- 
 inlineProc (Ctx c (Func fd ss)) args = do
-        endLabel <- mkName "end"
-        parmVars <- mkParmVars ss (zip ps args)
-        stmts <- inlineStmts endLabel (map ctxItem ss) >>= return . map nullCtx >>= return . withoutFinalJumpTo endLabel
-        return (if jumpsTo endLabel stmts == 0 then [] else [nullCtx $ Label endLabel], parmVars ++ stmts)
-               -- simplify $ nullCtx (Compound (parmVars ++ stmts)))
+        withMoreRewriteInfo $ do
+            endLabel <- mkName "end"
+            parmVars <- mkParmVars ss (zip ps args)
+            stmts <- inlineStmts endLabel (map ctxItem ss) >>= return . map nullCtx >>= return . withoutFinalJumpTo endLabel
+            return (if jumpsTo endLabel stmts == 0 then [] else [nullCtx $ Label endLabel], parmVars ++ stmts)
     where ps = funcParms fd
     
 nullify :: Data a => a -> a
@@ -273,10 +291,9 @@ mkParmVar ss (Ctx _ v@(Var nm _),arg) = do
     if isRelativelyPure locals funFacts arg && 
        (staticComplexity arg < 2 || usageCount nm ss == 1) && not (nm `isModifiedIn` ss) && (simpleRef arg || nm `isUsedOnlyWholeIn` ss)
         then do
-            st <- get
             case arg of
                 (Ctx _ (Get (cnm,All))) -> addRename nm (ctxItem cnm)
-                _ -> put st { optRewrites = M.insert (varName v) (ctxItem arg) (optRewrites st) }
+                _ -> addRewrite (varName v) (ctxItem arg)
             return []
         else do
             v' <- renameVar v
