@@ -1042,12 +1042,12 @@ eval' =
                        -- TODO: can you cast anything but a string to a key?
                        (LLVector,SVal s) -> parseVector s
                        (LLRot,SVal s) -> parseRotation s
-                       (LLList,SVal s) -> LVal [SVal s]
                        (LLKey,SVal s) -> KVal s
                        (LLKey,KVal s) -> KVal s
                        (LLVector, v@(VVal _ _ _)) -> v
                        (LLRot, v@(RVal _ _ _ _)) -> v
                        (LLList, LVal l) -> LVal l
+                       (LLList,v) -> LVal [v]
                     continue
                EvMkVec -> do
                    z <- popVal

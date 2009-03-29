@@ -778,7 +778,10 @@ isCastValid t t' = (t' == t) || (t,t') `elem` validCasts
                       (LLString,LLVector),(LLVector,LLString),
                       (LLString,LLKey),(LLKey,LLString),
                       (LLRot,LLString),(LLString,LLRot),
-                      (LLList,LLString),(LLString,LLList)]
+                      (LLList,LLString),(LLString,LLList),
+                      (LLFloat,LLList),(LLInteger,LLList),
+                      (LLVector,LLList),(LLRot,LLList),
+                      (LLKey,LLList)]
 
 compileCtxExpr :: Ctx Expr -> VState (Maybe LSLType)
 compileCtxExpr (Ctx ctx (Cast t expr)) = 

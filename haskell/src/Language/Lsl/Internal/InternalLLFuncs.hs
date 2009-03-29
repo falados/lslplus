@@ -617,7 +617,7 @@ llXorBase64Strings _ [SVal s1, SVal s2] =
     let i1 = map charToBits $ stripPadChars s1
         i2 = map charToBits $ stripPadChars s2
         n = length i2
-        i3 = zipWith (\ v i -> v `xor` (i2 !! (i `mod` n))) i1 [0..]
+        i3 = if null i2 then i1 else zipWith (\ v i -> v `xor` (i2 !! (i `mod` n))) i1 [0..]
     in continueWith $ SVal $ map (base64chars !!) i3
 
 -- test strings s1 = YWJjZGVm, s2 = eHl6 => GRsZHBwc
@@ -629,7 +629,7 @@ llXorBase64StringsCorrect _ [SVal s1, SVal s2] =
     let s1' = map fromEnum $ decodeB64 s1
         s2' = map fromEnum $ decodeB64 s2
         n = length s2'
-        s3 = zipWith (\ v i -> v `xor` (s2' !! (i `mod` n))) s1' [0..]
+        s3 = if null s2' then s1' else zipWith (\ v i -> v `xor` (s2' !! (i `mod` n))) s1' [0..]
     in continueWith $ SVal $ encodeB64 (map toEnum s3)
 llBase64ToString _ [SVal s] = continueWith $ SVal $ map mkPrintable $ decodeB64 s
 
