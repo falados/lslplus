@@ -16,6 +16,7 @@ import qualified Data.Map as M
 import Debug.Trace
 
 import Language.Lsl.Parse
+import Language.Lsl.Render
 import Language.Lsl.Internal.Constants(allConstants,Constant(..),findConstVal)
 import Language.Lsl.Internal.FuncSigs(funcSigs)
 import Language.Lsl.Internal.InternalLLFuncs(internalLLFuncs,internalLLFuncNames)
@@ -300,6 +301,10 @@ inlineVoidFunc f args = do
     (endStmts,stmts) <- inlineProc f args
     return (stmts ++ endStmts)
 
+--trS s sts = trace (s ++ " {\n" ++ renderStatements 1 (map nullCtx sts) "" ++ "}\n") sts
+
+--inlineStmts' s ss = inlineStmts s (trS "in->" ss) >>= return . (trS "out->")
+
 inlineStmts :: String -> [Statement] -> OState [Statement]
 inlineStmts _ [] = return []
 inlineStmts endLabel (NullStmt:NullStmt:stmts) = inlineStmts endLabel (NullStmt:stmts)
@@ -326,7 +331,7 @@ inlineStmts endLabel (Label s:stmts) = do
     -- must rename the label BEFORE rewriting the rest of the statements
     s' <- renameToNew s
     stmts' <- inlineStmts endLabel stmts
-    return (Label s':stmts)
+    return (Label s':stmts')
 inlineStmts endLabel (Jump s:stmts) = do
     -- must process the rest of the statements BEFORE rewriting the Jump
     stmts' <- inlineStmts endLabel stmts
@@ -522,8 +527,6 @@ inlineExpr = everywhereButM (False `mkQ` string `extQ` srcContext) (mkM inlineCa
 
 inlineCall c@(Call (Ctx _ nm) es) = do
     fs <- get >>= return . optAllFuncs
-    tmp <- get >>= return . optInlinerRenames
-    tmp1 <- get >>= return . optRenames
     case M.lookup nm fs of
         Nothing -> return c
         Just f -> do
@@ -1005,6 +1008,7 @@ simplifyS (If (Ctx _ (IntLit 0)) _ stmt) = return stmt
 simplifyS (If (Ctx _ (IntLit _)) stmt _) = return stmt
 simplifyS (If (Ctx _ (FloatLit 0)) _ stmt) = return stmt
 simplifyS (If (Ctx _ (FloatLit _)) stmt _) = return  stmt
+simplifyS (Do (Ctx _ (Get _))) = return NullStmt
 simplifyS s = return s
 
 toFloatLit (Ctx c (IntLit i))  = (Ctx c (FloatLit $ fromIntegral i))
