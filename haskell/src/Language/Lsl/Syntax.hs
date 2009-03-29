@@ -737,7 +737,12 @@ compileStatement (Ctx ctx (Return (Just expr))) =
             Nothing -> return ()
             Just t' -> do
                 (rtype,_) <- get'vsEntryPointInfo
-                when (t' /= rtype && not (all (`elem` [LLString,LLKey]) [t',rtype])) (vsmAddErr (ctx,"inappropriate return type for function/handler"))
+                case (t',rtype) of
+                   (LLString,LLKey) -> return ()
+                   (LLKey,LLString) -> return ()
+                   (LLInteger,LLFloat) -> return ()
+                   (x,y) | x == y -> return ()
+                         | otherwise -> (vsmAddErr (ctx,"inappropriate return type for function/handler"))
         put'vsBranchReturns True
         return True
 compileStatement (Ctx ctx (StateChange name)) = do
