@@ -256,10 +256,34 @@ default {
 }|]
 
 labelTest = invalidScriptStr "Label Test" labelScript
- 
+
+retconv = [$here|
+    float foo() {
+       integer i = 0;
+       return i;
+    } 
+    
+    default {
+        state_entry() {
+            llOwnerSay((string)foo());
+        }
+    }|]
+    
+casts = [$here|
+    default {
+        state_entry() {
+            list l = (list) 1;
+            l = (list) 1.1;
+            l = (list) ((key)"");
+            l = (list) <1,2,3>;
+            l = (list) ZERO_ROTATION;
+        }
+    }|]
 allTests = TestLabel "All Tests" $ TestList [
     tests,
     importTests,
-    labelTest ]
+    labelTest,
+    validScriptStr "return implicit conversion test" retconv,
+    validScriptStr "casts to list" casts ]
 
     

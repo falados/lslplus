@@ -36,9 +36,9 @@ v0 lib cs os = do
         Left e -> assertFailure (show e)
         Right cs' -> case compileLSLScript' [] cs' of
              Left e -> assertFailure (show e)
-             Right _ -> do
+             Right cs'' -> do
                      let result1 = exec cs
-                     let result2 = exec os
+                     let result2 = exec cs''
                      let cslog =  filtLog result1
                      let oslog = filtLog result2
                      assertEqual "logs don't match!" cslog oslog
@@ -777,5 +777,116 @@ t24 = tscript [] [$lsl|
       }
    }
    |] v0
+
    
-optTests = TestList [ t1, t2, t3, t4, t5, t6, t7, t8noinlining, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23]
+t25 = tscript [] [$lsl|
+    //pragma inline
+    string get() {
+    	if (llGetStartParameter()) return "a";
+    	return "b";
+    }
+    
+    //pragma inline
+    string send(string s) {
+    	string k = llGetDate();
+    	llOwnerSay(k + get());
+    	return k;
+    }
+    
+    default
+    {
+        state_entry()
+        {
+            send("Some message");
+        }
+    }
+    |] v0
+   
+t26 = tscript [] [$lsl|
+    //pragma inline
+    do_stuff()
+    {
+    	if( llGetStartParameter() > 1.0 )
+    		llOwnerSay("Foo" );
+    }
+    
+    default
+    {
+        state_entry()
+        {
+            if( llGetStartParameter() < 1.0 )
+            	do_stuff();
+            else
+            	llOwnerSay("Bar" );
+        }
+    }|] v0
+    
+t27 = tscript [] [$lsl|
+    // pragma inline
+    list parse(string src) {
+        return llCSV2List(src);
+    }
+    
+    // pragma inline
+    string listStr(list src, integer pos) {
+        return llList2String(src, pos);
+    }
+    
+    default {
+        state_entry() {
+            string params = llGetOwner();
+            llOwnerSay(listStr(parse(params), 0));
+        }
+    }
+    |] v0
+
+m28 = [$lslm|
+    $module ()
+    
+    string unused = "unused";
+    |]
+    
+s28 = [$lsl|
+    $import unused ();
+    
+    default {
+        state_entry() {
+            llOwnerSay("hi");
+        }
+    }
+    |] 
+    
+t28 = tscript [("unused",m28)] s28 v0
+
+t29 = tscript [] [$lsl|
+    default {
+        state_entry() {
+            llOwnerSay((string)llFrand(100.0));
+            llOwnerSay((string)llFrand(100.0));
+            llOwnerSay((string)llFrand(100.0));
+            llOwnerSay((string)llFrand(100.0));
+            llOwnerSay((string)llFrand(100.0));
+            llOwnerSay((string)llFrand(100.0));
+        }
+    }
+    |] v0
+    
+t30 = tscript [] [$lsl|
+    // pragma inline
+    call(list lst) {
+        llOwnerSay(llList2CSV(lst));
+    }
+    
+    
+    string frameNotecard = "foo";
+    default {
+        state_entry() {
+            call([]);
+            call([frameNotecard]);
+        }
+    }
+    |] v0
+
+optTests = TestList [ t1, t2, t3, t4, t5, t6, t7, t8noinlining, t9, t10, t11, t12, t13, 
+                      t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25, t26,
+                      t27, t28, t29]

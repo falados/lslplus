@@ -1059,6 +1059,18 @@ loadURLScript = [$lsl|
 loadURLScriptTest = mkTest "Load URL Test" $ ((chatRun [loadURLScript] 
     ["0, 00000000-0000-0000-0000-000000000002, 1, <128.0,128.0,0.0>, 2, <0.0,0.0,0.0,1.0>, 3, Default Avatar"]) { tLib = library })
 
+castTest = mkTest "Cast Test" $ ((chatRun [[$lsl|
+    default {
+        state_entry() {
+            list il = (list) 1;
+            list fl = (list) 1.1;
+            list vl = (list) <1,2,3>;
+            list rl = (list) ZERO_ROTATION;
+            list kl = (list) ((key) "x");
+            llSay(0,(string)il + "," + (string)fl + "," + (string)vl + "," + (string)rl + "," + (string)kl);
+        }
+    }|]] ["1,1.100000,<1.00000,2.00000,3.00000>,<0.00000,0.00000,0.00000,1.00000>,x"]) { tLib = library })
+    
 jumpScript1 = [$lsl|
     default {
         state_entry() {
@@ -1131,6 +1143,16 @@ jumpTest5 = mkTest "Jump Test 5" $ ((logRunStrict [jumpScript5] ["chan = 0, mess
 
 jumpTests = TestList [ jumpTest1, jumpTest2, jumpTest3, jumpTest4, jumpTest5 ]
 
+cryptoTest = mkTest "Crypto Test" $ ((chatRun [[$lsl|
+    string crypto_key = "";
+    
+    default {
+        state_entry() {
+            string b64 = llXorBase64StringsCorrect( llStringToBase64( "abcdef" ), "");
+            llSay( 0, "Enc: "+b64 );
+        }
+    }|]] ["Enc: YWJjZGVm"]) { tLib = library })
+
 tests = TestList [
         helloWorldTest,
         forLoopTest,
@@ -1193,7 +1215,9 @@ tests = TestList [
         wildRegressTest1,
         negIndexTest,
         loadURLScriptTest,
-        jumpTests
+        jumpTests,
+        castTest,
+        cryptoTest
     ]
     
 ----------------------------------------------------------------------------------------------------------------------
