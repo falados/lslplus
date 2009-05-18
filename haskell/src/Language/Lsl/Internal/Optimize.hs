@@ -32,7 +32,8 @@ import Language.Lsl.UnitTestEnv(simSFunc)
 optionInlining = elem OptimizationInlining
 
 optimizeScript :: [OptimizerOption] -> CompiledLSLScript -> CompiledLSLScript
-optimizeScript options script@(CompiledLSLScript gs fsIn ss) = CompiledLSLScript gsReachable fsReachable ss1
+optimizeScript options script@(CompiledLSLScript comment gs fsIn ss) = 
+        CompiledLSLScript comment gsReachable fsReachable ss1
    where inline = optionInlining options
          gcs = globalConstants gs fsIn ss
          scc = graphInfo fsIn
@@ -47,8 +48,8 @@ optimizeScript options script@(CompiledLSLScript gs fsIn ss) = CompiledLSLScript
          fsReachable = reachableFuncs ss1 (simp fs') -- funcs that are still reachable from handlers
          gsReachable = reachableGlobs (simp gs) fsReachable ss1 -- globals that are still reachable from handlers/funcs
          simp = if inline then simplify script pure gcs else id
-         runInliningOnState s@(State nm hs) = if noinlining nm then s
-             else (State nm (map (runInliningOnHandler funFacts ifs' gs) hs))
+         runInliningOnState s@(Ctx sc (State nm hs)) = if noinlining nm then s
+             else (Ctx sc (State nm (map (runInliningOnHandler funFacts ifs' gs) hs)))
 
 hasPragma p (Ctx (Just SourceContext { srcPragmas = l }) _) | p `elem` l = True
                                                             | otherwise  = False
@@ -59,8 +60,9 @@ noinlining = hasPragma PragmaNoInline
 
 data EPKey = HK String String | FK String deriving (Show, Eq, Ord)
 
-stateEdges :: [State] -> [(EPKey,EPKey,[EPKey])]
-stateEdges ss = concatMap (\ (State (Ctx _ nm) hs) -> (map (\ h@(Handler (Ctx _ nm') _ _) -> (HK nm nm',HK nm nm', (map  FK (handlerCallsFuncs h)))) hs)) ss
+stateEdges :: [Ctx State] -> [(EPKey,EPKey,[EPKey])]
+stateEdges ss = concatMap (\ (Ctx _ (State (Ctx _ nm) hs)) -> (map (\ h@(Ctx _ (Handler (Ctx _ nm') _ _)) -> 
+        (HK nm nm',HK nm nm', (map  FK (handlerCallsFuncs h)))) hs)) ss
 
 funcEdges :: [Ctx Func] -> [(EPKey,EPKey,[EPKey])]
 funcEdges fs = map (\ f -> let fn = fname f in (FK fn, FK fn,map FK $ funcCallsFuncs f)) fs
@@ -102,7 +104,7 @@ exprCallsFuncDirectly _ = []
 funcCallsFuncs :: Ctx Func -> [String]
 funcCallsFuncs = everythingBut stopCondition (++) [] ([] `mkQ` exprCallsFuncDirectly)
        
-handlerCallsFuncs :: Handler -> [String]
+handlerCallsFuncs :: Ctx Handler -> [String]
 handlerCallsFuncs = everythingBut stopCondition (++) [] ([] `mkQ` exprCallsFuncDirectly)
 
 fname (Ctx _ (Func (FuncDec (Ctx _ name) _ _) _)) = name
@@ -392,7 +394,7 @@ inlineStmts endLabel (If e s0 s1:stmts) = do
     
 runInliningOnFunc :: M.Map String FunctionFacts -> [Ctx Func] -> [Global] -> Ctx Func -> Ctx Func
 runInliningOnFunc ff fs gs f = if noinlining f then f else
-    evalState (performInliningOnFunc f) (freshOptimizerState ff fs (map (\ (GDecl (Var nm _) _) -> nm) gs))
+    evalState (performInliningOnFunc f) (freshOptimizerState ff fs (map (\ (GDecl (Ctx _ (Var nm _)) _) -> nm) gs))
     
 performInliningOnFunc :: Ctx Func -> OState (Ctx Func)
 performInliningOnFunc f@(Ctx ctx (Func (FuncDec nm t parms) stmts)) =
@@ -407,9 +409,9 @@ performInliningOnFunc f@(Ctx ctx (Func (FuncDec nm t parms) stmts)) =
               nm' <- renameToNewInInliner nm
               return (nullCtx $ Var nm' t)
     
-runInliningOnHandler :: M.Map String FunctionFacts -> [Ctx Func] -> [Global] -> Handler -> Handler
-runInliningOnHandler ff fs gs h = if noinlining (handlerName h) then h else
-    evalState (performInliningOnHandler h) (freshOptimizerState ff fs (map (\ (GDecl (Var nm _) _) -> nm) gs))
+runInliningOnHandler :: M.Map String FunctionFacts -> [Ctx Func] -> [Global] -> Ctx Handler -> Ctx Handler
+runInliningOnHandler ff fs gs h = if noinlining (handlerName $ ctxItem h) then h else
+    nullCtx $ evalState (performInliningOnHandler $ ctxItem h) (freshOptimizerState ff fs (map (\ (GDecl (Ctx _ (Var nm _)) _) -> nm) gs))
     
 performInliningOnHandler :: Handler -> OState Handler
 performInliningOnHandler h@(Handler nm parms stmts) = 
@@ -791,16 +793,17 @@ areUsedIn l v =
           comp :: Component -> Bool
           comp _ = True
 
-reachableGlobs gs fs ss = [ g | g@(GDecl (Var nm _) _) <- gs, nm `elem` reachableNames]
+reachableGlobs gs fs ss = [ g | g@(GDecl (Ctx _ (Var nm _)) _) <- gs, nm `elem` reachableNames]
     where reachableNames = (gnms `areUsedIn` ss) ++ (gnms `areUsedIn` fs) ++ (gnms `areUsedIn` gs)
-          gnms = [ nm | g@(GDecl (Var nm _) _) <- gs]
+          gnms = [ nm | g@(GDecl (Ctx _ (Var nm _)) _) <- gs]
           
-globalConstants :: [Global] -> [Ctx Func] -> [State] -> M.Map String Expr
+globalConstants :: [Global] -> [Ctx Func] -> [Ctx State] -> M.Map String Expr
 globalConstants gs fs ss =
         foldl globalConstant M.empty gs
-    where globalConstant m (GDecl (Var nm t) mexpr) = if nm `notElem` nonConsts then M.insert nm (mexpr2expr m t mexpr) m else m
+    where globalConstant m (GDecl (Ctx _ (Var nm t)) mexpr) = 
+              if nm `notElem` nonConsts then M.insert nm (mexpr2expr m t mexpr) m else m
           nonConsts = arentConstants gnms fs ++ arentConstants gnms ss
-          gnms = [nm | (GDecl (Var nm _) _) <- gs]
+          gnms = [nm | (GDecl (Ctx _ (Var nm _)) _) <- gs]
           -- isAConst nm = isConstant nm fs && isConstant nm ss
           expr2expr :: M.Map String Expr -> Expr -> Expr
           expr2expr m = everywhere (mkT go)

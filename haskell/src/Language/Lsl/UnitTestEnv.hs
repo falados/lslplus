@@ -102,7 +102,7 @@ doPredef n i a =
               else fail ("unexpected call: " ++ renderCall n a)
               
 mkScript (LModule globdefs vars) =
-    LSLScript (varsToGlobdefs ++ globdefs) [L.State (nullCtx "default") []]
+    LSLScript "" (varsToGlobdefs ++ globdefs) [nullCtx $ L.State (nullCtx "default") []]
     where varsToGlobdefs = map (\ v -> GV v Nothing) vars
 
 getValidScript name =

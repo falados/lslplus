@@ -67,14 +67,14 @@ import Debug.Trace(trace)
 
 -- initialize a script for execution
 initLSLScript :: RealFloat a => CompiledLSLScript -> ScriptImage a
-initLSLScript (CompiledLSLScript globals fs ss)  =
+initLSLScript (CompiledLSLScript _ globals fs ss)  =
     ScriptImage {
         scriptImageName = "",
         curState = "default",
         executionState = Waiting,
         glob = initGlobals globals,
         funcs = map ctxItem fs,
-        states = ss,
+        states = map ctxItem ss,
         valueStack = [],
         callStack = [],
         stepManager = emptyStepManager,
@@ -259,7 +259,7 @@ readMem = lookupM
 initGlobals :: RealFloat a => [Global] -> MemRegion a
 initGlobals globals = map (initGlobal globals) globals
  
-initGlobal globals (GDecl (Var name t) mexpr) = initVar name t $ fmap (evalLit globals) mexpr
+initGlobal globals (GDecl (Ctx _ (Var name t)) mexpr) = initVar name t $ fmap (evalLit globals) mexpr
 
 evalCtxLit globals (Ctx _ expr) = evalLit globals expr
        
@@ -280,7 +280,7 @@ evalLit globals expr =
         VecExpr a b c   -> VVal (litExpr2Float a) (litExpr2Float b) (litExpr2Float c)
         RotExpr a b c d -> RVal (litExpr2Float a) (litExpr2Float b) (litExpr2Float c) (litExpr2Float d)
         Get (Ctx _ nm,All)    -> 
-            case find (\ (GDecl (Var nm' t) mexpr') -> nm == nm') globals of
+            case find (\ (GDecl (Ctx _ (Var nm' t)) mexpr') -> nm == nm') globals of
                 Nothing -> 
                     case findConstVal nm of
                         Nothing -> error ("invalid global " ++ nm ++ " referenced in initializer")
@@ -582,13 +582,13 @@ data ExecutionState = Waiting | Executing | Halted | SleepingTil Int | Erroneous
     deriving (Show,Eq)
 
 matchEvent (Event name _ _) [] = fail ("no such handler" ++ name)
-matchEvent event@(Event name values _) ((Handler (Ctx ctx name') parms stmts):hs) 
+matchEvent event@(Event name values _) ((Ctx _ (Handler (Ctx ctx name') parms stmts)):hs) 
         | name == name' = do mem <- bindParms (ctxItems parms) values
                              return (mem,stmts,name,ctx)
         | otherwise = matchEvent event hs
 
 findHandler name handlers = ctx ("finding handler " ++ name) $ 
-    findM (\ (Handler (Ctx _ name') _ _) -> name' == name) handlers
+    findM (\ (Ctx _ (Handler (Ctx _ name') _ _)) -> name' == name) handlers
 
 
 evalScriptSimple :: (Read a, RealFloat a, Monad w) => Int -> [String] -> [Binding a] -> [LSLValue a] -> Eval w a (EvalResult,Maybe (LSLValue a))
@@ -630,7 +630,7 @@ setupSimple path globbindings args =
           getEntryPoint [stateName,handlerName] =
               do states <- getStates
                  (State _ handlers) <- findState stateName states
-                 (Handler name params stmts) <- findHandler handlerName handlers
+                 (Ctx _ (Handler name params stmts)) <- findHandler handlerName handlers
                  return (ctxItems params,stmts, srcCtx name)
 
 incontext s f =
@@ -1114,4 +1114,4 @@ data ExecutionInfo a = ExecutionInfo String Int (FrameInfo a) deriving (Show)
 hasActiveHandler simage handler =
     case find ( \ (State ctxname _) -> curState simage == ctxItem ctxname) (states simage) of
         Nothing -> False
-        Just (State _ handlers) -> isJust $ find (\ (Handler ctxname _ _) -> handler == ctxItem ctxname) handlers                 
+        Just (State _ handlers) -> isJust $ find (\ (Ctx _ (Handler ctxname _ _)) -> handler == ctxItem ctxname) handlers                 

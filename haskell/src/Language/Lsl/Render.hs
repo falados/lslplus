@@ -2,21 +2,23 @@ module Language.Lsl.Render(renderCompiledScript,renderStatements,renderCtxStatem
 
 import Data.List(foldl',intersperse)
 import Language.Lsl.Syntax(Expr(..),Func(..),FuncDec(..),Global(..),Handler(..),State(..),Statement(..),
-                  Ctx(..),Var(..),LSLType(..),Component(..),ctxItems,CompiledLSLScript(..))
+                  Ctx(..),Var(..),LSLType(..),Component(..),ctxItems,CompiledLSLScript(..),
+                  SourceContext(..))
 import Debug.Trace
 tr s x = trace (s ++ show x) x
 -- | Generate a string representing an LSL script from a timestamp (string) 
 -- and a compiled (i.e. validated, with referenced modules included) LSL script.
 renderCompiledScript :: String -> CompiledLSLScript -> String
-renderCompiledScript stamp (CompiledLSLScript globals funcs states) =
+renderCompiledScript stamp (CompiledLSLScript comment globals funcs states) =
    (renderString "// LSL script generated: " . renderString stamp . renderString "\n" .
+    renderString comment .
     renderGlobals globals . renderFuncs funcs . renderStates states) ""
 
 renderSequence r = (foldl' (.) blank) . (map r)
 
 renderGlobals = renderSequence renderGlobal
 
-renderGlobal (GDecl var val) = renderVar var . 
+renderGlobal (GDecl (Ctx sc var) val) = renderPreText sc . renderVar var . 
     case val of 
         Nothing -> renderString ";\n"
         Just expr -> renderString " = " . renderSimple expr . renderString ";\n"
@@ -40,17 +42,19 @@ renderSimple e = renderExpression e
 
 renderStates = renderSequence renderState
 
-renderState (State (Ctx _ "default") handlers) =
+renderState (Ctx ssc (State (Ctx sc "default") handlers)) = 
+    renderPreText ssc .
     renderString "default {\n" . renderHandlers handlers . renderString "}\n"
-renderState (State (Ctx _ name) handlers) =
+renderState (Ctx ssc (State (Ctx _ name) handlers)) =
+    renderPreText ssc .
     renderString "state " . renderString name . renderString " {\n" . renderHandlers handlers . renderString "}\n"
  
 renderHandlers = renderSequence renderHandler
 
-renderHandler (Handler (Ctx _ name) vars stmts) = renderHandler' name vars stmts
+renderHandler (Ctx _ (Handler (Ctx sc name) vars stmts)) = renderPreText1 (renderIndent 0) sc . renderHandler' name vars stmts
 
 renderHandler' name vars stmts =
-    renderIndent 0 . renderString name . renderChar '(' . renderVarList (ctxItems vars) . renderString ") {\n" . 
+    renderString name . renderChar '(' . renderVarList (ctxItems vars) . renderString ") {\n" . 
         renderStatements 1 stmts . renderIndent 0 . renderString "}\n"
         
 renderChar = showChar
@@ -222,3 +226,9 @@ renderType LLVoid = blank
 
 blank :: String -> String
 blank = id
+
+renderPreText :: (Maybe SourceContext) -> String -> String
+renderPreText = maybe blank (renderString . srcPreText)
+
+renderPreText1 :: (String -> String) -> (Maybe SourceContext) -> String -> String
+renderPreText1 f = maybe f (renderString . srcPreText)

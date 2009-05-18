@@ -2,7 +2,13 @@
 --   issue a report on all the errors it has found
 --   generate LSL scripts for those LSL+ scripts that successfully 'compiled'
 
-module Language.Lsl.Internal.Compiler(compile,main0,compileEmitSummarize,formatCompilationSummary) where
+module Language.Lsl.Internal.Compiler(
+    compile,
+    main0,
+    compileEmitSummarize,
+    compileAndEmit,
+    formatCompilationSummary,
+    renderScriptsToFiles) where
 
 import Control.Monad(when)
 import qualified Data.ByteString as B
@@ -38,6 +44,11 @@ compileEmitSummarize sourceInfo@(optimize,_,scriptInfo) = do
    results <- compile sourceInfo
    renderScriptsToFiles optimize (snd results) scriptInfo
    return (results,formatCompilationSummary results)
+
+compileAndEmit sourceInfo@(optimize,_,scriptInfo) = do
+   results <- compile sourceInfo
+   renderScriptsToFiles optimize (snd results) scriptInfo
+   return results
    
 main0 = readCompileEmit stdin
       
@@ -63,12 +74,13 @@ formatScriptCompilationSummary (name,result) =
         ([emit "name" [showString name]] ++ 
         case result of
             Left errs -> [emit "status" [emit "ok" [showString "false"], emit "errs" (map formatErr errs)]]
-            Right (CompiledLSLScript globals funcs states) ->
+            Right (CompiledLSLScript _ globals funcs states) ->
                 [emit "status" [emit "ok" [showString "true"]],
                 emit "entryPoints" (map emitFunc funcs ++ concatMap stateEntryPointEmitters states),
                 emit "globals" (map emitGlobal globals)])
     where funcNames = map (\ (Func dec _) -> ctxItem $ funcName dec)
-          handlerPaths = concatMap (\ (State ctxName handlers) -> map (\ (Handler ctxName1 _ _) -> ctxItem ctxName ++ "." ++ ctxItem ctxName1) handlers)
+          handlerPaths = concatMap (\ (Ctx _ (State ctxName handlers)) -> map (\ (Ctx _ (Handler ctxName1 _ _)) ->
+              ctxItem ctxName ++ "." ++ ctxItem ctxName1) handlers)
  
 formatModuleCompilationSummary (name,result) =
     emit "item"
@@ -87,16 +99,16 @@ emitFunc (Ctx _ (Func fd _)) =
         emit "returnType" [showString (lslTypeString $ funcType fd)],
         emit "params" (emitParams $ map ctxItem (funcParms fd))]
 
-emitGlobal (GDecl (Var n t) _) = emit "global" (emitNameTypePair n t)
+emitGlobal (GDecl (Ctx _ (Var n t)) _) = emit "global" (emitNameTypePair n t)
       
 emitFreeVar ctxvar =
    let (Var n t) = ctxItem ctxvar in emit "global" (emitNameTypePair n t)
        
 emitNameTypePair n t = [emit "name" [showString n], emit "type" [showString $ lslTypeString t]]
    
-stateEntryPointEmitters (State ctxName handlers) = map (emitHandler $ ctxItem ctxName) handlers
+stateEntryPointEmitters (Ctx _ (State ctxName handlers)) = map (emitHandler $ ctxItem ctxName) handlers
 
-emitHandler state (Handler ctxName ctxVars _) =
+emitHandler state (Ctx _ (Handler ctxName ctxVars _)) =
     emit "entryPoint" [
         emit "name" [showString (state ++ "." ++ ctxItem ctxName)],
         emit "returnType" [showString "void"],

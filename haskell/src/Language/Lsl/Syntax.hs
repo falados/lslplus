@@ -74,7 +74,7 @@ import Debug.Trace
 --trace1 s v = trace (s ++ show v) v
 
 data TextLocation = TextLocation { textLine0 :: Int, textColumn0 :: Int, textLine1 :: Int, textColumn1 :: Int, textName :: String }
-    deriving (Show,Typeable,Data)
+    deriving (Show,Eq,Typeable,Data)
 data SourceContext = SourceContext { srcTextLocation :: TextLocation, srcPreText :: String, srcPostTxt :: String, srcPragmas :: [Pragma] }
                      deriving (Show,Typeable,Data)
 
@@ -197,7 +197,7 @@ isLabel _ = False
 
 -- | An LSL global variable (this is actually not a source level/syntactic entity -- the set of globals
 -- for a script is derived after analyzing all included modules.
-data Global = GDecl Var (Maybe Expr)
+data Global = GDecl (Ctx Var) (Maybe Expr)
     deriving (Show,Typeable,Data)
 
 -- | A global definition (a function, a variable, or a module import statement).
@@ -212,11 +212,11 @@ goodHandlers :: [(String,[LSLType])]
 goodHandlers = simpleLslEventDescriptors
 
 -- | An LSL state definition.
-data State = State CtxName [Handler]
+data State = State CtxName [Ctx Handler]
     deriving (Show,Typeable,Data)
 
 -- | An LSL script.
-data LSLScript = LSLScript [GlobDef] [State] deriving (Show,Typeable,Data)
+data LSLScript = LSLScript String [GlobDef] [Ctx State] deriving (Show,Typeable,Data)
 
 type ModuleInfo = ([Global],[Ctx Func])
 -- | A collection of modules.
@@ -263,9 +263,10 @@ matchTypes LLFloat LLInteger = True
 matchTypes dest src = dest == src || (all (`elem` [LLKey,LLString]) [dest,src])
 
 data CompiledLSLScript = CompiledLSLScript {
+    scriptComment :: !String,
     scriptGlobals :: ![Global],
     scriptFuncs :: ![Ctx Func],
-    scriptStates :: ![State]}
+    scriptStates :: ![Ctx State]}
     deriving (Show)
 
 data RefPos = RefPos { refPosName :: !String, refPosLine :: !Int, refPosCol :: !Int }
@@ -279,7 +280,7 @@ data ValidationState = ValidationState {
         vsRefs :: !(M.Map RefPos SourceContext),
         vsLabels :: ![[String]],
         vsModules :: ![String],
-        vsStates :: ![State],
+        vsStates :: ![Ctx State],
         vsGlobals :: ![Global],
         vsFuncs :: ![Ctx Func],
         vsErr :: ![CodeErr],
@@ -373,7 +374,7 @@ vsmAddFunc func = get'vsFuncs >>= put'vsFuncs . (func :)
 vsmAddGlobal :: Global -> VState ()
 vsmAddGlobal global = get'vsGlobals >>= put'vsGlobals . (global :)
 
-vsmAddState :: State -> VState ()
+vsmAddState :: Ctx State -> VState ()
 vsmAddState state = get'vsStates >>= put'vsStates . (state :)
 
 vsmAddLocal :: Maybe SourceContext -> Var -> VState ()
@@ -486,7 +487,7 @@ warnLabelsMany :: Data a => [a] -> [CodeErr]
 warnLabelsMany = concatMap warnLabels
 
 warnLabelsStates = concatMap warnLabelsState
-    where warnLabelsState (State _ hs) = warnLabelsMany hs
+    where warnLabelsState (Ctx _ (State _ hs)) = warnLabelsMany hs
     
 warnLabels :: Data a => a -> [CodeErr]
 warnLabels x = map (\ (name,ctx) -> (ctx,"label " ++ name ++ " is already defined (problem for LSL/Mono)")) problems
@@ -496,7 +497,7 @@ warnLabels x = map (\ (name,ctx) -> (ctx,"label " ++ name ++ " is already define
           fstEq = flip ((==) . fst) . fst
 
 compileLSLScript :: LSLScript -> VState (Validity CompiledLSLScript)
-compileLSLScript (LSLScript globs states) = do
+compileLSLScript (LSLScript comment globs states) = do
     preprocessGlobDefs_ "" globs
     preprocessStates states
     mapM_ vsmAddGF predefFuncs
@@ -510,11 +511,11 @@ compileLSLScript (LSLScript globs states) = do
            states <- get'vsStates
            -- for now, error on label warnings since we have no warnings
            return $ case warnLabelsStates states ++ warnLabelsMany funcs of
-               [] -> Right $ CompiledLSLScript (reverse globals) (reverse funcs) (reverse states)
+               [] -> Right $ CompiledLSLScript comment (reverse globals) (reverse funcs) (reverse states)
                errs -> Left errs
         _ -> return $ Left $ reverse err
 
-preprocessStates states = let snames = map (\ (State cn _) -> ctxItem cn) states in put'vsStateNames snames
+preprocessStates states = let snames = map (\ (Ctx _ (State cn _)) -> ctxItem cn) states in put'vsStateNames snames
 
 preprocessGlobDefs :: String -> [GlobDef] -> VState ([Var],[FuncDec])
 preprocessGlobDefs prefix globs = do
@@ -548,7 +549,7 @@ compileGlob (GV v mexpr) = do
        whenJust mt $ \ t -> when (not (varType v' `matchTypes` t)) (vsmAddErr (srcCtx v, "expression not of the correct type"))
     vsmRegisterGlobal v
     vsmAddToNamesUsed (varName v')
-    vsmAddGlobal (GDecl v' (fmap ctxItem mexpr))
+    vsmAddGlobal (GDecl v (fmap ctxItem mexpr))
 compileGlob (GF cf@(Ctx ctx f@(Func (FuncDec name t params) statements))) =
     vsmWithNewScope $ do
         compileParams params
@@ -595,7 +596,7 @@ rewriteGlob' prefix renames vars (GV (Ctx ctx (Var name t)) mexpr) =
             namesUsed <- get'vsNamesUsed
             if name' `elem` namesUsed
                 then vsmAddErr (ctx, name' ++ " imported from module is already defined")
-                else let rewrittenGlobVar = GDecl (Var name' t) (fmap (ctxItem . (rewriteCtxExpr renames)) mexpr)
+                else let rewrittenGlobVar = GDecl (nullCtx (Var name' t)) (fmap (ctxItem . (rewriteCtxExpr renames)) mexpr)
                      in do vsmAddToNamesUsed name'
                            vsmRegisterGlobal (Ctx ctx (Var name' t))
                            vsmAddGlobal rewrittenGlobVar
@@ -619,16 +620,16 @@ rewriteGlob' prefix0 renames vars (GI (Ctx ctx mName) bindings prefix) =
                                        Nothing -> vsmAddErr (ctx, rn ++ ": not found") >> return (fv,rn)
                                        Just rn' -> return (fv,rn')
 
-compileState :: State -> VState ()
-compileState state@(State nm handlers) = 
+compileState :: Ctx State -> VState ()
+compileState state@(Ctx _ (State nm handlers)) = 
     vsmWithinState $ do
         states <- get'vsStates
-        when (isJust (find (\ (State x _)-> ctxItem x == ctxItem nm) states)) $
+        when (isJust (find (\ (Ctx _ (State x _))-> ctxItem x == ctxItem nm) states)) $
             vsmAddErr (srcCtx nm, ctxItem nm ++ " already defined") 
         mapM_ compileHandler handlers
         vsmAddState state
 
-compileHandler  (Handler (Ctx ctx name) args stmts) =
+compileHandler  (Ctx _ (Handler (Ctx ctx name) args stmts)) =
     vsmWithNewScope $ do
         used <- get'vsHandlersUsed
         if name `elem` used then vsmAddErr (ctx, name ++ " already used in this state")
@@ -1295,9 +1296,9 @@ moduleFromScript script = LModule globDefs []
           globDefsFromFuncs = map GF
           funcDefsFromStates = concatMap funcDefsFromState
           
-globDefFromGlob (GDecl v me) = GV (nullCtx v) (fmap nullCtx me)
-funcDefsFromState (State ctxnm handlers) = map (funcDefFromHandler (ctxItem ctxnm)) handlers
-funcDefFromHandler stateName (Handler ctxnm params stmts) = GF $ nullCtx $ Func (FuncDec combinedName LLVoid params) stmts
+globDefFromGlob (GDecl v me) = GV v (fmap nullCtx me)
+funcDefsFromState (Ctx _ (State ctxnm handlers)) = map (funcDefFromHandler (ctxItem ctxnm)) handlers
+funcDefFromHandler stateName (Ctx _ (Handler ctxnm params stmts)) = GF $ nullCtx $ Func (FuncDec combinedName LLVoid params) stmts
     where combinedName = nullCtx $ stateName ++ "$$" ++ (ctxItem ctxnm)
 
 rewriteCtxExpr :: [(String,String)] -> Ctx Expr -> Ctx Expr

@@ -1,5 +1,5 @@
 Name:           LslPlus
-version:        0.3.2
+version:        0.3.5
 Synopsis:	    An execution and testing framework for the Linden Scripting Language (LSL)
 Description:	
 	Provides a framework for executing Linden Scripting Language scripts offline,
@@ -35,6 +35,7 @@ Executable LslPlus
     Language.Lsl.Internal.BreakpointsDeserialize
     Language.Lsl.Internal.BuiltInModules
     Language.Lsl.Internal.CodeHelper
+    Language.Lsl.Internal.CompilationServer
     Language.Lsl.Internal.Compiler
     Language.Lsl.Internal.Constants
     Language.Lsl.Internal.DOMProcessing
@@ -57,6 +58,8 @@ Executable LslPlus
     Language.Lsl.Internal.OptimizerOptions
     Language.Lsl.Internal.Physics
     Language.Lsl.Internal.Pragmas
+    Language.Lsl.Internal.SerializationGenerator
+    Language.Lsl.Internal.SerializationInstances
     Language.Lsl.Internal.SHA1
     Language.Lsl.Internal.SimMetaData
     Language.Lsl.Internal.SystemTester
@@ -74,6 +77,7 @@ Executable LslPlus
     Language.Lsl.UnitTest
     Language.Lsl.UnitTestEnv
     Language.Lsl.WorldDef
+    Text.Here
     Text.ParserCombinators.ParsecExtras.Language
     Text.ParserCombinators.ParsecExtras.Token
   Ghc-Options: -fwarn-unused-imports

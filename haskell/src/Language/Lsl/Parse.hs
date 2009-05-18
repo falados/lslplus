@@ -1,6 +1,8 @@
 {-# OPTIONS_GHC -XDeriveDataTypeable #-}
 {-# OPTIONS_GHC -XQuasiQuotes #-}
 module Language.Lsl.Parse(
+        alternateScriptParser,
+        alternateModuleParser,
         parseScript,
         parseModule,
         exprParser,
@@ -8,7 +10,15 @@ module Language.Lsl.Parse(
         parseScriptFromString,
         parseModuleFromString,
         parseScriptFromStringAQ,
-        parseModuleFromStringAQ
+        parseModuleFromStringAQ,
+        ParseError,
+        SourcePos,
+        errorMessages,
+        errorPos,
+        showErrorMessages,
+        sourceLine,
+        sourceColumn,
+        sourceName
     ) where
 
 import qualified Data.ByteString as B
@@ -30,31 +40,57 @@ import Debug.Trace
 
 data ParseState = ParseState {
         atStart :: !Bool,
+        initialComment :: !String,
         parseAntiQuotations :: !Bool,
         pendingPragmas :: ![Pragma],
         trailingWS :: !String,
-        leadingWS :: !String
+        leadingWS :: !String,
+        preWSPos :: !(Maybe SourcePos)
     }
     
 getAQState = getState >>= return . parseAntiQuotations
 
-newAQState = ParseState { atStart = True, parseAntiQuotations = True, pendingPragmas = [], trailingWS = "", leadingWS = "" }
-newNoAQState = ParseState { atStart = True, parseAntiQuotations = False, pendingPragmas = [], trailingWS = "", leadingWS = "" }
+newAQState = ParseState { 
+    atStart = True, 
+    initialComment = "",
+    parseAntiQuotations = True,
+    pendingPragmas = [],
+    trailingWS = "",
+    leadingWS = "",
+    preWSPos = Nothing }
+newNoAQState = ParseState { 
+    atStart = True,
+    initialComment = "",
+    parseAntiQuotations = False,
+    pendingPragmas = [],
+    trailingWS = "",
+    leadingWS = "",
+    preWSPos = Nothing }
 
 data WS = WSSimple { wsText :: String } | WSSingle { wsText :: String } | WSMulti { wsText :: String }
     deriving Show
+    
 custWS simpleSpace oneLineComment multiLineComment = do
+         startPos <- getPosition
          st <- getState
          ws <- many ((simpleSpace >>= return . WSSimple) <|> 
                      (oneLineComment >>= return . WSSingle) <|> 
                      (multiLineComment >>= return . WSMulti) <?> "")
          let (trailing,leading) = if atStart st then ([],ws) else extractTrailing ws
          let pragmas = foldl extractPragma [] leading
+         let (initComment,leading') = if atStart st
+               then findInitialComment True [] leading
+               else (initialComment st, leading)
          setState st { atStart = False,
+                       initialComment = initComment,
                        pendingPragmas = pragmas, 
                        trailingWS = wsCat trailing,
-                       leadingWS = wsCat leading }
-     where wsCat = concatMap wsText
+                       leadingWS = wsCat leading',
+                       preWSPos = Just startPos }
+     where wsCat = concatMap showWS
+           showWS (WSSimple txt) = txt
+           showWS (WSSingle txt) = "//" ++ txt
+           showWS (WSMulti txt) = "/*" ++ txt ++ "*/"
            extractTrailing [] = ([],[])
            extractTrailing (WSSimple txt:rest) =
                case break (=='\n') txt of
@@ -66,7 +102,14 @@ custWS simpleSpace oneLineComment multiLineComment = do
                                                    | otherwise       = let (t,rest') = extractTrailing rest in (ws:t,rest')
            extractPragma ps (WSSingle txt) = maybe ps (:ps) (parsePragma txt)
            extractPragma ps _ = ps
-                 
+           findInitialComment :: Bool -> [WS] -> [WS] -> (String,[WS])
+           findInitialComment _ rleading [] = ("",reverse rleading)
+           findInitialComment onNewLine rleading (ws@(WSSimple txt):wss)
+               | null txt = findInitialComment onNewLine rleading wss
+               | (onNewLine && newlines txt > 0) || newlines txt > 1 = (wsCat (reverse (ws:rleading)), wss)
+               | otherwise = findInitialComment (last txt == '\n') (ws:rleading) wss
+           findInitialComment onNewLine rleading (ws:wss) = findInitialComment False (ws:rleading) wss
+           newlines s = length [ c | c <- s, c == '\n']
 parsePragma :: String -> Maybe Pragma
 parsePragma txt =
       case parse parser "" txt of
@@ -84,7 +127,15 @@ parsePragma txt =
            pragma <- (reserved "inline" >> return PragmaInline) <|> (reserved "noinlining" >> return PragmaNoInline)
            eof
            return pragma
-           
+    
+getPreWSPos = getState >>= return . preWSPos
+
+-- get the position after the last non-whitespace character parsed so far
+getEndPosition = getPreWSPos >>= maybe getPosition return
+
+getTrailingWS = getState >>= return . trailingWS
+getLeadingWS = getState >>= return . leadingWS
+
 -- define basic rules for lexical analysis
 lslStyle = javaStyle
              { P.reservedOpNames= ["*","/","+","++","-","--","^","&","&&",
@@ -352,10 +403,12 @@ castExpr = ctxify $
 
 ctxify f = do
     pragmas <- getState >>= return . pendingPragmas
+    pre <- getLeadingWS
     pos0 <- getPosition
     v <- f
-    pos1 <- getPosition
-    return $ Ctx (pos2Ctx (pos0,pos1) pragmas) v
+    pos1 <- getEndPosition
+    post <- getTrailingWS
+    return $ Ctx (pos2Ctx (pos0,pos1) pre post pragmas) v
 
 notExpr = ctxify ((char '!' <?> "prefix operator") >> whiteSpace >> expr2 >>= return.Not)
 invExpr = ctxify ((char '~' <?> "prefix operator") >> whiteSpace >> expr2 >>= return.Inv)
@@ -524,7 +577,8 @@ hparams (theType:ts) = do p <- hparam theType
 
 handlerName name = try (do id <- symbol name; notFollowedBy identLetter; return id)
 
-handler' name types = do ctxname <- ctxify $ handlerName name
+handler' name types =  
+             ctxify $ do ctxname <- ctxify $ handlerName name
                          parms <- parens (hparams types)
                          stmts <- braces statements
                          return $ Handler ctxname parms stmts
@@ -536,28 +590,33 @@ handler = choice $ map (\ (n,ts) -> handler' n ts) goodHandlers
 
 stateName = choice [reserved "default" >> return "default" , reserved "state" >> identifier]
 
-stateDecl = do name <- ctxify stateName
-               handlers <- braces $ many handler
-               return $ State name handlers
+stateDecl = do ctxify $ do
+                   name <- ctxify stateName
+                   handlers <- braces $ many handler
+                   return $ State name handlers
 
 stateDecls = many stateDecl
 
 --------------------------------------------------------------
 varOrFunc =   do pos0 <- getPosition
+                 pre <- getLeadingWS
                  pragmas <- getState >>= return . pendingPragmas
                  (Ctx ctx (t,id)) <- ctxify $ do
                      t <- try typeName
                      id <- ctxify identifier <?> "identifier"
                      return (t,id)
-                 choice [func t id pragmas pos0, gvar ctx t id]
+                 choice [func t id pragmas pos0 pre, gvar ctx t id]
           <|> do pos0 <- getPosition
+                 pre <- getLeadingWS
                  pragmas <- getState >>= return . pendingPragmas
                  id <- ctxify identifier <?> "identifier"
-                 func LLVoid id pragmas pos0
-func t id pragmas pos0 = do ps <- parens params
+                 func LLVoid id pragmas pos0 pre
+func t id pragmas pos0 pre = 
+                         do ps <- parens params
                             stmts <- braces statements
-                            pos1 <- getPosition
-                            return $ GF $ Ctx (pos2Ctx (pos0, pos1) pragmas) $ Func (FuncDec id t ps) stmts
+                            pos1 <- getEndPosition
+                            post <- getTrailingWS
+                            return $ GF $ Ctx (pos2Ctx (pos0, pos1) pre post pragmas) $ Func (FuncDec id t ps) stmts
 ---------------------------------------------------------------
 -- GLOBAL VARIABLES parsing
 gvar ctx t (Ctx _ id) = do mexpr <- option Nothing (reservedOp' "=" >> expr >>= return . Just)
@@ -596,7 +655,8 @@ lslParser = do whiteSpace
                globs <- globals
                ss <- stateDecls
                eof
-               return $ LSLScript globs ss
+               comment <- getState >>= return . initialComment
+               return $ LSLScript comment globs ss
 
 moduleParser = do whiteSpace
                   reserved "$module"
@@ -611,11 +671,11 @@ data PResult a = PResult {
     resultPosition :: !SourcePos,
     resultItem :: !a }
 
-stateInitial = do
-    name <- ctxify stateName
-    lexeme (char '{')
-    hs <- many $ try handler
-    return (State name hs)
+-- stateInitial = do
+--     name <- ctxify stateName
+--     lexeme (char '{')
+--     hs <- many $ try handler
+--     return (State name hs)
 
 withRest a p = do
     setPosition p
@@ -623,30 +683,31 @@ withRest a p = do
     st <- getParserState
     return PResult { resultInput = stateInput st, resultPosition = statePos st, resultItem = v }
 
-parsePartialInitial = withRest $ do
-    whiteSpace
-    name <- ctxify stateName
-    lexeme (char '{')
-    hs <- many $ try handler
-    return (State name hs)
+-- parsePartialInitial = withRest $ do
+--     whiteSpace
+--     name <- ctxify stateName
+--     lexeme (char '{')
+--     hs <- many $ try handler
+--     return (State name hs)
 -- parse as many globals then states without failing
 parseGreedy1 = withRest $
-    do whiteSpace
-       gs <- many $ try global
-       ss <- many $ try stateDecl
-       return (gs,ss)
+    (do try whiteSpace
+        gs <- many $ try global
+        ss <- many $ try stateDecl
+        return (gs,ss)) <|> return ([],[])
 -- parse one global or state
 parseStrict1 = withRest $
     do whiteSpace
        v <- choice [global >>= return . Left, stateDecl >>= return . Right]
        return v
-parsePartial = withRest $ do
-    do whiteSpace
-       name <- ctxify stateName
-       lexeme (char '{')
-       hs <- many $ try handler
-       return (State name hs)
-parseResume = withRest (
+parsePartial = withRest $
+    ctxify $ 
+      do whiteSpace
+         name <- ctxify stateName
+         lexeme (char '{')
+         hs <- many $ try handler
+         return (State name hs)
+parseResume = withRest $ ctxify (
     (do whiteSpace
         hs <- many $ try handler
         lexeme (char '}')
@@ -657,52 +718,53 @@ parseResume = withRest (
         ss <- many $ try stateDecl
         return ([],s:ss)))
 parseGreedy2 = withRest $
-    do whiteSpace
-       many $ try stateDecl
+    (do try whiteSpace
+        many $ try stateDecl) <|> return []
 parseStrict2 = withRest stateDecl
 
-anotherParser srcName string = goGreedy1 False ([],[],[]) (initialPos "") string
+alternateScriptParser srcName string = goGreedy1 False ([],[],[]) (initialPos "") string
     where doParse p pos = runParser (p pos) newNoAQState srcName
-          goGreedy1 _ (gs,ss,errs) pos [] = (LSLScript gs ss, reverse errs)
+          goGreedy1 _ (gs,ss,errs) pos [] = (LSLScript "" gs ss, reverse errs)
           goGreedy1 skipErr (gs,ss,errs) pos s =
               case doParse parseGreedy1 pos s of
-                 Left err -> error ("the greedy parser should never return an error, but returned: " ++ show err)
-                 Right (PResult [] _ (gs',ss')) -> (LSLScript (gs ++ gs') (ss ++ ss'),errs)
+                 Left err -> error ("parseGreedy1 should never return an error, but returned: " ++ show err)
+                 Right (PResult [] _ (gs',ss')) -> (LSLScript "" (gs ++ gs') (ss ++ ss'),errs)
                  Right (PResult rest pos' (gs',ss')) -> goStrict1 False (gs ++ gs',ss ++ ss',errs) pos' rest
-          goStrict1 skipErr (gs,ss,errs) _ [] = (LSLScript gs ss,reverse errs)
+          goStrict1 skipErr (gs,ss,errs) _ [] = (LSLScript "" gs ss,reverse errs)
           goStrict1 skipErr (gs,ss,errs) pos s@(c:cs) = 
               case doParse parseStrict1 pos s of
                  Left err -> goPartial1 True (gs,ss,if skipErr then errs else err:errs) pos s
                  Right (PResult rest pos' (Left g)) -> goGreedy1 False (gs ++ [g],ss,errs) pos' rest
                  Right (PResult rest pos' (Right s)) -> goGreedy2 False (gs,ss ++ [s], errs) pos' rest
-          goPartial1 skipErr (gs,ss,errs) _ [] = (LSLScript gs ss,reverse errs)
+          goPartial1 skipErr (gs,ss,errs) _ [] = (LSLScript "" gs ss,reverse errs)
           goPartial1 skipErr (gs,ss,errs) pos s@(c:cs) =
               case doParse parsePartial pos s of
                   Left err -> goStrict1 True (gs,ss,if skipErr then errs else err:errs) (updatePosChar pos c) cs
-                  Right (PResult rest pos' s) -> goResume True s (gs,ss, errs) pos' rest
-          goResume skipErr state (gs,ss,errs) _ [] = (LSLScript gs (ss ++ [state]),reverse errs)
-          goResume skipErr state@(State nm hs) (gs,ss,errs) pos s@(c:cs) =
+                  Right (PResult rest pos' state) -> goResume True state (gs,ss, errs) pos' rest
+          goResume skipErr state (gs,ss,errs) _ [] = (LSLScript "" gs (ss ++ [state]),reverse errs)
+          goResume skipErr state@(Ctx c0 (State nm hs)) (gs,ss,errs) pos s@(c:cs) =
               case doParse parseResume pos s of
                   Left err -> goResume True state (gs,ss,if skipErr then errs else err:errs) (updatePosChar pos c) cs
-                  Right (PResult rest pos' (hs',ss')) -> goGreedy2 False (gs,ss ++ (State nm (hs ++ hs'):ss'),errs) pos' rest
-          goGreedy2 skipErr (gs,ss,errs) _ [] = (LSLScript gs ss,reverse errs)
+                  Right (PResult rest pos' (Ctx c1 (hs',ss'))) -> 
+                      goGreedy2 False (gs,ss ++ (Ctx (combineContexts1 c0 c1) (State nm (hs ++ hs')):ss'),errs) pos' rest
+          goGreedy2 skipErr (gs,ss,errs) _ [] = (LSLScript "" gs ss,reverse errs)
           goGreedy2 skipErr (gs,ss,errs) pos s =
               case doParse parseGreedy2 pos s of
-                 Left err -> error ("the greedy parser should never return an error, but returned: " ++ show err)
-                 Right (PResult [] _ ss') -> (LSLScript gs (ss ++ ss'),reverse errs)
+                 Left err -> error ("parseGreedy2 parser should never return an error, but returned: " ++ show err)
+                 Right (PResult [] _ ss') -> (LSLScript "" gs (ss ++ ss'),reverse errs)
                  Right (PResult rest pos' ss') -> goStrict2 True (gs,ss ++ ss',errs) pos' rest
-          goStrict2 skipErr (gs,ss,errs) _ [] = (LSLScript gs ss,reverse errs)
+          goStrict2 skipErr (gs,ss,errs) _ [] = (LSLScript "" gs ss,reverse errs)
           goStrict2 skipErr (gs,ss,errs) pos s@(c:cs) =
               case doParse parseStrict2 pos s of
                   Left err -> goPartial2 True (gs,ss,if skipErr then errs else err:errs) pos s
                   Right (PResult rest pos' s) -> goGreedy2 False (gs,ss ++ [s],errs) pos rest
-          goPartial2 skipErr (gs,ss,errs) _ [] = (LSLScript gs ss,reverse errs)
+          goPartial2 skipErr (gs,ss,errs) _ [] = (LSLScript "" gs ss,reverse errs)
           goPartial2 skipErr (gs,ss,errs) pos s@(c:cs) =
               case doParse parsePartial pos s of
                   Left err -> goStrict2 True (gs,ss,if skipErr then errs else err:errs) (updatePosChar pos c) cs
                   Right (PResult rest pos' state) -> goResume True state (gs,ss,errs) pos' rest
  
-anotherModuleParser srcName string = goStart string
+alternateModuleParser srcName string = goStart string
     where doParse p pos = runParser (p pos) newNoAQState srcName
           startPos = initialPos ""
           goStart s =
@@ -713,7 +775,7 @@ anotherModuleParser srcName string = goStart string
           goGreedy skip (fv,gs,errs) pos s =
               case doParse parseGreedy pos s of
                   Left err -> error ("the greedy parser should never return an error, but returned: " ++ show err)
-                  Right (PResult [] _ gs') -> (LModule gs fv, reverse errs)
+                  Right (PResult [] _ gs') -> (LModule (gs ++ gs') fv, reverse errs)
                   Right (PResult rest pos' gs') -> goStrict False (fv,gs ++ gs',errs) pos' rest
           goStrict skip (fv,gs,errs) pos [] = (LModule gs fv, reverse errs)
           goStrict skip (fv,gs,errs) pos s@(c:cs) = 
@@ -771,25 +833,34 @@ parseFile p file =
            Right x -> return $ Right x
     where parser = runParser p newNoAQState file
     
-pos2Loc (pos0,pos1) = 
+pos2Loc (pos0,pos1) pre post = 
      SourceContext TextLocation { 
          textName = sourceName pos0,
          textColumn0 = sourceColumn pos0,
          textLine0 = sourceLine pos0,
          textColumn1 = sourceColumn pos1,
          textLine1 = sourceLine pos1
-     } "" "" []
+     } pre post []
      
-pos2Ctx (pos0,pos1) pragmas =  Just (pos2Loc (pos0,pos1)) { srcPragmas = pragmas }
+pos2Ctx (pos0,pos1) pre post pragmas =  
+    Just (pos2Loc (pos0,pos1) "" "") { srcPreText = pre, srcPostTxt = post, srcPragmas = pragmas }
 
-combineContexts (Nothing,pos0,pos1,Nothing) = Just $ pos2Loc (pos0,pos1)
-combineContexts (Just (SourceContext (TextLocation l0 c0 l1 c1 n) pre _ prag),_,_,Just (SourceContext (TextLocation l0' c0' l1' c1' n') _ post _ )) =
+combineContexts (Nothing,pos0,pos1,Nothing) = Just $ pos2Loc (pos0,pos1) "" ""
+combineContexts (Just (SourceContext (TextLocation l0 c0 l1 c1 n) pre _ prag),_,
+                 _,Just (SourceContext (TextLocation l0' c0' l1' c1' n') _ post _ )) =
     Just $ SourceContext (TextLocation l0 c0 l1' c1' n) pre post prag
 combineContexts (Just (SourceContext (TextLocation l0 c0 l1 c1 n) pre post prag),_,pos,_) =
     Just $ SourceContext (TextLocation l0 c0 (sourceLine pos) (sourceColumn pos) n) pre post prag
 combineContexts (_,pos,_,Just (SourceContext (TextLocation l0 c0 l1 c1 n) pre post prag)) =
     Just $ SourceContext (TextLocation (sourceLine pos) (sourceColumn pos) l1 c1 n) pre post prag
 
+combineContexts1 Nothing _ = Nothing
+combineContexts1 _ Nothing = Nothing
+combineContexts1 
+    (Just (SourceContext (TextLocation l0 c0 _ _ n) pre _ prag))
+    (Just (SourceContext (TextLocation _ _ l1 c1 _) _ post _)) = 
+        (Just (SourceContext (TextLocation l0 c0 l1 c1 n) pre post prag))
+        
 tst = [$here|@
     integer foo() {
         return 1;

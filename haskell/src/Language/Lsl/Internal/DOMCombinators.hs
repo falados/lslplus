@@ -22,13 +22,13 @@ type AttributesTester a = Posn -> [Attribute] -> Either String (Maybe a)
 
 el :: String -> (b -> a) -> ContentAcceptor b -> ElementTester a
 el tag f cf p (Elem name _ cs) | tag /= name = Right Nothing
-                                  | otherwise = case cf cs of
+                               | otherwise = case cf cs of
                                         Left s -> Left ("at " ++ show p ++ ": " ++ s)
                                         Right v -> Right (Just (f v))
 
 elWith :: String -> (a -> b -> c) -> AttributeAcceptor (Maybe a) -> ContentAcceptor b -> ElementTester c
 elWith tag f af cf p (Elem name attrs cs) | tag /= name = Right Nothing
-                                             | otherwise = do
+                                          | otherwise = do
                                                    av <- af p attrs 
                                                    case av of
                                                        Nothing -> Right Nothing
@@ -42,12 +42,16 @@ liftElemTester ef (CElem e pos) = case ef pos e of
     Right v -> Right v
     
 canHaveElem :: ElementTester a -> ContentFinder (Maybe a)
-canHaveElem ef = get >>= \ cs -> mapM (\ c -> (lift . liftElemTester ef) c >>= return . (,) c) cs >>= (\ vs -> case span (isNothing . snd) vs of
+canHaveElem ef = get >>= \ cs -> 
+        mapM (\ c -> (lift . liftElemTester ef) c >>= return . (,) c) [ e | e@(CElem _ _) <- cs ]
+        >>= (\ vs -> case span (isNothing . snd) vs of
     (bs,[]) -> put (map fst bs) >> return Nothing
     (bs,c:cs) -> put (map fst (bs ++ cs)) >> return (snd c))
    
 mustHaveElem :: ElementTester a -> ContentFinder a
-mustHaveElem ef = get >>= \ cs -> mapM (\ c -> (lift . liftElemTester ef) c >>= return . (,) c) cs >>= (\ vs -> case span (isNothing . snd) vs of
+mustHaveElem ef = get >>= \ cs -> 
+        mapM (\ c -> (lift . liftElemTester ef) c >>= return . (,) c) [ e | e@(CElem _ _) <- cs ] 
+        >>= (\ vs -> case span (isNothing . snd) vs of
     (bs,[]) -> throwError ("element not found")
     (bs,c:cs) -> put (map fst (bs ++ cs)) >> return (fromJust $ snd c))
 
