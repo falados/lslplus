@@ -287,3 +287,12 @@ allTests = TestLabel "All Tests" $ TestList [
     validScriptStr "casts to list" casts ]
 
     
+altModule = [$here|$module ()
+
+integer bar(integer x) {
+	return   1;
+}
+
+iteger test;|]
+
+
