@@ -937,7 +937,7 @@ eval' =
                     (FVal f1,IVal i2) -> FVal (f1 / fromInt i2)
                     (FVal f1,FVal f2) -> FVal (f1/f2)
                     (v@(VVal _ _ _),IVal i) -> let f = 1.0 / fromInt i in vecMulScalar v f
-                    (v@(VVal _ _ _),FVal f) -> vecMulScalar v f
+                    (v@(VVal _ _ _),FVal f) -> vecMulScalar v (1/f)
                     (v@(VVal _ _ _),r@(RVal _ _ _ _)) -> rotMulVec (invRot r) v
                     (r1@(RVal _ _ _ _),r2@(RVal _ _ _ _)) -> rotMul r1 $ invRot r2
                     _ -> error ("cannot apply operator to " ++ (show val1) ++ " and " ++ (show val2))

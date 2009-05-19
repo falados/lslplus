@@ -197,10 +197,12 @@ renderExpression (DivBy va expr) = renderAssignment va "/=" expr
 renderExpression (ModBy va expr) = renderAssignment va "%=" expr
 renderExpression (Equal expr1 expr2) = renderBinExpr "==" expr1 expr2
 renderExpression (NotEqual expr1 expr2) = renderBinExpr "!=" expr1 expr2
-renderExpression (PostInc va) = renderVarAccess va . renderString "++"
-renderExpression (PostDec va) = renderVarAccess va . renderString "--"
-renderExpression (PreInc va) = renderString "++" . renderVarAccess va
-renderExpression (PreDec va) = renderString "--" . renderVarAccess va 
+renderExpression (PostInc va) = renderInParens (renderVarAccess va . renderString "++")
+renderExpression (PostDec va) = renderInParens (renderVarAccess va . renderString "--")
+renderExpression (PreInc va) = renderInParens (renderString "++" . renderVarAccess va)
+renderExpression (PreDec va) = renderInParens (renderString "--" . renderVarAccess va)
+
+renderInParens f = renderChar '(' . f . renderChar ')'
 
 renderBinExpr op expr1 expr2 = renderChar '(' . renderCtxExpr expr1 . renderChar ' ' .
                                renderString op . renderChar ' ' . renderCtxExpr expr2 . renderChar ')'

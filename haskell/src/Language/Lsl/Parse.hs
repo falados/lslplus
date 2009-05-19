@@ -145,7 +145,7 @@ lslStyle = javaStyle
                                 "while","for","do","jump","return","default", "$import", "$module","quaternion"],
                P.caseSensitive = True,
                P.identStart = letter <|> char '_',
-               P.opLetter = oneOf "*/+:!#$%&*+./=?@\\^|-~",
+               P.opLetter = oneOf "*/+:!#$%&*+/=?@\\^|-~",
                P.opStart = oneOf ":!#$%&*+./<=>?@\\^|-~",
                P.custWhiteSpace = Just custWS }
 lexer :: P.TokenParser ParseState
