@@ -97,8 +97,10 @@ funcSigs = [
     ("llGetEnergy",LLFloat,[]),
     ("llGetForce",LLVector,[]),
     ("llGetFreeMemory",LLInteger,[]), -- SEMI-INTERNAL!!!
+    ("llGetFreeURLs",LLInteger,[]), 
     ("llGetGMTclock",LLFloat,[]),
     ("llGetGeometricCenter",LLVector,[]),
+    ("llGetHTTPHeader",LLString, [LLKey,LLString]),
     ("llGetInventoryCreator",LLKey,[LLString]),
     ("llGetInventoryKey",LLKey,[LLString]),
     ("llGetInventoryName",LLString,[LLInteger,LLInteger]),
@@ -176,6 +178,7 @@ funcSigs = [
     ("llGroundRepel",LLVoid,[LLFloat,LLInteger,LLFloat]),
     ("llGroundSlope",LLVector,[LLVector]),
     ("llHTTPRequest",LLKey,[LLString,LLList,LLString]),
+    ("llHTTPResponse",LLVoid,[LLKey,LLInteger,LLString]),
     ("llInsertString",LLString,[LLString,LLInteger,LLString]),
     ("llInstantMessage",LLVoid,[LLKey,LLString]),
     ("llIntegerToBase64",LLString,[LLInteger]),
@@ -237,6 +240,7 @@ funcSigs = [
     ("llRegionSay",LLVoid,[LLInteger,LLString]),
     ("llReleaseCamera",LLVoid,[LLKey]),
     ("llReleaseControls",LLVoid,[]),
+    ("llReleaseURL",LLVoid, [LLString]),
     ("llRemoteDataReply",LLVoid,[LLKey,LLKey,LLString,LLInteger]),
     ("llRemoteDataSetRegion",LLVoid,[]),
     ("llRemoteLoadScript",LLVoid,[LLKey,LLString,LLInteger,LLInteger]), -- deprecated/removed
@@ -248,6 +252,8 @@ funcSigs = [
     ("llRequestAgentData",LLKey,[LLKey,LLInteger]),
     ("llRequestInventoryData",LLKey,[LLString]),
     ("llRequestPermissions",LLVoid,[LLKey,LLInteger]),
+    ("llRequestSecureURL", LLString, []),
+    ("llRequestURL", LLKey, []),
     ("llRequestSimulatorData",LLKey,[LLString,LLInteger]),
     ("llResetLandBanList",LLVoid,[]),
     ("llResetLandPassList",LLVoid,[]),
@@ -588,6 +594,7 @@ funcDescriptions = [
     ("llGroundContour",(["v"],"returns the ground contour below the object position + v\n")),
     ("llGetAttached",([],"returns the object attachment point or 0 if not attached\n")),
     ("llGetFreeMemory",([],"returns the available heap space for the current script\n")),
+    ("llGetFreeURLs",([],"Returns an integer that is the number of available URLs.\n")),
     ("llGetRegionName",([],"returns the current region name\n")),
     ("llGetRegionTimeDilation",([],"returns the current time dilation as a float between 0 and 1\n")),
     ("llGetRegionFPS",([],"returns the mean region frames per second\n")),
@@ -641,6 +648,7 @@ funcDescriptions = [
     ("llGetNumberOfNotecardLines",(["name"],"Returns number of lines in notecard 'name' via the dataserver event (cast return value to integer)\n")),
     ("llGetBoundingBox",(["object"],"Returns the bounding box around an object (including any linked prims) relative to the root prim, in a list:  [ (vector) min_corner, (vector) max_corner ]\n")),
     ("llGetGeometricCenter",([],"Returns the geometric center of the linked set the script is attached to.\n")),
+    ("llGetHTTPHeader",(["request_id", "header"],"Returns a string that is the value for header for request_id.\n")),
     ("llGetPrimitiveParams",(["params"],"Gets primitive parameters specified in the params list.\n")),
     ("llIntegerToBase64",(["number"],"Big endian encode of of integer as a Base64 string.\n")),
     ("llBase64ToInteger",(["str"],"Big endian decode of a Base64 string into an integer.\n")),
@@ -683,6 +691,7 @@ funcDescriptions = [
     ("llGetRegionFlags",([],"Get the region flags (REGION_FLAG_*) for the region the object is in.\n")),
     ("llXorBase64StringsCorrect",(["s1","s2"],"Correctly performs an exclusive or on two Base 64 strings and returns a Base 64 string.  s2 repeats if it is shorter than s1.\n")),
     ("llHTTPRequest",(["url","parameters","body"],"Send an HTTP request.\n")),
+    ("llHTTPResponse",(["request_id", "status", "body"],"Responds to request_id with status and body.\n")),
     ("llResetLandBanList",([],"Removes all residents from the land ban list.\n")),
     ("llResetLandPassList",([],"Removes all residents from the land access/pass list.\n")),
     ("llGetObjectPrimCount",(["object_id"],"Returns the total number of prims for an object.\n")),
@@ -701,4 +710,9 @@ funcDescriptions = [
     ("llDetectedTouchST", (["index"], "Returns a vector that is the surface coordinates for where the prim was touched. The x & y vector positions contain the horizontal (s) & vertical (t) face coordinates respectively (<s, t, 0.0>). Each component is in the interval [0.0, 1.0].\n")),
     ("llDetectedTouchUV", (["index"], "Returns a vector that is the texture coordinates for where the prim was touched. The x & y vector positions contain the u & v face coordinates respectively (<u, v, 0.0>).\n")),
     ("llGetRegionAgentCount", ([], "Returns an integer that is the number of avatars in the region.\n")),
-    ("llGetAgentLanguage", (["key"], "Returns a string that is the language code of the preferred interface language of the user avatar.\n"))]
+    ("llGetAgentLanguage", (["key"], "Returns a string that is the language code of the preferred interface language of the user avatar.\n")),
+    ("llReleaseURL", (["url"], "Releases the specified URL, it will no longer be usable.\n")),
+    ("llRequestSecureURL", ([], "Requests one HTTPS:// (SSL) url for use by this object. The http_request event is tiggered with results.\n")),
+    ("llRequestSecureURL", ([], "Requests one HTTP:// url for use by this object. The http_request event is tiggered with results.\n"))
+    ]
+
