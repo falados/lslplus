@@ -1,9 +1,12 @@
 module Language.Lsl.Internal.FuncSigs(
     funcDescriptions,
     funcMeta,
-    funcSigs) where
+    funcSigs,
+    findSig,
+    convertArgs) where
 
-import Language.Lsl.Internal.Type(LSLType(..))
+import Data.List(find)
+import Language.Lsl.Internal.Type(LSLType(..), convertValues,LSLValue)
 
 -- TODO: import real info into funcMeta, and derive funcSigs from that
 funcMeta :: [(String,LSLType,[(String,LSLType)],String)]
@@ -16,6 +19,13 @@ funcMeta =
             in (name, rt,zip argNames args,description)
     in map sig2Meta funcSigs
         
+findSig name = find (\ (fname,_,_) -> name == fname) funcSigs
+
+convertArgs :: RealFrac a => String -> [LSLValue a] -> [LSLValue a]
+convertArgs name args = case findSig name of
+    Nothing -> args
+    Just (_,_,argTypes) -> convertValues argTypes args
+
 funcSigs :: [(String,LSLType,[LSLType])]
 funcSigs = [
     ("llAbs",LLInteger,[LLInteger]),

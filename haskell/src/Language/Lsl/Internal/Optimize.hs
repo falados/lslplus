@@ -18,7 +18,7 @@ import Debug.Trace
 import Language.Lsl.Parse
 import Language.Lsl.Render
 import Language.Lsl.Internal.Constants(allConstants,Constant(..),findConstVal)
-import Language.Lsl.Internal.FuncSigs(funcSigs)
+import Language.Lsl.Internal.FuncSigs(funcSigs,convertArgs)
 import Language.Lsl.Internal.InternalLLFuncs(internalLLFuncs,internalLLFuncNames)
 import Language.Lsl.Internal.OptimizerOptions(OptimizerOption(..))
 import Language.Lsl.Syntax(CompiledLSLScript(..),Expr(..),Statement(..),Var(..),
@@ -985,7 +985,7 @@ simplifyE e@(Call (Ctx _ nm) exprs) =
         Nothing -> return e
         Just vs -> 
             case lookup nm internalLLFuncs of
-                Just f -> return (valToExpr $ snd (Id.runIdentity (f () vs)))
+                Just f -> return (valToExpr $ snd (Id.runIdentity (f () (convertArgs nm vs))))
                 Nothing -> do
                     pureFuncs <- get >>= return . siPureFuncs
                     script <- get >>= return . siScript

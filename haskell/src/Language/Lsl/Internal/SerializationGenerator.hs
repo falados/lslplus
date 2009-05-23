@@ -84,7 +84,7 @@ instance JavaRep Bool where
     
 instance JavaRep String where
     representative = ""
-    xmlSerialize t s = emit (maybe "string" id t) (maybe [] (const [("class","string")]) t) [showString s]
+    xmlSerialize t s = emit (maybe "string" id t) (maybe [] (const [("class","string")]) t) [(showString . xmlEscape) s]
     xmlDefaultTag _ = "string"
     subElemDescriptor tag = el tag id simpleContent
     elemDescriptor = el "string" id simpleContent

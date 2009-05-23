@@ -29,7 +29,7 @@ import Data.Maybe(isJust)
 
 import Language.Lsl.Internal.Breakpoint(Breakpoint(..),StepManager(..),pushStepManagerFrame,popStepManagerFrame,emptyStepManager,mkBreakpoint)
 import Language.Lsl.Internal.CodeHelper(renderCall)
-import Language.Lsl.Internal.FuncSigs(funcSigs)
+import Language.Lsl.Internal.FuncSigs(convertArgs)
 import Language.Lsl.Internal.Util(fromInt,lookupM,ctx,findM)
 import Language.Lsl.Syntax(Expr(..),
                   CompiledLSLScript(..),
@@ -54,7 +54,8 @@ import Language.Lsl.Syntax(Expr(..),
                   rmCtx)
 import Language.Lsl.Internal.Type(LSLType(..),LSLValue(..),typeOfLSLComponent,typeOfLSLValue,toFloat,toSVal,
                 lslShowVal,replaceLslValueComponent,vecMulScalar,rotMulVec,parseVector,parseRotation,
-                parseInt,parseFloat,invRot,rotMul,vcross,Component(..),lslValueComponent)
+                parseInt,parseFloat,invRot,rotMul,vcross,Component(..),lslValueComponent,
+                convertValues)
 import Language.Lsl.Internal.Key(nullKey,nextKey)
 import Language.Lsl.Internal.Evaluation(EvalResult(..),Event(..),ScriptInfo(..))
 import Language.Lsl.Internal.Constants(findConstVal,llcZeroRotation,llcZeroVector)
@@ -1088,9 +1089,7 @@ pushModBy var evalElement expr = pushElements [EvSet $ ctxVr2Vr var,evalElement,
 
 evalPredef' name = 
     do (LVal args) <- popVal
-       let args' = case find (\ (fname,_,_) -> name == fname) funcSigs of
-                   Nothing -> args
-                   Just (_,_,argTypes) -> convertArgs argTypes args
+       let args' = convertArgs name args
        key <- getMyPrimKey
        sid <- getScriptName
        oid <- getObjectId
@@ -1100,12 +1099,12 @@ evalPredef' name =
        (evalResult,retval) <- doAction name scriptInfo args'    
        pushVal retval
        return evalResult
-    where convertArgs argTypes args = zipWith convertArg argTypes args
-          convertArg LLFloat (IVal i) = FVal $ fromInt i
-          convertArg LLInteger (FVal f) = IVal $ floor f
-          convertArg LLKey (SVal s) = KVal s
-          convertArg LLString (KVal k) = SVal k
-          convertArg _ v = v
+--     where convertArgs argTypes args = zipWith convertArg argTypes args
+--           convertArg LLFloat (IVal i) = FVal $ fromInt i
+--           convertArg LLInteger (FVal f) = IVal $ floor f
+--           convertArg LLKey (SVal s) = KVal s
+--           convertArg LLString (KVal k) = SVal k
+--           convertArg _ v = v
           
 ctxList es = map (Ctx Nothing) es
 

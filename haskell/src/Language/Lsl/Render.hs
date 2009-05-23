@@ -12,7 +12,7 @@ renderCompiledScript :: String -> CompiledLSLScript -> String
 renderCompiledScript stamp (CompiledLSLScript comment globals funcs states) =
    (renderString "// LSL script generated: " . renderString stamp . renderString "\n" .
     renderString comment .
-    renderGlobals globals . renderFuncs funcs . renderStates states) ""
+    renderGlobals globals . renderFuncs funcs . renderStates states . renderString "\n") ""
 
 renderSequence r = (foldl' (.) blank) . (map r)
 
@@ -20,8 +20,8 @@ renderGlobals = renderSequence renderGlobal
 
 renderGlobal (GDecl (Ctx sc var) val) = renderPreText sc . renderVar var . 
     case val of 
-        Nothing -> renderString ";\n"
-        Just expr -> renderString " = " . renderSimple expr . renderString ";\n"
+        Nothing -> renderString ";"
+        Just expr -> renderString " = " . renderSimple expr . renderString ";"
 
 renderCtxSimple (Ctx _ expr) = renderSimple expr
 renderSimple (Neg expr) = renderChar '-' . renderCtxExpr expr
@@ -44,10 +44,10 @@ renderStates = renderSequence renderState
 
 renderState (Ctx ssc (State (Ctx sc "default") handlers)) = 
     renderPreText ssc .
-    renderString "default {\n" . renderHandlers handlers . renderString "}\n"
+    renderString "default {\n" . renderHandlers handlers . renderString "}"
 renderState (Ctx ssc (State (Ctx _ name) handlers)) =
     renderPreText ssc .
-    renderString "state " . renderString name . renderString " {\n" . renderHandlers handlers . renderString "}\n"
+    renderString "state " . renderString name . renderString " {\n" . renderHandlers handlers . renderString "}"
  
 renderHandlers = renderSequence renderHandler
 
@@ -72,9 +72,9 @@ renderVarList (v:vars) =
 
 renderFuncs = renderSequence renderCtxFunc
 
-renderCtxFunc (Ctx _ func) = renderFunc func
+renderCtxFunc (Ctx sc func) = renderPreText sc . renderFunc func
 renderFunc (Func dec stmts) = 
-    renderFuncDec dec . renderString "{\n" . renderStatements 0 stmts . renderString "}\n"
+    renderFuncDec dec . renderString "{\n" . renderStatements 0 stmts . renderString "}"
 
 renderIndent 0 = renderString "    "
 renderIndent n = renderString "    " . renderIndent (n - 1)
@@ -230,7 +230,7 @@ blank :: String -> String
 blank = id
 
 renderPreText :: (Maybe SourceContext) -> String -> String
-renderPreText = maybe blank (renderString . srcPreText)
+renderPreText = maybe (renderString "\n") (renderString . srcPreText)
 
 renderPreText1 :: (String -> String) -> (Maybe SourceContext) -> String -> String
-renderPreText1 f = maybe f (renderString . srcPreText)
+renderPreText1 f = maybe (renderString "\n" . f) (renderString . srcPreText)

@@ -3,6 +3,7 @@ module Language.Lsl.Internal.Type(
     LSLType(..),
     LSLValue(..),
     Component(..),
+    convertValues,
     typeOfLSLValue,
     typeOfLSLComponent,
     parseFloat,
@@ -260,3 +261,11 @@ liftV2 f = \ x y -> vec2VVal $ f (vVal2Vec x) (vVal2Vec y)
 
 rot2RVal (x,y,z,s) = RVal x y z s
 rVal2Rot (RVal x y z s) = (x,y,z,s)
+
+
+convertValues argTypes args = zipWith convertArg argTypes args
+    where convertArg LLFloat (IVal i) = FVal $ fromInt i
+          convertArg LLInteger (FVal f) = IVal $ floor f
+          convertArg LLKey (SVal s) = KVal s
+          convertArg LLString (KVal k) = SVal k
+          convertArg _ v = v
