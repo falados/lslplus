@@ -279,12 +279,21 @@ casts = [$here|
             l = (list) ZERO_ROTATION;
         }
     }|]
+    
+floatWierdness = [$here|
+    default {
+        state_entry() {
+            float f = 1.0;
+            llOwnerSay((string)(f*.2));
+        }
+    }|]
 allTests = TestLabel "All Tests" $ TestList [
     tests,
     importTests,
     labelTest,
     validScriptStr "return implicit conversion test" retconv,
-    validScriptStr "casts to list" casts ]
+    validScriptStr "casts to list" casts,
+    validScriptStr "float wierdness" floatWierdness ]
 
     
 altModule = [$here|$module ()
