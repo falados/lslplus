@@ -1,5 +1,5 @@
 Name:           LslPlus
-version:        0.4.1
+version:        0.4.1.1
 Synopsis:	    An execution and testing framework for the Linden Scripting Language (LSL)
 Description:	
 	Provides a framework for executing Linden Scripting Language scripts offline,
@@ -20,7 +20,7 @@ Tested-With:	GHC ==6.10.1
 Extra-source-files: NOTICE
 
 Executable LslPlus
-  Build-Depends:  base >= 4.0 && < 4.1, haskell98, filepath >= 1.1.0.0 && < 1.2, parsec >= 2.1.0.0 && < 3,
+  Build-Depends:  base >= 4.0 && < 4.2, haskell98, filepath >= 1.1.0.0 && < 1.2, parsec >= 2.1.0.0 && < 3,
                   HaXml >= 1.19 && < 1.20, directory > 1 && < 1.1, mtl >= 1.1 && < 1.2, array >= 0.2 && < 0.3,
                   network >= 2.1 && < 2.3, random >= 1.0, containers >= 0.1 && < 0.3, old-time, utf8-string >= 0.3 && < 0.4,
                   pureMD5 >= 0.2 && < 3, bytestring >= 0.9 && < 0.10, template-haskell >= 2.3.0.0 && < 2.4, syb >= 0.1.0.0 && < 0.2.0.0
