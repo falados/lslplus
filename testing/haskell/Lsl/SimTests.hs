@@ -374,6 +374,27 @@ linkMessageSenderScript = [$lsl|
 linkMessageTest = mkTest "linkMessage Test" $ 
     (chatRun [linkMessageReceiverScript,linkMessageSenderScript] ["got hi "]) { tWorld = lessSimpleWorld }
 
+linkMessageReceiverScript2 = [$lsl|
+    default{
+        link_message(integer sender, integer num, string msg, key k) {
+            llMessageLinked(sender,0,"Present",NULL_KEY);
+        }
+    }|]
+    
+linkMessageSenderScript2 = [$lsl|
+    default{
+        state_entry(){
+            llMessageLinked(1,0,"",NULL_KEY);
+        }
+        
+        link_message(integer sender, integer num, string msg, key k) {
+            llSay(0,"got " + msg);
+        }
+    }|]
+
+linkMessageTest2 = mkTest "linkMessage Test" $ 
+    (chatRun [linkMessageReceiverScript2,linkMessageSenderScript2] ["got Present"]) { tWorld = lessSimpleWorld }
+
 getObjectDetailsScript = [$lsl|
     default{
         state_entry() {
@@ -1174,6 +1195,7 @@ tests = TestList [
         getPrimitiveParamsTest,
         timerTest,
         linkMessageTest,
+        linkMessageTest2,
         getObjectDetailsTest,
         getObjectDetailsAvTest,
         requestPermissionsTest,
