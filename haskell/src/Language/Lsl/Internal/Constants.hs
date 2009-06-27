@@ -28,6 +28,9 @@ llcChangedLink = IVal cChangedLink
 cChangedInventory = 0x1;llcChangedInventory :: RealFloat a => LSLValue a; llcChangedInventory = IVal cChangedInventory
 cChangedAllowedDrop = 0x40;llcChangedAllowedDrop :: RealFloat a => LSLValue a; llcChangedAllowedDrop = IVal cChangedAllowedDrop
 
+cChangedRegionStart = 0x400 :: Int
+llcChangedRegionStart = IVal cChangedRegionStart
+
 cMaskBase = 0;llcMaskBase :: RealFloat a => LSLValue a; llcMaskBase = IVal cMaskBase
 cMaskOwner = 1;llcMaskOwner :: RealFloat a => LSLValue a; llcMaskOwner = IVal cMaskOwner
 cMaskGroup = 2;llcMaskGroup :: RealFloat a => LSLValue a; llcMaskGroup = IVal cMaskGroup
@@ -217,6 +220,7 @@ allConstants = [
     Constant "CHANGED_LINK" llcChangedLink,
     Constant "CHANGED_OWNER" (IVal 0x80),
     Constant "CHANGED_REGION" (IVal 0x100),
+    Constant "CHANGED_REGION_START" llcChangedRegionStart,
     Constant "CHANGED_SCALE" (IVal 0x8),
     Constant "CHANGED_SHAPE" (IVal 0x4),
     Constant "CHANGED_TELEPORT" (IVal 0x200),
@@ -523,6 +527,8 @@ allConstants = [
     Constant "TYPE_ROTATION" (IVal 6),
     Constant "TYPE_STRING" (IVal 3),
     Constant "TYPE_VECTOR" (IVal 5),
+    Constant "URL_REQUEST_DENIED" (SVal "URL_REQUEST_DENIED"),
+    Constant "URL_REQUEST_GRANTED" (SVal "URL_REQUEST_GRANTED"),
     Constant "VEHICLE_ANGULAR_DEFLECTION_EFFICIENCY" (IVal 32),
     Constant "VEHICLE_ANGULAR_DEFLECTION_TIMESCALE" (IVal 33),
     Constant "VEHICLE_ANGULAR_FRICTION_TIMESCALE" (IVal 17),

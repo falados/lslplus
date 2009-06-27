@@ -30,6 +30,8 @@ lslEventDescriptors = [
      "raised when data is received from the dataserver (in response to one of a variety of ll-function calls)"),
     ("email",[(LLString,"time"),(LLString,"address"),(LLString,"subj"),(LLString,"message"),(LLInteger,"num_left")], EventDeliveryScript, [],
      "raised when the llGetNextEmail function call is answered"),
+    ("http_request",[(LLKey,"request_id"),(LLString,"method"),(LLString,"body")], EventDeliveryScript, [],
+     "raised when an script receives an http request"),
     ("http_response",[(LLKey,"request_id"),(LLInteger,"status"),(LLList,"metadata"),(LLString,"body")], EventDeliveryScript, [],
      "raised when an http response is received for an http request that is pending"),
     ("land_collision",[(LLVector,"pos")], EventDeliveryPrim, [],

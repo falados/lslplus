@@ -470,9 +470,10 @@ llUnSit info@(ScriptInfo _ _ _ pk _) [KVal k] =
 llMessageLinked info@(ScriptInfo oid pid sid pkey _) [IVal link,IVal val,SVal msg,KVal key] =
     do  LSLObject { primKeys = links } <- (getObject oid) <||> throwError ("object not found!")
         when (null links) $ throwError ("object is has no links!")
+        let sender = if length links > 1 then pid + 1 else pid
         let targetLinkIndices = targetLinks (length links) link pid
         let targetLinks = map (links !!) targetLinkIndices
-        let event = (Event "link_message" [IVal pid, IVal val, SVal msg, KVal key] M.empty)
+        let event = (Event "link_message" [IVal sender, IVal val, SVal msg, KVal key] M.empty)
         lift $ mapM_ (\ pk -> pushDeferredScriptEventToPrim event pk 0) targetLinks
         continueWith VoidVal
 
