@@ -188,17 +188,39 @@ handleCommand cs (CheckModule (CodeElement name text)) =
                     Nothing -> []
                     Just (Right _) -> []
                     Just (Left errs) -> map toErrInfo errs
-    in return (cs,xmlSerialize Nothing (ModuleResponse (m,errs')) "")
+    in return (cs,xmlSerialize Nothing (ModuleResponse (simplifyModule m,errs')) "")
 handleCommand cs (CheckScript (CodeElement name text)) =
     let (s, errs) = alternateScriptParser name text
         lib = libFromAugLib $ M.toList (modules cs)
         errs' = map parseErrorToErrInfo errs ++ case compileLSLScript' lib s of
             Left errs -> map toErrInfo errs
             _ -> []
-    in return (cs,xmlSerialize Nothing (ScriptResponse (s,errs')) "")
+    in return (cs,xmlSerialize Nothing (ScriptResponse (simplifyScript s,errs')) "")
 
+-- take the detail out of a script, leaving just the skeleton...
+simplifyScript :: LSLScript -> LSLScript
+simplifyScript (LSLScript _ gs ss) = LSLScript "" (map simpG gs) (map simpCS ss)
+    where simpCS (Ctx sc s) = (Ctx (simpSC sc) (simpS s))
+          simpS (State cn chs) = (State (simpCN cn) (map simpCH chs))
+          simpCH (Ctx sc h) = (Ctx (simpSC sc) (simpH h))
+          simpH (Handler cn _ _) = Handler (simpCN cn) [] []
+
+-- take the detail out of a script, leaving just the skeleton...
+simplifyModule :: LModule -> LModule
+simplifyModule (LModule gs _) = LModule (map simpG gs) []
+
+simpG (GV cv _) = GV (simpCV cv) Nothing
+simpG (GF cf) = GF (simpCF cf)
+simpG (GI cn _ _) = GI (simpCN cn) [] ""
+simpCV (Ctx sc v) = (Ctx (simpSC sc) v)
+simpCF (Ctx sc f) = (Ctx (simpSC sc) (simpF f))
+simpCN (Ctx sc n) = (Ctx (simpSC sc) n)
+simpSC Nothing = Nothing
+simpSC (Just (SourceContext tl _ _ _)) = (Just (SourceContext tl "" "" []))
+simpF (Func fd _) = (Func fd [])
+          
 compilationServer :: IO ()
-compilationServer = processLinesSIO emptyCState "quit" handler
+compilationServer = processLinesSIOB emptyCState "quit" handler
 
 codeGen loc pkg = do
     setCurrentDirectory loc

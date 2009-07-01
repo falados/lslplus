@@ -20,6 +20,7 @@ module Language.Lsl.Internal.Util (
     processLines,
     processLinesS,
     processLinesSIO,
+    processLinesSIOB,
     generatePermutation,
     fac,
     fst3,
@@ -30,7 +31,9 @@ module Language.Lsl.Internal.Util (
 
 import Control.Monad(liftM,when)
 import Control.Monad.Error(MonadError(..),Error(..))
+import Data.Char
 import Data.List(find,elemIndex,isPrefixOf,tails)
+import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Data.Map as Map
 import qualified Data.IntMap as IntMap
 
@@ -148,6 +151,21 @@ processLinesSIO state term f =
            processLinesSIO newState term f
     where escape = escapeURIString isUnescapedInURI
     
+    
+processLinesSIOB state term f = B.getContents >>= go state . B.lines
+  where bterm = B.pack term
+        go state (s:ss) = when (bterm /= s) $ do
+             (newState,s') <- f state (unescapeB s)
+             B.putStrLn (escape s')
+             hFlush stdout
+             go newState ss
+        escape = B.pack  . escapeURIString isUnescapedInURI
+        unescapeB s | B.length s == 0 = ""
+                    | otherwise = case (B.unpack (B.take 3 s), B.drop 3 s) of
+                        ('%':x1:x2:[],s') | isHexDigit x1 && isHexDigit x2 ->
+                            chr (digitToInt x1 * 16 + digitToInt x2) : unescapeB s'
+                        _ -> B.head s : (unescapeB (B.tail s))
+
 -- TODO: fix this definition!
 fac :: Integer -> Integer
 fac 0 = 1
