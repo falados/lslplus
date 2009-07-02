@@ -13,8 +13,8 @@ import IO
 import System
 import System.Exit
 
-version="0.4.1.1"
-usage progName = "Usage: " ++ progName ++ " [Version|MetaData|Compiler|ExpressionHandler|SimMetaData|SystemTester|UnitTester]"
+version="0.4.2"
+usage progName = "Usage: " ++ progName ++ " [Version|MetaData|Compiler|ExpressionHandler|SimMetaData|SystemTester|UnitTester|CompilationServer]"
 main = do
     progName <- getProgName
     args <- getArgs
