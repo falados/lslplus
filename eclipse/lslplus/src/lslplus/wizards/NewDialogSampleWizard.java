@@ -30,7 +30,7 @@ public class NewDialogSampleWizard extends Wizard implements INewWizard {
 		}
 
 		
-		protected List getSampleItems() {
+		protected List<Sample> getSampleItems() {
 		    Bundle bundle = LslPlusPlugin.getDefault().getBundle();
 		    Sample evhandlerSample =
 		        new Sample("eventhandler.lslm", bundle, //$NON-NLS-1$
@@ -40,7 +40,7 @@ public class NewDialogSampleWizard extends Wizard implements INewWizard {
 		    Sample rpcSimSample = new Sample("dialogsim.simp", bundle, //$NON-NLS-1$
 		            new Path("samples/dialog_example/dialogsim.simp"), true); //$NON-NLS-1$
 		    
-		    LinkedList list = new LinkedList();
+		    LinkedList<Sample> list = new LinkedList<Sample>();
 		    Collections.addAll(list, new Sample[] { evhandlerSample, rpcServerSample, rpcSimSample });
 		    return list;
         }

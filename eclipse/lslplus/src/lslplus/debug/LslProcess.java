@@ -33,7 +33,7 @@ public abstract class LslProcess extends Thread implements IProcess {
 	protected Process p = null;
     private boolean terminated = false;
     protected Interactor interactor;
-    private HashSet listeners = new HashSet();
+    private HashSet<IProcessListener> listeners = new HashSet<IProcessListener>();
     protected LslThread thread;
     protected LslProcess() { }
     
@@ -52,7 +52,7 @@ public abstract class LslProcess extends Thread implements IProcess {
                     LslProcess.this.p.destroy();
                     onTerminate();
                 } catch (Exception e) {
-                    Util.log(e,e.getLocalizedMessage());
+                    Util.error(e,e.getLocalizedMessage());
                     onTerminate();
                 }
             }
@@ -115,6 +115,7 @@ public abstract class LslProcess extends Thread implements IProcess {
 	public void setAttribute(String key, String value) {
 	}
 
+	@SuppressWarnings("unchecked")
 	public Object getAdapter(Class adapter) {
 		return Platform.getAdapterManager().getAdapter(this, adapter);
 	}
@@ -153,7 +154,7 @@ public abstract class LslProcess extends Thread implements IProcess {
        IProcessListener[] listenerArray;
        synchronized (this) {
            terminated = true;
-           listenerArray = (IProcessListener[]) listeners.toArray(new IProcessListener[listeners.size()]);
+           listenerArray = listeners.toArray(new IProcessListener[listeners.size()]);
        }
        for (int i = 0; i < listenerArray.length; i++) {
             listenerArray[i].processTerminated(this);

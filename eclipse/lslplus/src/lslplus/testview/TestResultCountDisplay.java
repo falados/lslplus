@@ -78,7 +78,7 @@ public class TestResultCountDisplay extends Composite implements DisposeListener
  
     public void update(int total, int run, int errored, int failed) {
         totalCount = total;
-        runCountLabel.setText(MessageFormat.format("{0}/{1}", new String[] { Integer.toString(run), Integer.toString(total) })); //$NON-NLS-1$
+        runCountLabel.setText(MessageFormat.format("{0}/{1}", new Object[] { Integer.toString(run), Integer.toString(total) })); //$NON-NLS-1$
         errorCountLabel.setText(Integer.toString(errored));
         failureCountLabel.setText(Integer.toString(failed));
         redraw();

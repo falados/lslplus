@@ -14,7 +14,7 @@ import org.eclipse.jface.viewers.LabelProvider;
 import org.eclipse.swt.graphics.Image;
 
 public class SimProjectLabelProvider extends LabelProvider implements ITableLabelProvider {
-    private LinkedList images;
+    private LinkedList<Image> images;
     private Image objectImage = createImage("icons/object.gif"); //$NON-NLS-1$
     private Image primImage = createImage("icons/prim.gif"); //$NON-NLS-1$
     private Image avatarImage = createImage("icons/avatar.gif"); //$NON-NLS-1$
@@ -27,16 +27,16 @@ public class SimProjectLabelProvider extends LabelProvider implements ITableLabe
     private Image xPositionImage = createImage("icons/x-position.gif"); //$NON-NLS-1$
     private Image yPositionImage = createImage("icons/y-position.gif"); //$NON-NLS-1$
     private Image zPositionImage = createImage("icons/z-position.gif"); //$NON-NLS-1$
-    private Image notecardImage = createImage("icons/notecard.gif");
-    private Image animationImage = createImage("icons/animation.gif");
-    private Image gestureImage = createImage("icons/gesture.gif");
-    private Image clothingImage = createImage("icons/clothing.gif");
-    private Image soundImage = createImage("icons/sound.gif");
-    private Image textureImage = createImage("icons/texture.gif");
-    private Image landmarkImage = createImage("icons/landmark.gif");
-    private Image bodypartImage = createImage("icons/bodypart.gif");
+    private Image notecardImage = createImage("icons/notecard.gif"); //$NON-NLS-1$
+    private Image animationImage = createImage("icons/animation.gif"); //$NON-NLS-1$
+    private Image gestureImage = createImage("icons/gesture.gif"); //$NON-NLS-1$
+    private Image clothingImage = createImage("icons/clothing.gif"); //$NON-NLS-1$
+    private Image soundImage = createImage("icons/sound.gif"); //$NON-NLS-1$
+    private Image textureImage = createImage("icons/texture.gif"); //$NON-NLS-1$
+    private Image landmarkImage = createImage("icons/landmark.gif"); //$NON-NLS-1$
+    private Image bodypartImage = createImage("icons/bodypart.gif"); //$NON-NLS-1$
     private Image createImage(String path) {
-        if (images == null) images = new LinkedList();
+        if (images == null) images = new LinkedList<Image>();
         Image i = LslPlusPlugin.createImage(path);
         if (i != null) images.add(i);
         return i;
@@ -63,9 +63,9 @@ public class SimProjectLabelProvider extends LabelProvider implements ITableLabe
             return gridPositionImage;
         } else if (element instanceof SimProject.GridCoordinateNode) {
             SimProject.GridCoordinateNode n = (SimProject.GridCoordinateNode) element;
-            if (n.getName().startsWith("x")) return xPositionImage;
-            if (n.getName().startsWith("y")) return yPositionImage;
-            if (n.getName().startsWith("z")) return zPositionImage;
+            if (n.getName().startsWith("x")) return xPositionImage; //$NON-NLS-1$
+            if (n.getName().startsWith("y")) return yPositionImage; //$NON-NLS-1$
+            if (n.getName().startsWith("z")) return zPositionImage; //$NON-NLS-1$
             return valImage;
         } else if (element instanceof SimProject.AvatarReferenceNode) {
             return avatarRefImage;
@@ -103,8 +103,8 @@ public class SimProjectLabelProvider extends LabelProvider implements ITableLabe
 
     public void dispose() {
         super.dispose();
-        for (Iterator i = images.iterator(); i.hasNext(); ) {
-            Image img = (Image) i.next();
+        for (Iterator<Image> i = images.iterator(); i.hasNext(); ) {
+            Image img = i.next();
             img.dispose();
         }
         

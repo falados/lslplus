@@ -24,7 +24,7 @@ import org.eclipse.jface.text.Region;
 public class LslTextHover implements ITextHover {
 
 	private static LslWordDetector detector = new LslWordDetector();
-	private static HashMap hoverInfo = null;
+	private static HashMap<String,String> hoverInfo = null;
 
 	/**
      * @param textViewer 
@@ -43,10 +43,10 @@ public class LslTextHover implements ITextHover {
 					return null;
 				}
 				if (hoverRegion.getLength() > -1) {
-					Map hinfo = getHoverInfo();
+					Map<String,String> hinfo = getHoverInfo();
 					String s = doc.get(hoverRegion.getOffset(), hoverRegion.getLength());
 					
-					return (String)hinfo.get(s);
+					return hinfo.get(s);
 				}
 			} catch (BadLocationException x) {
 			} catch (BadPartitioningException x) {
@@ -75,9 +75,9 @@ public class LslTextHover implements ITextHover {
 		}
 	}
 	
-	private static synchronized HashMap getHoverInfo() {
+	private static synchronized HashMap<String,String> getHoverInfo() {
 		if (hoverInfo == null) {
-			hoverInfo = new HashMap();
+			hoverInfo = new HashMap<String,String>();
 			LslHandler handlers[] = LslPlusPlugin.getDefault().getLslMetaData().getHandlers();
 			for (int i = 0; i < handlers.length; i++) {
 				hoverInfo.put(handlers[i].getName(), handlers[i].fullDescription());

@@ -1,6 +1,5 @@
 package lslplus.simview;
 
-import java.util.Iterator;
 import java.util.LinkedList;
 
 import lslplus.LslPlusPlugin;
@@ -12,9 +11,9 @@ import org.eclipse.swt.graphics.Image;
 
 public class LogViewerLabelProvider implements ITableLabelProvider {
     
-    private LinkedList listeners = new LinkedList();
-    private LinkedList images = new LinkedList();
-    private Image infoImg = createImage("icons/info_st_obj.gif");
+    private LinkedList<ILabelProviderListener> listeners = new LinkedList<ILabelProviderListener>();
+    private LinkedList<Image> images = new LinkedList<Image>();
+    private Image infoImg = createImage("icons/info_st_obj.gif"); //$NON-NLS-1$
     
     public Image getColumnImage(Object element, int columnIndex) {
         if (element instanceof SimStatuses.Message) {
@@ -42,10 +41,10 @@ public class LogViewerLabelProvider implements ITableLabelProvider {
                 return SimWatcherViewPart.formatTime(Integer.parseInt(message.getTime()));
             else if (columnIndex == 1) return message.getSource();
             else return message.getText();
-        } else if ("archive".equals(element)) {
-            return "archive";
+        } else if ("archive".equals(element)) { //$NON-NLS-1$
+            return "archive"; //$NON-NLS-1$
         } else {
-            return "";
+            return ""; //$NON-NLS-1$
         }
     }
 
@@ -56,8 +55,8 @@ public class LogViewerLabelProvider implements ITableLabelProvider {
     public void dispose() {
         listeners.clear();
         
-        for (Iterator i = images.iterator(); i.hasNext();) {
-            Image img = (Image)i.next();
+        for (Image element : images) {
+            Image img = element;
             img.dispose();
         }
         

@@ -50,13 +50,13 @@ public class LslPlusEditorPreferencePage extends FieldEditorPreferencePage imple
     private void createFieldEditors(int kind) {
         String kname = LslCodeScanner.KIND_NAMES[kind];
         String kindId = LslCodeScanner.STYLE_KINDS[kind];
-        addField(new ColorFieldEditor(kindId + '.' + "color", 
-                fmt("{0} color", kname),getFieldEditorParent()));
-        addField(new BooleanFieldEditor(kindId + '.' + "bold",
-                fmt("{0} bold?", kname), getFieldEditorParent()));
-        addField(new BooleanFieldEditor(kindId + '.' + "italic",
-                fmt("{0} italic?", kname), getFieldEditorParent()));
-        addField(new BooleanFieldEditor(kindId + '.' + "underline",
-                fmt("{0} underline?", kname), getFieldEditorParent()));
+        addField(new ColorFieldEditor(kindId + '.' + "color",  //$NON-NLS-1$
+                fmt("{0} color", kname),getFieldEditorParent())); //$NON-NLS-1$
+        addField(new BooleanFieldEditor(kindId + '.' + "bold",//$NON-NLS-1$
+                fmt("{0} bold?", kname), getFieldEditorParent()));//$NON-NLS-1$
+        addField(new BooleanFieldEditor(kindId + '.' + "italic",//$NON-NLS-1$
+                fmt("{0} italic?", kname), getFieldEditorParent()));//$NON-NLS-1$
+        addField(new BooleanFieldEditor(kindId + '.' + "underline",//$NON-NLS-1$
+                fmt("{0} underline?", kname), getFieldEditorParent()));//$NON-NLS-1$
     }
 }

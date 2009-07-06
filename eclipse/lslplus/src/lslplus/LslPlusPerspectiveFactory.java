@@ -24,6 +24,9 @@ public class LslPlusPerspectiveFactory implements IPerspectiveFactory {
 		IFolderLayout bottom = layout.createFolder("bottom", IPageLayout.BOTTOM, 0.75f, editorArea); //$NON-NLS-1$
 		bottom.addView(IPageLayout.ID_PROBLEM_VIEW);
 		
+		IFolderLayout right = layout.createFolder("right", IPageLayout.RIGHT, 0.80f, editorArea); //$NON-NLS-1$
+		right.addView(IPageLayout.ID_OUTLINE);
+		
 		layout.addActionSet("org.eclipse.debug.ui.launchActionSet"); //$NON-NLS-1$
 		layout.addNewWizardShortcut("lslplus.LslPlusProjectWizard"); //$NON-NLS-1$
 		layout.addNewWizardShortcut("lslplus.newTestWizard"); //$NON-NLS-1$

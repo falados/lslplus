@@ -43,7 +43,7 @@ public class TestResultLabelProvider extends LabelProvider implements ITableLabe
             LogMessage m = (LogMessage) element;
             if (m.getText().startsWith("call:")) { //$NON-NLS-1$
                 return fCallIcon;
-            } else if (m.getText().startsWith("return:")) {
+            } else if (m.getText().startsWith("return:")) { //$NON-NLS-1$
                 return fReturnIcon;
             } else {
                 return fInfoIcon;

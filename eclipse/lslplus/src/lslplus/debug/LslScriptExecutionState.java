@@ -20,7 +20,7 @@ public class LslScriptExecutionState {
         }
         public int getVal() { return val; }
         public String toString() { return Integer.toString(val); }
-        public String typeString() { return "integer"; }
+        public String typeString() { return "integer"; } //$NON-NLS-1$
     }
     
     public static class FloatValue extends Value {
@@ -30,7 +30,7 @@ public class LslScriptExecutionState {
         }
         public float getVal() { return val; }
         public String toString() { return Float.toString(val); }
-        public String typeString() { return "float"; }
+        public String typeString() { return "float"; } //$NON-NLS-1$
     }
     
     public static class StringValue extends Value {
@@ -42,7 +42,7 @@ public class LslScriptExecutionState {
         
         // TODO FIX!!!
         public String toString() { return val; } 
-        public String typeString() { return "string"; }
+        public String typeString() { return "string"; } //$NON-NLS-1$
     }
    
     public static class KeyValue extends Value {
@@ -53,7 +53,7 @@ public class LslScriptExecutionState {
         public String getVal() { return val; }
         // TODO FIX!!!
         public String toString() { return val; } 
-        public String typeString() { return "key"; }
+        public String typeString() { return "key"; } //$NON-NLS-1$
     }
     
     public static class VectorValue extends Value {
@@ -69,9 +69,9 @@ public class LslScriptExecutionState {
         public float getZ() { return z;}
         
         public String toString() {
-            return "<" + x + "," + y + "," + z + ">";
+            return "<" + x + "," + y + "," + z + ">";  //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$//$NON-NLS-4$
         }
-        public String typeString() { return "vector"; }
+        public String typeString() { return "vector"; } //$NON-NLS-1$
     }
 
     public static class RotationValue extends Value {
@@ -89,33 +89,33 @@ public class LslScriptExecutionState {
         public float getS() { return s;}
         
         public String toString() {
-            return "<" + x + "," + y + "," + z + "," + s + ">";
+            return "<" + x + "," + y + "," + z + "," + s + ">"; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$
         }
-        public String typeString() { return "rotation"; }
+        public String typeString() { return "rotation"; } //$NON-NLS-1$
     }
     
     public static class ListValue extends Value {
         private Value[] elements = null;
-        public ListValue(List l) {
-            elements = (Value[]) l.toArray(new Value[0]);
+        public ListValue(List<Value> l) {
+            elements = l.toArray(new Value[0]);
         }
         
         public Value[] getElements() { return elements; }
         
         public String toString() {
-            StringBuilder buf = new StringBuilder("[");
-            String sep = "";
-            if (elements == null) return "[]";
+            StringBuilder buf = new StringBuilder("["); //$NON-NLS-1$
+            String sep = ""; //$NON-NLS-1$
+            if (elements == null) return "[]"; //$NON-NLS-1$
             for (int i = 0; i < elements.length; i++) {
                 buf.append(sep);
                 buf.append(elements[i].toString());
-                sep = ",";
+                sep = ","; //$NON-NLS-1$
             }
             
-            buf.append("]");
+            buf.append("]"); //$NON-NLS-1$
             return buf.toString();
         }
-        public String typeString() { return "list"; }
+        public String typeString() { return "list"; } //$NON-NLS-1$
     }
     
     public static class Binding {
@@ -173,20 +173,21 @@ public class LslScriptExecutionState {
         configureXStream(xstream);
     }
     public static void configureXStream(XStream xstream) {
-        xstream.alias("script-state", LslScriptExecutionState.class);
-        xstream.alias("frame", Frame.class);
-        xstream.alias("binding", Binding.class);
-        xstream.aliasType("integer-value",IntegerValue.class);
-        xstream.aliasType("float-value", FloatValue.class);
-        xstream.aliasType("string-value", StringValue.class);
-        xstream.aliasType("key-value", KeyValue.class);
-        xstream.aliasType("vector-value", VectorValue.class);
-        xstream.aliasType("rotation-value", RotationValue.class);
-        xstream.aliasType("list-value", ListValue.class);
-        xstream.alias("value", Value.class);
+        xstream.alias("script-state", LslScriptExecutionState.class); //$NON-NLS-1$
+        xstream.alias("frame", Frame.class); //$NON-NLS-1$
+        xstream.alias("binding", Binding.class); //$NON-NLS-1$
+        xstream.aliasType("integer-value",IntegerValue.class); //$NON-NLS-1$
+        xstream.aliasType("float-value", FloatValue.class); //$NON-NLS-1$
+        xstream.aliasType("string-value", StringValue.class); //$NON-NLS-1$
+        xstream.aliasType("key-value", KeyValue.class); //$NON-NLS-1$
+        xstream.aliasType("vector-value", VectorValue.class); //$NON-NLS-1$
+        xstream.aliasType("rotation-value", RotationValue.class); //$NON-NLS-1$
+        xstream.aliasType("list-value", ListValue.class); //$NON-NLS-1$
+        xstream.alias("value", Value.class); //$NON-NLS-1$
         xstream.registerConverter(new SingleValueConverter() {
             private FloatConverter conv = new FloatConverter();
-            public boolean canConvert(Class arg0) {
+            @SuppressWarnings("unchecked")
+			public boolean canConvert(Class arg0) {
                 return FloatValue.class.equals(arg0);
             }
             public Object fromString(String arg0) {
@@ -208,7 +209,8 @@ public class LslScriptExecutionState {
                 return conv.toString(arg0.toString());
             }
 
-            public boolean canConvert(Class arg0) {
+            @SuppressWarnings("unchecked")
+			public boolean canConvert(Class arg0) {
                 return IntegerValue.class.equals(arg0);
             }
             
@@ -223,7 +225,8 @@ public class LslScriptExecutionState {
                 return ((StringValue)arg0).val;
             }
 
-            public boolean canConvert(Class arg0) {
+            @SuppressWarnings("unchecked")
+			public boolean canConvert(Class arg0) {
                 return StringValue.class.equals(arg0);
             }
             
@@ -238,7 +241,8 @@ public class LslScriptExecutionState {
                 return ((KeyValue)arg0).val;
             }
 
-            public boolean canConvert(Class arg0) {
+            @SuppressWarnings("unchecked")
+			public boolean canConvert(Class arg0) {
                 return KeyValue.class.equals(arg0);
             }
             

@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.StringReader;
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Array;
 import java.net.URL;
@@ -84,7 +85,7 @@ public class Util {
             }
             return result;
         } catch (Exception e) {
-            Util.log(e, e.getLocalizedMessage());
+            Util.error(e, e.getLocalizedMessage());
             return null;
         } finally {
             if (reader != null) {
@@ -96,11 +97,56 @@ public class Util {
         }
         
     }
-    public static List compulteLineOffsets(IFile f) {
+    
+    public static int[] findOffsetsFor(int[] lines, int[] columns, String f) {
+        StringReader reader = null;
+        try {
+            reader = new StringReader(f);
+            
+            int index = 0;
+            int lineIndex = 0;
+            int colIndex = 0;
+            int[] result = new int[lines.length];
+            for (int i = 0; i < lines.length; i++) {
+                while (lineIndex < lines[i]) {
+                    int ch = reader.read();
+                    if (ch < 0) break;
+                    if (ch == '\n') {
+                        lineIndex++;
+                        colIndex = 0;
+                    }
+                    index++;
+                }
+                
+                boolean incIndex = false;
+                while (colIndex < columns[i]) {
+                    int ch = reader.read();
+                    if (ch < 0) break;
+                    if (ch == '\n') {
+                        lineIndex++;
+                        incIndex = true;
+                        colIndex = 0;
+                        break;
+                    }
+                    if (ch == '\t') colIndex += (8 - colIndex % 8);
+                    else colIndex += 1;
+                    index++;
+                }
+                result[i] = index;
+                if (incIndex) index++;
+            }
+            return result;
+        } catch (Exception e) {
+            Util.error(e, e.getLocalizedMessage());
+            return null;
+        }
+    }
+
+    public static List<Integer> compulteLineOffsets(IFile f) {
         try {
             BufferedReader reader = new BufferedReader(new InputStreamReader(f.getContents()));
             
-            ArrayList list = new ArrayList();
+            ArrayList<Integer> list = new ArrayList<Integer>();
             
             list.add(new Integer(0));
             int ch;
@@ -115,14 +161,14 @@ public class Util {
             
             return list;
         } catch (Exception e) {
-            Util.log(e, e.getLocalizedMessage());
+            Util.error(e, e.getLocalizedMessage());
             return null;
         }
     }
 	/*
 	 * Add a log entry
 	 */
-	public static void log(Throwable e, String message) {
+	public static void error(Throwable e, String message) {
 		IStatus status= new Status(
 			IStatus.ERROR, 
 			"lslplus",  //$NON-NLS-1$
@@ -151,14 +197,14 @@ public class Util {
 	
 	public static Object[] concat(Object[][] lsts) {
 		int totLength = 0;
-		Class componentType = null;
+		Class<?> componentType = null;
 		
 		for (int i = 0; i < lsts.length; i++) {
 			Object[] lst = lsts[i];
 			if (lst == null) continue;
 			if (componentType == null) componentType = lst.getClass().getComponentType();
 			else {
-				Class newComponentType = lst.getClass().getComponentType();
+				Class<?> newComponentType = lst.getClass().getComponentType();
 				
 				if (newComponentType != componentType) {
 					if (!componentType.isAssignableFrom(newComponentType)) {
@@ -201,9 +247,14 @@ public class Util {
 			LslPlusPlugin.getDefault().getLog().log(status);
 	}
 	
-	public static interface ArrayMapFunc {
-		public Object map(Object o);
-		public Class elementType();
+	public static interface ArrayMapFunc<T> {
+		public T map(Object o);
+		public Class<T> elementType();
+	}
+	
+	public static interface MapFunc<S,T> {
+		public T map(S o);
+		public Class<T> elementType();
 	}
 	
 	public static interface Predicate {
@@ -217,8 +268,9 @@ public class Util {
 		return null;
 	}
 	
-	public static Object[] arrayMap(ArrayMapFunc f, Object[] list) {
-		Object[] o = (Object[]) Array.newInstance(f.elementType(), list.length);
+	@SuppressWarnings("unchecked")
+	public static <T> T[] arrayMap(ArrayMapFunc<T> f, Object[] list) {
+		T[] o = (T[]) Array.newInstance(f.elementType(), list.length);
 		
 		for (int i = 0; i < list.length; i++) {
 			o[i] = f.map(list[i]);
@@ -227,11 +279,22 @@ public class Util {
 		return o;
 	}
 	
-	public static List filtMap(ArrayMapFunc f, Object[] list) {
-	    LinkedList result = new LinkedList();
+	public static <S,T> T[] listMapToArray(MapFunc<S,T> f, List<S> list) {
+		@SuppressWarnings("unchecked")
+		T[] result = (T[]) Array.newInstance(f.elementType(), list.size());
+		
+		int i = 0;
+		for (S s : list) {
+			result[i++] = f.map(s);
+		}
+		return result;
+	}
+	
+	public static <T> List<T> filtMap(ArrayMapFunc<T> f, Object[] list) {
+	    LinkedList<T> result = new LinkedList<T>();
 	    
 	    for (int i = 0; i < list.length; i++) {
-	        Object o = f.map(list[i]);
+	        T o = f.map(list[i]);
 	        
 	        if (o != null) result.add(o);
 	    }
@@ -263,9 +326,9 @@ public class Util {
         return -1;
     }
 
-    public static Set mapToSet(ArrayMapFunc arrayMapFunc, List globs) {
-        HashSet set = new HashSet();
-        for (Iterator i = globs.iterator(); i.hasNext(); ) {
+    public static <T> Set<T> mapToSet(ArrayMapFunc<T> arrayMapFunc, List<T> globs) {
+        HashSet<T> set = new HashSet<T>();
+        for (Iterator<T> i = globs.iterator(); i.hasNext(); ) {
             set.add(arrayMapFunc.map(i.next()));
         }
         

@@ -49,7 +49,7 @@ public class LslPartitionScanner extends RuleBasedPartitionScanner {
 
 		IToken comment= new Token(LSL_MULTILINE_COMMENT);
 
-		List rules= new ArrayList();
+		List<IRule> rules= new ArrayList<IRule>();
 
 		rules.add(new EndOfLineRule("//", Token.UNDEFINED)); //$NON-NLS-1$
 

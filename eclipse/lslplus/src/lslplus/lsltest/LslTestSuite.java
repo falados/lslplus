@@ -83,7 +83,8 @@ public class LslTestSuite implements IAdaptable {
                 return conv.toString(((LslFloat)arg0).val);
             }
 
-            public boolean canConvert(Class arg0) {
+            @SuppressWarnings("unchecked")
+			public boolean canConvert(Class arg0) {
                 return LslFloat.class.equals(arg0);
             }
 		    
@@ -99,7 +100,8 @@ public class LslTestSuite implements IAdaptable {
                 return conv.toString(((LslInteger)arg0).val);
             }
 
-            public boolean canConvert(Class arg0) {
+            @SuppressWarnings("unchecked")
+			public boolean canConvert(Class arg0) {
                 return LslInteger.class.equals(arg0);
             }
             
@@ -114,7 +116,8 @@ public class LslTestSuite implements IAdaptable {
                 return ((LslString)arg0).val;
             }
 
-            public boolean canConvert(Class arg0) {
+            @SuppressWarnings("unchecked")
+			public boolean canConvert(Class arg0) {
                 return LslString.class.equals(arg0);
             }
             
@@ -129,7 +132,8 @@ public class LslTestSuite implements IAdaptable {
                 return ((LslKey)arg0).val;
             }
 
-            public boolean canConvert(Class arg0) {
+            @SuppressWarnings("unchecked")
+			public boolean canConvert(Class arg0) {
                 return LslKey.class.equals(arg0);
             }
             
@@ -144,7 +148,8 @@ public class LslTestSuite implements IAdaptable {
                 return ((LslVector)arg0).val;
             }
 
-            public boolean canConvert(Class arg0) {
+            @SuppressWarnings("unchecked")
+			public boolean canConvert(Class arg0) {
                 return LslVector.class.equals(arg0);
             }
             
@@ -159,7 +164,8 @@ public class LslTestSuite implements IAdaptable {
                 return ((LslRotation)arg0).val;
             }
 
-            public boolean canConvert(Class arg0) {
+            @SuppressWarnings("unchecked")
+			public boolean canConvert(Class arg0) {
                 return LslRotation.class.equals(arg0);
             }
             
@@ -174,7 +180,8 @@ public class LslTestSuite implements IAdaptable {
                 return ((LslList1)arg0).val;
             }
 
-            public boolean canConvert(Class arg0) {
+            @SuppressWarnings("unchecked")
+			public boolean canConvert(Class arg0) {
                 return LslList1.class.equals(arg0);
             }
             
@@ -184,14 +191,14 @@ public class LslTestSuite implements IAdaptable {
 	
 	private IResource resource;
 
-	private ArrayList tests;
+	private ArrayList<LslTest> tests;
 	
 	public static LslTestSuite empty() {
 		return new LslTestSuite();
 	}
 	
 	public LslTestSuite() {
-		this.tests = new ArrayList();
+		this.tests = new ArrayList<LslTest>();
 	}
 	
 	public void setIResource(IResource resource) {
@@ -216,9 +223,9 @@ public class LslTestSuite implements IAdaptable {
 	}
 	
 	private LslTestSuite postInit() {
-	    if (tests == null) tests = new ArrayList();
-	    for (Iterator i = tests.iterator(); i.hasNext(); ) {
-	        LslTest test = (LslTest) i.next();
+	    if (tests == null) tests = new ArrayList<LslTest>();
+	    for (Iterator<LslTest> i = tests.iterator(); i.hasNext(); ) {
+	        LslTest test = i.next();
 	        test.setSuite(this);
 	        test.postInit();
 	    }
@@ -234,7 +241,7 @@ public class LslTestSuite implements IAdaptable {
 	public static void main(String args[]) {
 	    LslTestSuite suite = new LslTestSuite();
 	    LslTest test = new LslTest();
-	    LinkedList list = new LinkedList();
+	    LinkedList<LslValue> list = new LinkedList<LslValue>();
 	    list.add(new LslFloat("1.0")); //$NON-NLS-1$
 	    test.setArguments(new LslValue[] { new LslList(list) });
 	    test.setExpectedReturn(new MaybeValue()); //new MaybeValue(new LslVector(1.0f,2.0f,3.0f));
@@ -248,10 +255,11 @@ public class LslTestSuite implements IAdaptable {
 	}
 
 	public LslTest[] getTests() {
-	    if (tests == null) tests = new ArrayList();
-		return (LslTest[]) tests.toArray(new LslTest[tests.size()]);
+	    if (tests == null) tests = new ArrayList<LslTest>();
+		return tests.toArray(new LslTest[tests.size()]);
 	}
 
+	@SuppressWarnings("unchecked")
 	public Object getAdapter(Class adapter) {
         return Platform.getAdapterManager().getAdapter(this, adapter);
     }
@@ -268,7 +276,7 @@ public class LslTestSuite implements IAdaptable {
         try {
             return (LslProjectNature) resource.getProject().getNature(LslProjectNature.ID);
         } catch (CoreException e) {
-            Util.log(e, e.getLocalizedMessage());
+            Util.error(e, e.getLocalizedMessage());
             return null;
         }
     }

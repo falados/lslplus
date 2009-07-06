@@ -3,12 +3,23 @@ package lslplus.lsltest;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 
 import lslplus.LslExpressionValidator;
 import lslplus.LslPlusPlugin;
 import lslplus.LslProjectNature;
-import lslplus.LslProjectNature.NameTypePair;
+import lslplus.generated.GlobalSummary;
+import lslplus.generated.GlobalSummary_GlobalSummary;
+import lslplus.generated.LSLType;
+import lslplus.generated.LSLType_LLFloat;
+import lslplus.generated.LSLType_LLInteger;
+import lslplus.generated.LSLType_LLKey;
+import lslplus.generated.LSLType_LLList;
+import lslplus.generated.LSLType_LLRot;
+import lslplus.generated.LSLType_LLString;
+import lslplus.generated.LSLType_LLVector;
+import lslplus.generated.Tuple2;
 import lslplus.gentree.Node;
 import lslplus.gentree.NodeFactory;
 import lslplus.gentree.NodeFactory2;
@@ -75,7 +86,7 @@ public class TestProject {
             try {
                 return (LslProjectNature) resource.getProject().getNature(LslProjectNature.ID);
             } catch (CoreException e) {
-                Util.log(e, e.getLocalizedMessage());
+                Util.error(e, e.getLocalizedMessage());
                 return null;
             }
         }
@@ -91,15 +102,15 @@ public class TestProject {
         }
 
         public String getNodeTypeName() {
-            return "Test";
+            return "Test"; //$NON-NLS-1$ TODO
         }
 
         public Node createNode(Node parent, String value) {
-            return new TestNode(parent,"New  Test", value);
+            return new TestNode(parent,"New  Test", value); //$NON-NLS-1$ TODO
         }
 
         public String getNodeCreationId() {
-            return "entry-point";
+            return "entry-point"; //$NON-NLS-1$
         }
     };
     
@@ -108,35 +119,36 @@ public class TestProject {
 
         public TestNode(Node parent, String testName, String value) {
             super(parent, testName, value);
-            String[] elements = value.toString().split("/");
+            String[] elements = value.toString().split("/"); //$NON-NLS-1$
             Node root = findRoot();
-            LslParam[] params = ((SuiteNode)root).nature().getParams(elements[0], elements[1]);
-            String returnType = ((SuiteNode)root).nature().getReturnType(elements[0], elements[1]);
-            addChild(new ArgumentsListNode(this, "args", params));
+            LinkedList<Tuple2<String,LSLType>> params =
+            	((SuiteNode)root).nature().getParams(elements[0], elements[1]);
+            String returnType = lslTypeToString(((SuiteNode)root).nature().getReturnType(elements[0], elements[1]));
+            addChild(new ArgumentsListNode(this, "args", params)); //$NON-NLS-1$
             addChild(new ExpectedReturnNode(this,returnType,null));
-            addChild(new BindingListNode(this,"initial", "Initial Globals"));
+            addChild(new BindingListNode(this,"initial", "Initial Globals")); //$NON-NLS-1$ //$NON-NLS-2$ TODO
             addChild(new ExpectationsNode(this));
-            addChild(new BindingListNode(this,"final", "Final Globals"));
+            addChild(new BindingListNode(this,"final", "Final Globals")); //$NON-NLS-1$ //$NON-NLS-2$ TODO
         }
 
         public ExpectationsNode getExpectations() {
-            return (ExpectationsNode) findChildByName("expectations");
+            return (ExpectationsNode) findChildByName("expectations"); //$NON-NLS-1$
         }
         
         public ArgumentsListNode getArguments() {
-            return (ArgumentsListNode) findChildByName("args");
+            return (ArgumentsListNode) findChildByName("args"); //$NON-NLS-1$
         }
         
         public ExpectedReturnNode getReturn() {
-            return (ExpectedReturnNode) findChildByName("returns");
+            return (ExpectedReturnNode) findChildByName("returns"); //$NON-NLS-1$
         }
         
         public BindingListNode getInitialBindings() {
-            return (BindingListNode) findChildByName("initial");
+            return (BindingListNode) findChildByName("initial"); //$NON-NLS-1$
         }
 
         public BindingListNode getFinalBindings() {
-            return (BindingListNode) findChildByName("final");
+            return (BindingListNode) findChildByName("final"); //$NON-NLS-1$
         }
         
         public NodeStatus checkNameString(String name) {
@@ -182,14 +194,15 @@ public class TestProject {
 
     public static class ArgumentsListNode extends Node {
 
-        public ArgumentsListNode(Node parent, String nodeName, LslParam[] params) {
+        public ArgumentsListNode(Node parent, String nodeName, 
+        		LinkedList<Tuple2<String, LSLType>> params) {
             super(parent, nodeName, null);
-            for (int i = 0; i < params.length; i++) {
-                addChild(new ArgumentNode(this,params[i].getName(), params[i].getType()));
+            for (Tuple2<String,LSLType> param : params) {
+                addChild(new ArgumentNode(this,param.el1, lslTypeToString(param.el2)));
             }
         }
 
-        public String getNameDisplay() { return "Arguments"; }
+        public String getNameDisplay() { return "Arguments"; } //$NON-NLS-1$ TODO
         public NodeStatus checkNameString(String name) {
             return NodeStatus.OK;
         }
@@ -274,17 +287,19 @@ public class TestProject {
         public Node createNode(Node parent, String value) {
             SuiteNode root = (SuiteNode) parent.findRoot();
             TestNode test = (TestNode) parent.getParent();
-            NameTypePair[] pairs = root.nature().getGlobalVariables(test.getFilename());
-            for (int i = 0; i < pairs.length; i++) {
-                if (value.equals(pairs[i].getName())) {
-                    return new BindingNode(parent,pairs[i].getName(), pairs[i].getType());
+            LinkedList<GlobalSummary> pairs = root.nature().getGlobalVariables(test.getFilename());
+            //for (int i = 0; i < pairs.length; i++) {
+            for (GlobalSummary gs0 : pairs) {
+            	GlobalSummary_GlobalSummary gs = (GlobalSummary_GlobalSummary) gs0;
+                if (value.equals(gs.globalName)) {
+                    return new BindingNode(parent,gs.globalName, lslTypeToString(gs.globalType));
                 }
             }
             return null;
         }
 
         public String getNodeCreationId() {
-            return "globvar";
+            return "globvar"; //$NON-NLS-1$
         }
 
         public Node createNode(Node parent) {
@@ -292,7 +307,7 @@ public class TestProject {
         }
 
         public String getNodeTypeName() {
-            return "Assignment";
+            return "Assignment"; //$NON-NLS-1$ TODO
         }
         
     };
@@ -347,7 +362,7 @@ public class TestProject {
         }
         
         public String getNameDisplay() {
-            return "Returns (" + type + ")";
+            return "Returns (" + type + ")"; //$NON-NLS-1$ //$NON-NLS-2$ TODO
         }
         
         public NodeStatus checkNameString(String name) {
@@ -362,7 +377,7 @@ public class TestProject {
 
         public String getValueString() {
             String s = (String)getValue();
-            return s == null ? "" : s;
+            return s == null ? "" : s; //$NON-NLS-1$
         }
 
         public boolean isDeletable() {
@@ -388,16 +403,16 @@ public class TestProject {
     
     public static class ExpectedReturnNode extends ReturnNode {
         public ExpectedReturnNode(Node parent, String type, Object value) {
-            super(parent, "returns" , type, value);
+            super(parent, "returns" , type, value); //$NON-NLS-1$
         }
 
         public NodeStatus checkValueString(String s) {
-            if (s.trim().equals("")) return NodeStatus.OK;
+            if (s.trim().equals("")) return NodeStatus.OK; //$NON-NLS-1$
             return super.checkValueString(s);
         }
 
         protected void onUpdate(String s) {
-            super.onUpdate("".equals(s.trim())? null : s);
+            super.onUpdate("".equals(s.trim())? null : s); //$NON-NLS-1$
         }
         
     }
@@ -460,20 +475,20 @@ public class TestProject {
     public static class ExpectationsNode extends Node {
         private static final NodeFactory[] LEGAL_CHILDREN = { EXPECTED_CALL_FACTORY };
         public ExpectationsNode(Node parent) {
-            super(parent, "expectations", null);
-            addChild(new ExpectationsModeNode(this,"nice"));
+            super(parent, "expectations", null); //$NON-NLS-1$
+            addChild(new ExpectationsModeNode(this,"nice")); //$NON-NLS-1$
         }
 
         public String getNameDisplay() {
-            return "Call Expectations";
+            return "Call Expectations"; //$NON-NLS-1$ TODO
         }
         
         public String getMode() {
-            ExpectationsModeNode node = (ExpectationsModeNode) findChildByName("mode");
+            ExpectationsModeNode node = (ExpectationsModeNode) findChildByName("mode"); //$NON-NLS-1$
             return node.getValueString();
         }
         
-        public List getExpectedCalls() {
+        public List<Node> getExpectedCalls() {
             return findChildrenByType(ExpectedCallNode.class);
         }
         
@@ -513,13 +528,13 @@ public class TestProject {
     public static class ExpectationsModeNode extends Node {
 
         public ExpectationsModeNode(Node parent, Object value) {
-            super(parent, "mode", value);
+            super(parent, "mode", value); //$NON-NLS-1$
         }
 
-        public String getNameDisplay() { return "Call handler mode"; }
+        public String getNameDisplay() { return "Call handler mode"; } //$NON-NLS-1$ TODO
         
         public String getChoicesId() {
-            return "expectations-mode";
+            return "expectations-mode"; //$NON-NLS-1$
         }
 
         public boolean hasValueChoices() {
@@ -563,11 +578,11 @@ public class TestProject {
     private static final NodeFactory2 EXPECTED_CALL_FACTORY = new NodeFactory2() {
 
         public Node createNode(Node parent, String value) {
-            return new ExpectedCallNode(parent, "call", value);
+            return new ExpectedCallNode(parent, "call", value); //$NON-NLS-1$
         }
 
         public String getNodeCreationId() {
-            return "call";
+            return "call"; //$NON-NLS-1$
         }
 
         public Node createNode(Node parent) {
@@ -575,7 +590,7 @@ public class TestProject {
         }
 
         public String getNodeTypeName() {
-            return "Call";
+            return "Call"; //$NON-NLS-1$
         }
         
     };
@@ -590,16 +605,16 @@ public class TestProject {
                 }
             }, LslPlusPlugin.getLLFunctions());
             
-            addChild(new ExpectedArgumentsListNode(this,"args", func.getParams()));
-            addChild(new ReturnNode(this,"returns", func.getReturns(),LslTest.defaultValueFor(func.getReturns())));
+            addChild(new ExpectedArgumentsListNode(this,"args", func.getParams())); //$NON-NLS-1$
+            addChild(new ReturnNode(this,"returns", func.getReturns(),LslTest.defaultValueFor(func.getReturns()))); //$NON-NLS-1$
         }
 
         public ExpectedArgumentsListNode getArgumentListNode() {
-            return (ExpectedArgumentsListNode) findChildByName("args");
+            return (ExpectedArgumentsListNode) findChildByName("args"); //$NON-NLS-1$
         }
         
         public ReturnNode getReturn() {
-            return (ReturnNode) findChildByName("returns");
+            return (ReturnNode) findChildByName("returns"); //$NON-NLS-1$
         }
         
         public NodeStatus checkNameString(String name) {
@@ -683,24 +698,24 @@ public class TestProject {
         }
 
         public NodeStatus checkValueString(String s) {
-            if (s.trim().equals("")) return NodeStatus.OK;
+            if (s.trim().equals("")) return NodeStatus.OK; //$NON-NLS-1$
             return super.checkValueString(s);
         }
 
         public String getValueString() {
-            if (getValue() == null) return "";
+            if (getValue() == null) return ""; //$NON-NLS-1$
             return super.getValueString();
         }
 
         protected void onUpdate(String s) {
             
-            super.onUpdate("".equals(s.trim()) ? null : s);
+            super.onUpdate("".equals(s.trim()) ? null : s); //$NON-NLS-1$
         }
     }
     
     private static XStream xstream = new XStream(new DomDriver());
     private static void configureXStream(XStream xstream) {
-        Class[] nodeTypes = new Class[] {
+        Class<?>[] nodeTypes = new Class[] {
                 SuiteNode.class, TestNode.class, ArgumentNode.class,
                 ArgumentsListNode.class, BindingListNode.class,
                 BindingNode.class, ReturnNode.class, ExpectedReturnNode.class,
@@ -713,7 +728,7 @@ public class TestProject {
         xstream.omitField(Node.class, "children"); //$NON-NLS-1$
         xstream.omitField(Node.class, "listeners"); //$NON-NLS-1$
         for (int i = 0; i < nodeTypes.length; i++) {
-            Class c = nodeTypes[i];
+            Class<?> c = nodeTypes[i];
             String name = c.getSimpleName();
             name = name.substring(0, 1).toLowerCase() + name.substring(1);
             xstream.alias(name, c);
@@ -746,9 +761,9 @@ public class TestProject {
             TestNode node = null;
             try {
                 node = new TestNode(suiteNode,t.getName(), t.getEntryPoint().getFileName() +
-                        "/" + t.getEntryPoint().getPath());
+                        "/" + t.getEntryPoint().getPath()); //$NON-NLS-1$
             } catch (RuntimeException e) {
-                Util.log(e, "couldn't load test");
+                Util.error(e, "couldn't load test"); //$NON-NLS-1$
                 if (dirty.length >= 0) dirty[0] = true;
                 continue;
             }
@@ -756,68 +771,68 @@ public class TestProject {
             
             suiteNode.addChild(node);
             
-            ArgumentsListNode argsList = (ArgumentsListNode) node.findChildByName("args");
-            List args = argsList.findChildrenByType(ArgumentNode.class);
+            ArgumentsListNode argsList = (ArgumentsListNode) node.findChildByName("args"); //$NON-NLS-1$
+            List<Node> args = argsList.findChildrenByType(ArgumentNode.class);
             if (args.size() == t.getArguments().length) {
                 int j = 0;
-                for (Iterator it = args.iterator(); it.hasNext(); ) {
+                for (Node element : args) {
                     LslValue v = t.getArguments()[j++];
-                    ArgumentNode argNode = (ArgumentNode) it.next();
+                    ArgumentNode argNode = (ArgumentNode) element;
                     argNode.setType(LslTest.lslTypeToString(v.getClass()));
                     argNode.setValue(v.toString());
                 }
             }
             
-            ExpectedReturnNode returns = (ExpectedReturnNode) node.findChildByName("returns");
+            ExpectedReturnNode returns = (ExpectedReturnNode) node.findChildByName("returns"); //$NON-NLS-1$
             if (t.getExpectedReturn().getVal() != null) {
                 returns.type = LslTest.lslTypeToString(t.getExpectedReturn().getVal().getClass());
             }
-            returns.setValue(t.getExpectedReturn().getVal()== null ? "" : t.getExpectedReturn().getVal().toString());
+            returns.setValue(t.getExpectedReturn().getVal()== null ? "" : t.getExpectedReturn().getVal().toString()); //$NON-NLS-1$
             
-            BindingListNode initial = (BindingListNode) node.findChildByName("initial");
+            BindingListNode initial = (BindingListNode) node.findChildByName("initial"); //$NON-NLS-1$
             
-            for (Iterator it = t.getInitialBindings().iterator(); it.hasNext(); ) {
-                LslTest.GlobBinding binding = (GlobBinding) it.next();
+            for (Iterator<GlobBinding> it = t.getInitialBindings().iterator(); it.hasNext(); ) {
+                LslTest.GlobBinding binding = it.next();
                 BindingNode bn = new BindingNode(initial, binding.getName(), LslTest.lslTypeToString(binding.getValue().getClass()));
                 bn.setValue(binding.getValue().toString());
                 initial.addChild(bn);
             }
             
-            BindingListNode finals = (BindingListNode) node.findChildByName("final");
+            BindingListNode finals = (BindingListNode) node.findChildByName("final"); //$NON-NLS-1$
             
-            for (Iterator it = t.getFinalBindings().iterator(); it.hasNext(); ) {
-                LslTest.GlobBinding binding = (GlobBinding) it.next();
+            for (Iterator<GlobBinding> it = t.getFinalBindings().iterator(); it.hasNext(); ) {
+                LslTest.GlobBinding binding = it.next();
                 BindingNode bn = new BindingNode(finals, binding.getName(), LslTest.lslTypeToString(binding.getValue().getClass()));
                 bn.setValue(binding.getValue().toString());
                 finals.addChild(bn);
             }
             
-            ExpectationsNode expectations = (ExpectationsNode) node.findChildByName("expectations");
-            ExpectationsModeNode expectationsMode = (ExpectationsModeNode) expectations.findChildByName("mode");
+            ExpectationsNode expectations = (ExpectationsNode) node.findChildByName("expectations"); //$NON-NLS-1$
+            ExpectationsModeNode expectationsMode = (ExpectationsModeNode) expectations.findChildByName("mode"); //$NON-NLS-1$
             expectationsMode.setValue(t.getExpectations().getMode());
             
-            List expectedCalls = t.getExpectations().getExpectedCalls();
+            List<ExpectedCall> expectedCalls = t.getExpectations().getExpectedCalls();
             
-            for (Iterator it = expectedCalls.iterator(); it.hasNext(); ) {
-                LslTest.ExpectedCall call = (ExpectedCall) it.next();
-                ExpectedCallNode callNode = new ExpectedCallNode(expectations, "call", call.getName());
-                ExpectedArgumentsListNode expectedArgs = (ExpectedArgumentsListNode) callNode.findChildByName("args");
-                ReturnNode returnVal = (ReturnNode) callNode.findChildByName("returns");
+            for (Iterator<ExpectedCall> it = expectedCalls.iterator(); it.hasNext(); ) {
+                LslTest.ExpectedCall call = it.next();
+                ExpectedCallNode callNode = new ExpectedCallNode(expectations, "call", call.getName()); //$NON-NLS-1$
+                ExpectedArgumentsListNode expectedArgs = (ExpectedArgumentsListNode) callNode.findChildByName("args"); //$NON-NLS-1$
+                ReturnNode returnVal = (ReturnNode) callNode.findChildByName("returns"); //$NON-NLS-1$
                 
                 if (returnVal.type.equals(LslTest.lslTypeToString(call.getReturns().getClass()))) {
                     returnVal.setValue(call.getReturns().toString());
                 }
-                List callArgs = call.getArgs();
-                List argNodes = expectedArgs.getChildren();
-                Iterator it2 = argNodes.iterator();
-                Iterator it1 = callArgs.iterator();
+                List<MaybeValue> callArgs = call.getArgs();
+                List<Node> argNodes = expectedArgs.getChildren();
+                Iterator<Node> it2 = argNodes.iterator();
+                Iterator<MaybeValue> it1 = callArgs.iterator();
                 while (it1.hasNext() && it2.hasNext()) {
-                    LslTest.MaybeValue val = (MaybeValue) it1.next();
+                    LslTest.MaybeValue val = it1.next();
                     ExpectedArgumentNode expectNode = (ExpectedArgumentNode) it2.next();
                     String type = expectNode.getType();
                     if (val.getVal() == null) continue;
                     if (!LslTest.lslTypeToString(val.getVal().getClass()).equals(type)) break;
-                    expectNode.setValue(val.getVal() == null ? "" : val.getVal().toString());
+                    expectNode.setValue(val.getVal() == null ? "" : val.getVal().toString()); //$NON-NLS-1$
                 }
                 expectations.addChild(callNode);
             }
@@ -830,9 +845,9 @@ public class TestProject {
         LslTestSuite suite = new LslTestSuite();
         suite.setIResource(suiteNode.resource);
         
-        List testNodes = suiteNode.getChildren();
+        List<Node> testNodes = suiteNode.getChildren();
         
-        for (Iterator it = testNodes.iterator(); it.hasNext();) {
+        for (Iterator<Node> it = testNodes.iterator(); it.hasNext();) {
             TestNode tn = (TestNode) it.next();
             LslTest test = new LslTest();
             test.setSuite(suite);
@@ -842,7 +857,7 @@ public class TestProject {
             ep.setPath(tn.getPath());
             test.setEntryPoint(ep);
             ArgumentsListNode argumentsNode = tn.getArguments();
-            List argumentsList = argumentsNode.getChildren();
+            List<Node> argumentsList = argumentsNode.getChildren();
             LslValue[] args = new LslValue[argumentsList.size()];
             for (int index = 0; index < args.length; index++) {
                 ArgumentNode argNode = (ArgumentNode) argumentsList.get(index);
@@ -864,16 +879,16 @@ public class TestProject {
             ExpectationsNode expectationsNode = tn.getExpectations();
             CallExpectations expectations = new CallExpectations();
             expectations.setMode(expectationsNode.getMode());
-            List expectedCallNodes = expectationsNode.getExpectedCalls();
-            List expectedCalls = expectations.getExpectedCalls();
-            for (Iterator expectIt = expectedCallNodes.iterator(); expectIt.hasNext();) {
+            List<Node> expectedCallNodes = expectationsNode.getExpectedCalls();
+            List<ExpectedCall> expectedCalls = expectations.getExpectedCalls();
+            for (Iterator<Node> expectIt = expectedCallNodes.iterator(); expectIt.hasNext();) {
                 ExpectedCall call = new ExpectedCall();
                 ExpectedCallNode callNode = (ExpectedCallNode) expectIt.next();
                 
-                List callArgs = call.getArgs();
+                List<MaybeValue> callArgs = call.getArgs();
                 ExpectedArgumentsListNode expectedArgsNode = callNode.getArgumentListNode();
-                List expectedArgNodes = expectedArgsNode.getChildren();
-                for (Iterator argNodeIt = expectedArgNodes.iterator(); argNodeIt.hasNext();) {
+                List<Node> expectedArgNodes = expectedArgsNode.getChildren();
+                for (Iterator<Node> argNodeIt = expectedArgNodes.iterator(); argNodeIt.hasNext();) {
                     ExpectedArgumentNode argNode = (ExpectedArgumentNode) argNodeIt.next();
                     if (argNode.getValue() == null) {
                         callArgs.add(new MaybeValue());
@@ -895,10 +910,10 @@ public class TestProject {
         
     }
     
-    private static ArrayList convertBindings(BindingListNode node) {
-        ArrayList bindings = new ArrayList();
+    private static ArrayList<GlobBinding> convertBindings(BindingListNode node) {
+        ArrayList<GlobBinding> bindings = new ArrayList<GlobBinding>();
         
-        for (Iterator ib = node.getChildren().iterator(); ib.hasNext();) {
+        for (Iterator<Node> ib = node.getChildren().iterator(); ib.hasNext();) {
             BindingNode bindingNode = (BindingNode) ib.next();
             GlobBinding binding = new GlobBinding();
             binding.setName(bindingNode.getName());
@@ -907,5 +922,16 @@ public class TestProject {
         }
         
         return bindings;
+    }
+    
+    public static String lslTypeToString(LSLType t) {
+    	if (t instanceof LSLType_LLFloat) return "float"; //$NON-NLS-1$
+    	if (t instanceof LSLType_LLInteger) return "integer"; //$NON-NLS-1$
+    	if (t instanceof LSLType_LLKey) return "key"; //$NON-NLS-1$
+    	if (t instanceof LSLType_LLList) return "list"; //$NON-NLS-1$
+    	if (t instanceof LSLType_LLRot) return "rotation"; //$NON-NLS-1$
+    	if (t instanceof LSLType_LLString) return "string"; //$NON-NLS-1$
+    	if (t instanceof LSLType_LLVector) return "vector"; //$NON-NLS-1$
+    	return ""; //$NON-NLS-1$
     }
 }

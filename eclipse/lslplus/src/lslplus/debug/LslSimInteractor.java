@@ -131,14 +131,14 @@ public class LslSimInteractor implements Runnable, Interactor, SimEventListener 
     }
     
     
-    private HashSet listeners = new HashSet();
+    private HashSet<InteractorListener> listeners = new HashSet<InteractorListener>();
     private BufferedReader reader;
     private PrintStream writer;
     private String simDescriptor;
     private Thread thread;
     private boolean done = false;
     private boolean debugMode;
-    private LinkedList eventQueue = new LinkedList();
+    private LinkedList<SimEvent> eventQueue = new LinkedList<SimEvent>();
     
     public LslSimInteractor(String launchMode, String simDescriptor, InputStream in, OutputStream out) {
         reader = new BufferedReader(new InputStreamReader(in));
@@ -200,7 +200,7 @@ public class LslSimInteractor implements Runnable, Interactor, SimEventListener 
     private BreakpointData[] createBreakpointData() {
         IBreakpointManager bpm = getBreakpointManager();
         IBreakpoint[] breakpoints = bpm.getBreakpoints(LslDebugTarget.LSLPLUS);
-        LinkedList list = new LinkedList();
+        LinkedList<BreakpointData> list = new LinkedList<BreakpointData>();
         for (int i = 0; i < breakpoints.length; i++) {
             try {
                 if (breakpoints[i] instanceof LslLineBreakpoint) {
@@ -216,10 +216,10 @@ public class LslSimInteractor implements Runnable, Interactor, SimEventListener 
                     list.add(new BreakpointData(fullPath.toOSString(), line));
                 }
             } catch (CoreException e) {
-                Util.log(e, e.getLocalizedMessage());
+                Util.error(e, e.getLocalizedMessage());
             }
         }
-        return (BreakpointData[]) list.toArray(new BreakpointData[list.size()]);
+        return list.toArray(new BreakpointData[list.size()]);
     }
     
     public void continueExecution() {
@@ -253,14 +253,14 @@ public class LslSimInteractor implements Runnable, Interactor, SimEventListener 
     }
     
     private void fireSuspended(LslScriptExecutionState state) {
-        for (Iterator i = listeners.iterator(); i.hasNext();) {
-            ((InteractorListener)i.next()).suspended(state);
+        for (Iterator<InteractorListener> i = listeners.iterator(); i.hasNext();) {
+            i.next().suspended(state);
         }
     }
     
     private void fireComplete() {
-        for (Iterator i = listeners.iterator(); i.hasNext();) {
-            ((InteractorListener)i.next()).completed();
+        for (Iterator<InteractorListener> i = listeners.iterator(); i.hasNext();) {
+            i.next().completed();
         }
     }
     public void run() {
@@ -290,15 +290,15 @@ public class LslSimInteractor implements Runnable, Interactor, SimEventListener 
                     fireSuspended(((SimSuspended)status).getScriptState());
                     return;
                 } else {
-                    Util.error("Unrecognized status: " + status);
+                    Util.error("Unrecognized status: " + status); //$NON-NLS-1$
                 }
             }
         } catch (IOException e) {
-            Util.log(e, e.getLocalizedMessage());
+            Util.error(e, e.getLocalizedMessage());
         } catch (RuntimeException e) {
-            Util.log(e, e.getLocalizedMessage());
+            Util.error(e, e.getLocalizedMessage());
             if (line != null) {
-                Util.log("input was: " + Util.URIDecode(line));
+                Util.log("input was: " + Util.URIDecode(line)); //$NON-NLS-1$
             }
             try {
                 endSession();
@@ -333,7 +333,7 @@ public class LslSimInteractor implements Runnable, Interactor, SimEventListener 
     
     private SimEvent[] getAllPendingEvents() {
         synchronized (eventQueue) {
-            SimEvent[] events = (SimEvent[]) eventQueue.toArray(new SimEvent[eventQueue.size()]);
+            SimEvent[] events = eventQueue.toArray(new SimEvent[eventQueue.size()]);
             eventQueue.clear();
             return events;
         }

@@ -32,10 +32,10 @@ public abstract class NewFileSampleWizard extends Wizard {
     	protected InputStream getInitialContents() {
     	    try {
                 return FileLocator.openStream(LslPlusPlugin.getDefault().getBundle(),
-                        new Path(pathToSample), false);//$NON-NLS-1$
+                        new Path(pathToSample), false);
             } catch (IOException e) {
-                Util.log(e, e.getLocalizedMessage());
-                return new ByteArrayInputStream("$module ()\n// can't find template!".getBytes());
+                Util.error(e, e.getLocalizedMessage());
+                return new ByteArrayInputStream("$module ()\n// can't find template!".getBytes()); //$NON-NLS-1$ TODO
             } 
     	}
     

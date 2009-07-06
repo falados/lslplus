@@ -23,7 +23,7 @@ import org.eclipse.jface.viewers.LabelProviderChangedEvent;
 public class ErrorDecorator implements ILightweightLabelDecorator {
     private static final String ICON_PATH = "icons/error_decorator.gif"; //NON-NLS-1 //$NON-NLS-1$
 
-    private LinkedList labelProviderListeners = new LinkedList();
+    private LinkedList<ILabelProviderListener> labelProviderListeners = new LinkedList<ILabelProviderListener>();
 
 	private ImageDescriptor descriptor;
 	
@@ -56,7 +56,7 @@ public class ErrorDecorator implements ILightweightLabelDecorator {
 				return;
 			}
 		} catch (CoreException e) {
-			Util.log(e,"exception caught trying to determine project nature!"); //$NON-NLS-1$
+			Util.error(e,"exception caught trying to determine project nature!"); //$NON-NLS-1$
 			return;
 		}
 
@@ -79,10 +79,10 @@ public class ErrorDecorator implements ILightweightLabelDecorator {
 	}
 	
 	public void errorStatusChanged() {
-		Iterator i = labelProviderListeners.iterator();
+		Iterator<ILabelProviderListener> i = labelProviderListeners.iterator();
 		
 		while (i.hasNext()) {
-			ILabelProviderListener listener = (ILabelProviderListener) i.next();
+			ILabelProviderListener listener = i.next();
 			listener.labelProviderChanged(new LabelProviderChangedEvent(this));
 		}
 	}

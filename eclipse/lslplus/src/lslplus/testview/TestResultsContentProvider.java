@@ -11,8 +11,8 @@ import org.eclipse.jface.viewers.Viewer;
 
 public class TestResultsContentProvider implements ITreeContentProvider {
 
-    private LinkedList list = new LinkedList();
-    private HashMap map = new HashMap();
+    private LinkedList<TestResult> list = new LinkedList<TestResult>();
+    private HashMap<Object[],Object> map = new HashMap<Object[],Object>();
     public Object[] getChildren(Object parentElement) {
         if (parentElement instanceof TestResult) {
             TestResult tr = (TestResult) parentElement;

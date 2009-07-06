@@ -14,9 +14,12 @@ public class SimEvent {
         configureXStream(xstream);
     }
     
-    private String name;
-    private int delay;
-    private SimEventArg args[];
+    @SuppressWarnings("unused")
+	private String name;
+    @SuppressWarnings("unused")
+	private int delay;
+    @SuppressWarnings("unused")
+	private SimEventArg args[];
     
     public SimEvent() { }
     

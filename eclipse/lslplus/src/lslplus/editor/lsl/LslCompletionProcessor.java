@@ -37,10 +37,10 @@ public class LslCompletionProcessor implements IContentAssistProcessor {
 	private Image handlerImage;
 	private Image constantImage;
 	private Image keywordImage;
-	private static final Comparator PROPOSAL_COMPARATOR = new Comparator() {
-		public int compare(Object aProposal1, Object aProposal2) {
-			String text1 = ((ICompletionProposal)aProposal1).getDisplayString();
-			String text2 = ((ICompletionProposal)aProposal2).getDisplayString();
+	private static final Comparator<ICompletionProposal> PROPOSAL_COMPARATOR = new Comparator<ICompletionProposal>() {
+		public int compare(ICompletionProposal aProposal1, ICompletionProposal aProposal2) {
+			String text1 = aProposal1.getDisplayString();
+			String text2 = aProposal2.getDisplayString();
 			return text1.compareTo(text2);
 		}
 
@@ -108,23 +108,23 @@ public class LslCompletionProcessor implements IContentAssistProcessor {
 	protected CompletionInfo [] getPossibleProposals() {
 		if (possibleProposals == null) {
 		    LslHandler handlers[] = LslPlusPlugin.getDefault().getLslMetaData().getHandlers();
-		    CompletionInfo[] handlerNames = (CompletionInfo[])Util.arrayMap(new Util.ArrayMapFunc() {
-			    		public Class elementType() { return CompletionInfo.class; }
-				    	public Object map(Object o) {
+		    CompletionInfo[] handlerNames = Util.arrayMap(new Util.ArrayMapFunc<CompletionInfo>() {
+			    		public Class<CompletionInfo> elementType() { return CompletionInfo.class; }
+				    	public CompletionInfo map(Object o) {
 				    		LslHandler handler = (LslHandler) o;
 				    		String proto = handler.getName() + formatParams(handler.getParams());
 				    		String startLine = proto + " {"; //$NON-NLS-1$
 				    		return new CompletionInfo(handler.getName(),
-				    				startLine, //$NON-NLS-1$
+				    				startLine,
 				    				proto,
 				    				handler.getDescription(), handlerImage,
 				    				startLine.length());
 				    	}
 				    }, handlers);
 		    
-		    CompletionInfo[] functions = (CompletionInfo[])Util.arrayMap(new Util.ArrayMapFunc() {
-				public Class elementType() { return CompletionInfo.class; }
-				public Object map(Object o) {
+		    CompletionInfo[] functions = Util.arrayMap(new Util.ArrayMapFunc<CompletionInfo>() {
+				public Class<CompletionInfo> elementType() { return CompletionInfo.class; }
+				public CompletionInfo map(Object o) {
 					LslFunction f = (LslFunction) o;
 					return new CompletionInfo(f.getName(),
 							f.getName() + formatArgs(f.getParams()),
@@ -133,20 +133,20 @@ public class LslCompletionProcessor implements IContentAssistProcessor {
 				}
 		    }, LslPlusPlugin.getDefault().getLslMetaData().getFunctions());
 
-		    CompletionInfo[] constants = (CompletionInfo[]) Util.arrayMap(
-		    		new Util.ArrayMapFunc() {
-						public Class elementType() { return CompletionInfo.class; }
-						public Object map(Object o) {
+		    CompletionInfo[] constants = Util.arrayMap(
+		    		new Util.ArrayMapFunc<CompletionInfo>() {
+						public Class<CompletionInfo> elementType() { return CompletionInfo.class; }
+						public CompletionInfo map(Object o) {
 							LslConstant k = (LslConstant) o;
 							return new CompletionInfo(k.getName(),k.getName(),
 									k.getName() + " - " + k.getType(), //$NON-NLS-1$
 									k.getDescription(),constantImage, k.getName().length());
 						}
 		    		}, LslPlusPlugin.getDefault().getLslMetaData().getConstants());
-		    CompletionInfo[] keywords = (CompletionInfo[]) Util.arrayMap(
-		    		new Util.ArrayMapFunc() {
-						public Class elementType() { return CompletionInfo.class; }
-						public Object map(Object o) {
+		    CompletionInfo[] keywords = Util.arrayMap(
+		    		new Util.ArrayMapFunc<CompletionInfo>() {
+						public Class<CompletionInfo> elementType() { return CompletionInfo.class; }
+						public CompletionInfo map(Object o) {
 							String k = (String) o;
 							return new CompletionInfo(k,k,k,null,keywordImage,k.length());
 						}
@@ -198,7 +198,7 @@ public class LslCompletionProcessor implements IContentAssistProcessor {
 	 * Method declared on IContentAssistProcessor
 	 */
 	public ICompletionProposal[] computeCompletionProposals(ITextViewer viewer, int documentOffset) {
-		List proposals = new ArrayList();
+		List<ICompletionProposal> proposals = new ArrayList<ICompletionProposal>();
 		Couple c = guessTextLine(viewer.getDocument(), documentOffset);
 		String prefix = c.o;
 		possibleProposals = getPossibleProposals();
@@ -214,8 +214,7 @@ public class LslCompletionProcessor implements IContentAssistProcessor {
 			}
 		}
 		Collections.sort(proposals, PROPOSAL_COMPARATOR);
-		return (ICompletionProposal[])proposals.toArray(
-									new ICompletionProposal[proposals.size()]);
+		return proposals.toArray(new ICompletionProposal[proposals.size()]);
 	}
 	
 	private Couple guessTextLine(IDocument doc, int offset) {

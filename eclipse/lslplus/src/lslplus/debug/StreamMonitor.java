@@ -12,7 +12,7 @@ import org.eclipse.debug.core.IStreamListener;
 import org.eclipse.debug.core.model.IStreamMonitor;
 
 public class StreamMonitor implements IStreamMonitor {
-	private HashSet listeners = new HashSet();
+	private HashSet<IStreamListener> listeners = new HashSet<IStreamListener>();
 	private StringBuffer buf = new StringBuffer();
 	private Reader reader;
 	
@@ -55,8 +55,8 @@ public class StreamMonitor implements IStreamMonitor {
 	};
 	
 	private void notifyListeners(String text) {
-		for (Iterator i = listeners.iterator(); i.hasNext(); ) {
-			IStreamListener listener = (IStreamListener)i.next();
+		for (Iterator<IStreamListener> i = listeners.iterator(); i.hasNext(); ) {
+			IStreamListener listener = i.next();
 			listener.streamAppended(text, this);
 		}
 	}

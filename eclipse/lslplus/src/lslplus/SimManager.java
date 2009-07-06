@@ -47,13 +47,13 @@ public class SimManager implements SimEventListener {
         public SimEventDefinition[] getEventDescriptors() { return eventDescriptors; }
     }
     
-    private HashSet listeners = new HashSet();
-    private HashSet simEventListeners = new HashSet();
-    private HashSet simMetaDataListeners = new HashSet();
+    private HashSet<SimListener> listeners = new HashSet<SimListener>();
+    private HashSet<SimEventListener> simEventListeners = new HashSet<SimEventListener>();
+    private HashSet<SimMetaDataListener> simMetaDataListeners = new HashSet<SimMetaDataListener>();
     private volatile boolean active  = false;
     private LslSimProcess process = null;
     private SimState simState;
-    private volatile HashMap eventDescriptors = null;
+    private volatile HashMap<String,SimEventDefinition> eventDescriptors = null;
     private SimKeyManager keyManager = new SimKeyManager();
     
     public SimManager() {
@@ -110,7 +110,7 @@ public class SimManager implements SimEventListener {
             try {
                 process.terminate();
             } catch (DebugException e) {
-                Util.log(e, e.getLocalizedMessage());
+                Util.error(e, e.getLocalizedMessage());
             }
         }
         
@@ -139,7 +139,7 @@ public class SimManager implements SimEventListener {
             //  show the result view if it isn't shown yet
             return (SimWatcherViewPart) page.showView(SimWatcherViewPart.ID);
         } catch (PartInitException pie) {
-            Util.log(pie, pie.getLocalizedMessage());
+            Util.error(pie, pie.getLocalizedMessage());
             return null;
         } finally{
             //restore focus stolen by the creation of the result view
@@ -160,23 +160,23 @@ public class SimManager implements SimEventListener {
     }
     
     private void fireSimLaunched() {
-        for (Iterator i = listeners.iterator(); i.hasNext();) {
-            SimListener listener = (SimListener) i.next();
+        for (Iterator<SimListener> i = listeners.iterator(); i.hasNext();) {
+            SimListener listener = i.next();
             
             listener.simLaunched();
         }
     }
     
     private void fireSimEnded() {
-        for (Iterator i = listeners.iterator(); i.hasNext(); ) {
-            SimListener listener = (SimListener) i.next();
+        for (Iterator<SimListener> i = listeners.iterator(); i.hasNext(); ) {
+            SimListener listener = i.next();
             listener.simEnded();
         }
     }
 
     private void fireNewSimState(SimStatuses.Message[] messages) {
-        for (Iterator i = listeners.iterator(); i.hasNext(); ) {
-            SimListener listener = (SimListener) i.next();
+        for (Iterator<SimListener> i = listeners.iterator(); i.hasNext(); ) {
+            SimListener listener = i.next();
             listener.newSimState(simState, messages);
         }
     }
@@ -194,13 +194,13 @@ public class SimManager implements SimEventListener {
             public void run() {
                 try {
                     synchronized (simEventListeners) {
-                        for (Iterator i = simEventListeners.iterator(); i.hasNext(); ) {
-                            SimEventListener l = (SimEventListener) i.next();
+                        for (Iterator<SimEventListener> i = simEventListeners.iterator(); i.hasNext(); ) {
+                            SimEventListener l = i.next();
                             l.putEvent(event);
                         }
                     }
                 } catch (Exception e) {
-                    Util.log(e,e.getLocalizedMessage());
+                    Util.error(e,e.getLocalizedMessage());
                 }
             }
         };
@@ -209,13 +209,13 @@ public class SimManager implements SimEventListener {
     
     public SimEventDefinition getAnEventDefinition(String name) {
         if (eventDescriptors == null) return null;
-        return (SimEventDefinition) eventDescriptors.get(name);
+        return eventDescriptors.get(name);
     }
     
     public SimEventDefinition[] getAllEventDefinitions() {
-        HashMap map = eventDescriptors;
+        HashMap<String,SimEventDefinition> map = eventDescriptors;
         if (map == null) return null;
-        return (SimEventDefinition[]) map.values().toArray(new SimEventDefinition[map.size()]);
+        return map.values().toArray(new SimEventDefinition[map.size()]);
     }
     
     private void buildSimMetaData() {
@@ -228,7 +228,7 @@ public class SimManager implements SimEventListener {
                         Messages.SimManager_Cant_Get_Simulator_Information);
                 SimMetaData metaData = SimMetaData.fromXML(metaDataString);
                 
-                HashMap map = new HashMap();
+                HashMap<String,SimEventDefinition> map = new HashMap<String, SimEventDefinition>();
                 for (int i = 0; i < metaData.getEventDescriptors().length; i++) {
                     SimEventDefinition def = metaData.getEventDescriptors()[i];
                     map.put(def.getName(), def);
@@ -246,8 +246,8 @@ public class SimManager implements SimEventListener {
     }
     
     protected void fireSimMetaDataReady() {
-        for (Iterator i = simMetaDataListeners.iterator(); i.hasNext();) {
-            SimMetaDataListener l = (SimMetaDataListener) i.next();
+        for (Iterator<SimMetaDataListener> i = simMetaDataListeners.iterator(); i.hasNext();) {
+            SimMetaDataListener l = i.next();
             l.metaDataReady();
         }
     }

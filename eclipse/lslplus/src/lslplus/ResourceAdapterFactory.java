@@ -17,6 +17,7 @@ import org.eclipse.core.runtime.IAdapterFactory;
  */
 public class ResourceAdapterFactory implements IAdapterFactory {
 
+	@SuppressWarnings("unchecked")
 	public Object getAdapter(Object adaptableObject, Class adapterType) {
 		if (adaptableObject instanceof IFile) {
 			IFile f = (IFile) adaptableObject;
@@ -34,15 +35,15 @@ public class ResourceAdapterFactory implements IAdapterFactory {
 					suite.setIResource(f);
 					return suite;
 				} catch (CoreException e) {
-					Util.log(e, e.getLocalizedMessage());
+					Util.error(e, e.getLocalizedMessage());
 					return null;
 				}
-			} else if ("simp".equals(ext) && SimProject.WorldNode.class.equals(adapterType)) {
+			} else if ("simp".equals(ext) && SimProject.WorldNode.class.equals(adapterType)) { //$NON-NLS-1$
 			    try {
 			        SimProject.WorldNode node = SimProject.fromXml(f.getContents(), f);
 			        return node;
 			    } catch (CoreException e) {
-			        Util.log(e, e.getLocalizedMessage());
+			        Util.error(e, e.getLocalizedMessage());
 			        return null;
 			    }
 			}
@@ -50,7 +51,7 @@ public class ResourceAdapterFactory implements IAdapterFactory {
 		return null;
 	}
 
-	static private Class[] adapterList = {
+	static private Class<?>[] adapterList = {
 		LslPlusElement.class,
 		LslDerivedScript.class,
 		LslTestSuite.class,
@@ -58,6 +59,7 @@ public class ResourceAdapterFactory implements IAdapterFactory {
 		SimProject.WorldNode.class
 	};
 	
+	@SuppressWarnings("unchecked")
 	public Class[] getAdapterList() {
 		return adapterList;
 	}

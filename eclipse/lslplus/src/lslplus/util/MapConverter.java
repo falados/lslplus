@@ -2,7 +2,6 @@ package lslplus.util;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -23,22 +22,21 @@ public class MapConverter implements Converter {
     public MapConverter(Mapper mapper) {
         this.mapper = mapper;
     }
-    public void marshal(Object source, HierarchicalStreamWriter writer, MarshallingContext context) {
-        Map map = (Map) source;
+	public void marshal(Object source, HierarchicalStreamWriter writer, MarshallingContext context) {
+	    @SuppressWarnings("unchecked")
+        Map<String,Object> map = (Map<String,Object>) source;
         
-        for (Iterator iterator = map.entrySet().iterator(); iterator.hasNext();) {
-            Map.Entry entry = (Map.Entry) iterator.next();
-
+        for (Map.Entry<String,Object> entry : map.entrySet()) {
             String key = entry.getKey().toString();
             Object value = entry.getValue();
-            writer.startNode("entry");
-            writer.startNode("key");
+            writer.startNode("entry"); //$NON-NLS-1$
+            writer.startNode("key"); //$NON-NLS-1$
             writer.setValue(key);
             writer.endNode();
             
             ExtendedHierarchicalStreamWriterHelper.startNode(writer, "value", value.getClass()); //$NON-NLS-1$
             if (!value.getClass().equals(Object.class)) {
-                writer.addAttribute(mapper.aliasForAttribute("class"), mapper.serializedClass(value.getClass()));
+                writer.addAttribute(mapper.aliasForAttribute("class"), mapper.serializedClass(value.getClass())); //$NON-NLS-1$
             }
 
             context.convertAnother(value);
@@ -49,7 +47,8 @@ public class MapConverter implements Converter {
         
     }
 
-    public Object unmarshal(HierarchicalStreamReader reader, UnmarshallingContext context) {
+    @SuppressWarnings("unchecked")
+	public Object unmarshal(HierarchicalStreamReader reader, UnmarshallingContext context) {
         Map m = (Map) createCollection(context.getRequiredType());
         while (reader.hasMoreChildren()) {
             reader.moveDown();
@@ -58,15 +57,15 @@ public class MapConverter implements Converter {
             while (reader.hasMoreChildren()) {
                 reader.moveDown();
                 
-                if ("key".equals(reader.getNodeName())) {
-                    if (key != null) throw new ConversionException("multiple keys in single entry");
+                if ("key".equals(reader.getNodeName())) { //$NON-NLS-1$
+                    if (key != null) throw new ConversionException("multiple keys in single entry"); //$NON-NLS-1$
                     key = context.convertAnother(m, String.class).toString();
                     
-               } else if ("value".equals(reader.getNodeName())) {
-                    if (value != null) throw new ConversionException("multiple values in single entry");
+               } else if ("value".equals(reader.getNodeName())) { //$NON-NLS-1$
+                    if (value != null) throw new ConversionException("multiple values in single entry"); //$NON-NLS-1$
                     value = readItem(reader, context, m);
                 } else {
-                    throw new ConversionException("unrecognized InfoMap element");
+                    throw new ConversionException("unrecognized InfoMap element"); //$NON-NLS-1$
                 }
                 
                 reader.moveUp();
@@ -78,24 +77,26 @@ public class MapConverter implements Converter {
         return m;
     }
 
-    public boolean canConvert(Class type) {
+    @SuppressWarnings("unchecked")
+	public boolean canConvert(Class type) {
         return Map.class.isAssignableFrom(type);
     }
 
-    private Object createCollection(Class type) {
+    @SuppressWarnings("unchecked")
+	private Object createCollection(Class type) {
         Class defaultType = mapper.defaultImplementationOf(type);
         try {
             return defaultType.newInstance();
         } catch (InstantiationException e) {
-            throw new ConversionException("Cannot instantiate " + defaultType.getName(), e);
+            throw new ConversionException("Cannot instantiate " + defaultType.getName(), e); //$NON-NLS-1$
         } catch (IllegalAccessException e) {
-            throw new ConversionException("Cannot instantiate " + defaultType.getName(), e);
+            throw new ConversionException("Cannot instantiate " + defaultType.getName(), e); //$NON-NLS-1$
         }
     }
     
     private Object readItem(HierarchicalStreamReader reader, UnmarshallingContext context, Object current) {
-        String classAttribute = reader.getAttribute(mapper.aliasForAttribute("class"));
-        Class type;
+        String classAttribute = reader.getAttribute(mapper.aliasForAttribute("class")); //$NON-NLS-1$
+        Class<?> type;
         if (classAttribute == null) {
             type = mapper.realClass(reader.getNodeName());
         } else {
@@ -109,20 +110,20 @@ public class MapConverter implements Converter {
         XStream xstream = new XStream(new DomDriver());
         Mapper mapper = xstream.getMapper();
         
-        xstream.alias("valueDB", Map.class);
+        xstream.alias("valueDB", Map.class); //$NON-NLS-1$
         xstream.registerConverter(new MapConverter(mapper), XStream.PRIORITY_VERY_HIGH);
-        xstream.alias("list", List.class);
+        xstream.alias("list", List.class); //$NON-NLS-1$
         xstream.registerConverter(new ListConverter(mapper));
-        HashMap m = new HashMap();
-        m.put("hello", "there");
-        m.put("goodbye", new Integer(12));
-        HashMap m1 = new HashMap();
-        m1.put("foo", new Float(5.0));
-        ArrayList l = new ArrayList();
-        l.add("bite");
+        HashMap<String,Object> m = new HashMap<String,Object>();
+        m.put("hello", "there");  //$NON-NLS-1$//$NON-NLS-2$
+        m.put("goodbye", new Integer(12)); //$NON-NLS-1$
+        HashMap<String,Object> m1 = new HashMap<String,Object>();
+        m1.put("foo", new Float(5.0)); //$NON-NLS-1$
+        ArrayList<Object> l = new ArrayList<Object>();
+        l.add("bite"); //$NON-NLS-1$
         l.add(new Integer(90210));
-        m1.put("list", l);
-        m.put("more", m1);
+        m1.put("list", l); //$NON-NLS-1$
+        m.put("more", m1); //$NON-NLS-1$
         String s = xstream.toXML(m);
         System.out.println(xstream.toXML(m));
         Object o = xstream.fromXML(s);

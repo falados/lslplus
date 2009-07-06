@@ -41,16 +41,16 @@ import com.thoughtworks.xstream.io.xml.DomDriver;
 // TODO: add validation, so we can mark project is invalid, e.g. if referenced scripts don't exist.
 public class SimProject {
     private static final String PRIM_PROPERTIES = "prim-properties"; //$NON-NLS-1$
-    private static final String OBJECT_PROPERTIES = "object-properties";
+    private static final String OBJECT_PROPERTIES = "object-properties"; //$NON-NLS-1$
     static final NodeFactory[] EMPTY_FACTORY_LIST = { };
-    private static final String DEFAULT_AVATAR_ID = "Default Avatar";
-    private static HashMap ID_TO_DISPLAY = new HashMap();
+    private static final String DEFAULT_AVATAR_ID = "Default Avatar"; //$NON-NLS-1$ TODO
+    private static HashMap<String,String> ID_TO_DISPLAY = new HashMap<String,String>();
     
     static {
-        ID_TO_DISPLAY.put("pos", "Position"); //$NON-NLS-1$
-        ID_TO_DISPLAY.put("prim-properties", "Prim properties"); //$NON-NLS-1$
-        ID_TO_DISPLAY.put("avatar-properties", "Avatar properties"); //$NON-NLS-1$
-        ID_TO_DISPLAY.put(OBJECT_PROPERTIES, "Object properties");
+        ID_TO_DISPLAY.put("pos", "Position"); //$NON-NLS-1$ //$NON-NLS-2$ TODO
+        ID_TO_DISPLAY.put("prim-properties", "Prim properties"); //$NON-NLS-1$ //$NON-NLS-2$ TODO
+        ID_TO_DISPLAY.put("avatar-properties", "Avatar properties"); //$NON-NLS-1$ //$NON-NLS-2$ TODO
+        ID_TO_DISPLAY.put(OBJECT_PROPERTIES, "Object properties"); //$NON-NLS-1$ TODO
     }
     
     public static interface HasDerivedValue {
@@ -64,27 +64,27 @@ public class SimProject {
 
     public static class ObjectNodeFactory implements NodeFactory {
         public Node createNode(Node parent) {
-            ObjectNode node = new ObjectNode(parent, "Object");
+            ObjectNode node = new ObjectNode(parent, "Object"); //$NON-NLS-1$ TODO
             PrimNode rootPrim = (PrimNode) primNodeFactory.createNode(node);
-            rootPrim.setName("Object");
+            rootPrim.setName("Object"); //$NON-NLS-1$ TODO
             node.addChild(rootPrim);
             
             return node;
         }
 
         public String getNodeTypeName() {
-            return "Object";
+            return "Object"; //$NON-NLS-1$ TODO ?
         }
     }
 
     public static class PrimNodeFactory implements NodeFactory {
         public Node createNode(Node parent) {
-            String name = computeNewName(parent.getChildren(), "prim");
+            String name = computeNewName(parent.getChildren(), "prim"); //$NON-NLS-1$
             return new PrimNode(parent, name);
         }
 
         public String getNodeTypeName() {
-            return "Prim";
+            return "Prim"; //$NON-NLS-1$ TODO ?
         }
     }
 
@@ -92,36 +92,36 @@ public class SimProject {
 
         public Node createNode(Node parent) {
             PrimNode node = (PrimNode) parent;
-            List nodes = node.getChildren();
-            String name = SimProject.computeNewName(nodes, "New Script");
+            List<Node> nodes = node.getChildren();
+            String name = SimProject.computeNewName(nodes, "New Script"); //$NON-NLS-1$ TODO
             
-            return new ScriptNode(parent, name, "");
+            return new ScriptNode(parent, name, ""); //$NON-NLS-1$
         }
 
         public String getNodeTypeName() {
-            return "Script";
+            return "Script"; //$NON-NLS-1$ TODO
         }
     }
     
     public static class AvatarNodeFactory implements NodeFactory {
         public Node createNode(Node parent) {
             WorldNode world = (WorldNode) parent;
-            String name = computeNewName(world.getChildren(), "Joe Avatar");
+            String name = computeNewName(world.getChildren(), "Joe Avatar"); //$NON-NLS-1$ TODO
             
             return new AvatarNode(parent, name);
         }
 
         public String getNodeTypeName() {
-            return "Avatar";
+            return "Avatar"; //$NON-NLS-1$ TODO
         }
     }
 
     static class KeyTracker {
         private SimKeyManager mgr = new SimKeyManager();
-        private HashMap xref = new HashMap();
+        private HashMap<Object,String> xref = new HashMap<Object,String>();
         
         public String keyFor(Object o) {
-            String k = (String) xref.get(o);
+            String k = xref.get(o);
             if (k == null) {
                 k = mgr.getNextKey();
                 xref.put(o, k);
@@ -179,7 +179,8 @@ public class SimProject {
         
         public IResource getResource() { return resource; }
 
-        public Object getAdapter(Class adapter) {
+        @SuppressWarnings("unchecked")
+		public Object getAdapter(Class adapter) {
             return Platform.getAdapterManager().getAdapter(this, adapter);
         }
         
@@ -201,7 +202,7 @@ public class SimProject {
         }
 
         public String getValueString() {
-            return "";
+            return ""; //$NON-NLS-1$
         }
 
         public NodeStatus checkValueString(String s) {
@@ -220,8 +221,8 @@ public class SimProject {
         }
 
         public void updateName(String name) {
-            List prims = findChildrenByType(PrimNode.class);
-            Node root = (Node) prims.get(0);
+            List<Node> prims = findChildrenByType(PrimNode.class);
+            Node root = prims.get(0);
             super.setName(name);
             root.setName(name);
         }
@@ -251,7 +252,7 @@ public class SimProject {
         
         protected void onChildRemoved(Node n) {
             if (n instanceof PrimNode) {
-                List prims = findChildrenByType(PrimNode.class);
+                List<Node> prims = findChildrenByType(PrimNode.class);
                 if (n == prims.get(0)) {
                     if (prims.size() > 1) {
                         PrimNode secondPrim = (PrimNode) prims.get(1);
@@ -270,7 +271,7 @@ public class SimProject {
         }
 
         public String getOwner() {
-            List prims = findChildrenByType(PrimNode.class);
+            List<Node> prims = findChildrenByType(PrimNode.class);
             if (prims.size() == 0) return DEFAULT_AVATAR_ID;
             else {
                 PrimNode prim = (PrimNode) prims.get(0);
@@ -278,19 +279,19 @@ public class SimProject {
             }
         }
 
-        public SimObject getSimObject(List allPrims) { 
-            List primNodes = findChildrenByType(PrimNode.class);
+        public SimObject getSimObject(List<Prim> allPrims) { 
+            List<Node> primNodes = findChildrenByType(PrimNode.class);
             String[] primKeys = new String[primNodes.size()];
             int j = 0;
-            for (Iterator i1 = primNodes.iterator(); i1.hasNext(); ) {
+            for (Iterator<Node> i1 = primNodes.iterator(); i1.hasNext(); ) {
                 PrimNode pn = (PrimNode)i1.next();
                 Prim p = (Prim)pn.getDerivedValue();
                 allPrims.add(p);
                 primKeys[j++] = p.getKey();
             }
             ObjectPropertiesNode props = (ObjectPropertiesNode) findChildByName(OBJECT_PROPERTIES);
-            Map m = props.getData();
-            LVector position = (LVector) m.get("position");
+            Map<String,Object> m = props.getData();
+            LVector position = (LVector) m.get("position"); //$NON-NLS-1$
             return new SimObject(primKeys, position);
         }
     }
@@ -313,23 +314,23 @@ public class SimProject {
         public void zeroPosition() {
             PrimPropertiesNode props = (PrimPropertiesNode) findChildByName(SimProject.PRIM_PROPERTIES);
             
-            GridPositionNode node = (GridPositionNode) props.findChildByName("pos");
-            GridCoordinateNode x = (GridCoordinateNode) node.findChildByName("x");
+            GridPositionNode node = (GridPositionNode) props.findChildByName("pos"); //$NON-NLS-1$
+            GridCoordinateNode x = (GridCoordinateNode) node.findChildByName("x"); //$NON-NLS-1$
             x.setValue(new Integer(0));
-            GridCoordinateNode y = (GridCoordinateNode) node.findChildByName("y");
+            GridCoordinateNode y = (GridCoordinateNode) node.findChildByName("y"); //$NON-NLS-1$
             y.setValue(new Integer(0));
         }
 
         public void setOwner(String owner) {
             PrimPropertiesNode props = (PrimPropertiesNode) findChildByName(SimProject.PRIM_PROPERTIES);
             
-            props.setProperty("owner", owner);
+            props.setProperty("owner", owner); //$NON-NLS-1$
         }
 
         public String getOwner() {
             PrimPropertiesNode props = (PrimPropertiesNode) findChildByName(SimProject.PRIM_PROPERTIES);
             
-            return props.getProperty("owner");
+            return props.getProperty("owner"); //$NON-NLS-1$
         }
 
         public NodeFactory[] legalChildNodes() {
@@ -337,7 +338,7 @@ public class SimProject {
         }
 
         public String getValueString() {
-            return "";
+            return ""; //$NON-NLS-1$
         }
 
         public boolean isValueChangeable() {
@@ -356,7 +357,7 @@ public class SimProject {
         }
 
         public void updateName(String name) {
-            List prims = getParent().findChildrenByType(PrimNode.class);
+            List<Node> prims = getParent().findChildrenByType(PrimNode.class);
             if (prims.indexOf(this) == 0) getParent().setName(name);
             super.setName(name);
         }
@@ -366,7 +367,7 @@ public class SimProject {
         }
 
         public boolean isDeletable() {
-            List prims = getParent().findChildrenByType(PrimNode.class);
+            List<Node> prims = getParent().findChildrenByType(PrimNode.class);
            
             return prims.size() > 1;
         }
@@ -376,26 +377,26 @@ public class SimProject {
         }
 
         public Object getDerivedValue() {
-            List inventoryNodes = this.findChildrenByType(InventoryNode.class);
+            List<Node> inventoryNodes = this.findChildrenByType(InventoryNode.class);
             InventoryItem[] invItems = new InventoryItem[inventoryNodes.size()];
             int j = 0;
-            for (Iterator i = inventoryNodes.iterator(); i.hasNext();) {
+            for (Iterator<Node> i = inventoryNodes.iterator(); i.hasNext();) {
                 invItems[j++] = ((InventoryNode)i.next()).getInventoryItem();
             }
             String key = ((WorldNode)findRoot()).keyFor(this);
-            List scriptNodes = this.findChildrenByType(ScriptNode.class);
+            List<Node> scriptNodes = this.findChildrenByType(ScriptNode.class);
             ScriptInfo[] scripts = new ScriptInfo[scriptNodes.size()];
             j = 0;
-            for (Iterator i = scriptNodes.iterator(); i.hasNext();) {
+            for (Iterator<Node> i = scriptNodes.iterator(); i.hasNext();) {
                 ScriptNode n = (ScriptNode) i.next();
                 scripts[j++] = new ScriptInfo(n.getName(), n.getValueString());
             }
             
             PrimPropertiesNode props = (PrimPropertiesNode) findChildByName(PRIM_PROPERTIES);
-            Map m = props.getData();
-            LVector position = (LVector) m.get("position");
+            Map<String,Object> m = props.getData();
+            LVector position = (LVector) m.get("position"); //$NON-NLS-1$
             return new SimWorldDef.Prim(getName(),
-                    key, scripts, invItems, (String)m.get("description"), getOwner(), position, new LVector(0,0,0));
+                    key, scripts, invItems, (String)m.get("description"), getOwner(), position, new LVector(0,0,0)); //$NON-NLS-1$
         }
     }
 
@@ -413,10 +414,10 @@ public class SimProject {
         }
 
         public String getNameDisplay() {
-            return (String) ID_TO_DISPLAY.get(getName());
+            return ID_TO_DISPLAY.get(getName());
         }
         public String getValueString() {
-            return "";
+            return ""; //$NON-NLS-1$
         }
 
         public boolean isDeletable() {
@@ -438,15 +439,15 @@ public class SimProject {
         public void onUpdate(String s) {
         }
         
-        abstract public Map getData();
+        abstract public Map<String,Object> getData();
     }
 
     public static class PrimPropertiesNode extends FixedFormatNode {
         public PrimPropertiesNode(Node parent, String owner) {
             super(parent, PRIM_PROPERTIES, null);
-            addChild(new GridPositionNode(this,"pos"));
-            addChild(new AvatarReferenceNode(this, "owner", owner));
-            addChild(new StringNode(this,"description",""));
+            addChild(new GridPositionNode(this,"pos")); //$NON-NLS-1$
+            addChild(new AvatarReferenceNode(this, "owner", owner)); //$NON-NLS-1$
+            addChild(new StringNode(this,"description","")); //$NON-NLS-1$ //$NON-NLS-2$
         }
 
         public void setProperty(String string, String val) {
@@ -458,8 +459,8 @@ public class SimProject {
             return findChildByName(string).getValueString();
         }
 
-        public Map getData() {
-            HashMap map = new HashMap();
+        public Map<String,Object> getData() {
+            HashMap<String,Object> map = new HashMap<String,Object>();
             GridPositionNode node = (GridPositionNode) findChildByName("pos"); //$NON-NLS-1$
             map.put("position", node.getVector()); //$NON-NLS-1$
             
@@ -481,11 +482,11 @@ public class SimProject {
 
         public ObjectPropertiesNode(Node parent) {
             super(parent, OBJECT_PROPERTIES, null);
-            addChild(new GridPositionNode(this,"pos"));
+            addChild(new GridPositionNode(this,"pos")); //$NON-NLS-1$
         }
 
-        public Map getData() {
-            HashMap map = new HashMap();
+        public Map<String,Object> getData() {
+            HashMap<String,Object> map = new HashMap<String,Object>();
             GridPositionNode node = (GridPositionNode) findChildByName("pos"); //$NON-NLS-1$
             map.put("position", node.getVector()); //$NON-NLS-1$
             return map;
@@ -499,8 +500,8 @@ public class SimProject {
             addChild(new GridPositionNode(this,"pos")); //$NON-NLS-1$
         }
 
-        public Map getData() {
-            HashMap map = new HashMap();
+        public Map<String,Object> getData() {
+            HashMap<String,Object> map = new HashMap<String,Object>();
             GridPositionNode node = (GridPositionNode) findChildByName("pos"); //$NON-NLS-1$
             map.put("pos", node.getVector()); //$NON-NLS-1$
             return map;
@@ -508,7 +509,8 @@ public class SimProject {
     }
     
     public static class AvatarNode extends Node implements HasDerivedValue {
-        private static final NodeStatus AVATAR_NAME_IN_USE = new NodeStatus(false, "Avatar name already in use");
+        private static final NodeStatus AVATAR_NAME_IN_USE = 
+        	new NodeStatus(false, "Avatar name already in use"); //$NON-NLS-1$ TODO
         public AvatarNode(Node parent, String nodeName) {
             super(parent, nodeName, null);
             addChild(new AvatarPropertiesNode(this));
@@ -544,7 +546,7 @@ public class SimProject {
         }
 
         public String getValueString() {
-            return "";
+            return ""; //$NON-NLS-1$
         }
 
         public boolean isValueChangeable() {
@@ -574,7 +576,7 @@ public class SimProject {
         }
         
         public NodeStatus checkNameString(String name) {
-            List list = getParent().findChildrenByType(AvatarNode.class);
+            List<Node> list = getParent().findChildrenByType(AvatarNode.class);
             NodeStatus error = AVATAR_NAME_IN_USE;
             return SimProject.checkNameUnique(this, name, list, error);
         }
@@ -589,7 +591,7 @@ public class SimProject {
 
         public Object getDerivedValue() {
             AvatarPropertiesNode pn = (AvatarPropertiesNode) findChildByName("avatar-properties"); //$NON-NLS-1$
-            Map props = pn.getData();
+            Map<String,Object> props = pn.getData();
             LVector position = (LVector) props.get("pos"); //$NON-NLS-1$
             EventHandlerNode n = (EventHandlerNode) findChildByName("event-handler"); //$NON-NLS-1$
             return new SimWorldDef.Avatar(getName(),position.getX(), position.getY(), position.getZ(),
@@ -610,7 +612,8 @@ public class SimProject {
     
     public static class ScriptNode extends Node {
         private static final NodeFactory[] LEGAL_CHILD_NODES = new NodeFactory[0];
-        private static final NodeStatus SCRIPT_NAME_IN_USE = new NodeStatus(false, "Script name already in use");
+        private static final NodeStatus SCRIPT_NAME_IN_USE =
+        	new NodeStatus(false, "Script name already in use"); //$NON-NLS-1$ TODO
         public NodeFactory[] legalChildNodes() {
             return LEGAL_CHILD_NODES;
         }
@@ -640,7 +643,7 @@ public class SimProject {
         }
         
         public String getChoicesId() {
-            return "scripts";
+            return "scripts"; //$NON-NLS-1$
         }
 
         public NodeStatus checkNameString(String name) {
@@ -721,7 +724,6 @@ public class SimProject {
     
     public static class StringNode extends Node {
         private static final NodeFactory[] LEGAL_CHILD_NODES = new NodeFactory[0];
-        private static final NodeStatus CANNOT_BE_NULL = new NodeStatus(false, "string cannot be null");
         public StringNode(Node parent, String name, String value) {
             super(parent, name, value);
         }
@@ -731,7 +733,6 @@ public class SimProject {
         }
 
         public String getValueString() {
-            
             return (String)getValue();
         }
 
@@ -740,7 +741,7 @@ public class SimProject {
         }
 
         public NodeStatus checkValueString(String s) {
-            if (s == null) return new NodeStatus(false, "string cannot be null");
+            if (s == null) return new NodeStatus(false, "string cannot be null"); //$NON-NLS-1$ TODO
             return NodeStatus.OK;
         }
 
@@ -773,7 +774,7 @@ public class SimProject {
         }
         
         public String getNameDisplay() {
-            return "Event Handler";
+            return "Event Handler"; //$NON-NLS-1$ TODO
         }
         public NodeStatus checkNameString(String name) {
             return NodeStatus.OK;
@@ -785,7 +786,7 @@ public class SimProject {
 
         public String getValueString() {
             if (getValue() == null) {
-                return "(none)";
+                return "(none)"; //$NON-NLS-1$ TODO
             }
             return getValue().toString();
         }
@@ -807,7 +808,7 @@ public class SimProject {
         }
 
         protected void onUpdate(String s) {
-            if ("(none)".equals(s)) setValue(null);
+            if ("(none)".equals(s)) setValue(null); //$NON-NLS-1$ TODO
             else setValue(s);
         }
     }
@@ -817,9 +818,9 @@ public class SimProject {
             super(parent, nodeName, null);
             
             boolean prim = parent instanceof PrimPropertiesNode;
-            addChild(new GridCoordinateNode(this, "x", prim? 0:128));
-            addChild(new GridCoordinateNode(this, "y", prim? 0:128));
-            addChild(new GridCoordinateNode(this, "z", 0));
+            addChild(new GridCoordinateNode(this, "x", prim? 0:128)); //$NON-NLS-1$
+            addChild(new GridCoordinateNode(this, "y", prim? 0:128)); //$NON-NLS-1$
+            addChild(new GridCoordinateNode(this, "z", 0)); //$NON-NLS-1$
         }
 
         public NodeStatus checkNameString(String name) {
@@ -831,7 +832,7 @@ public class SimProject {
         }
 
         public String getNameDisplay() {
-            return (String) ID_TO_DISPLAY.get(getName());
+            return ID_TO_DISPLAY.get(getName());
         }
         public String getValueString() {
             return null;
@@ -873,8 +874,8 @@ public class SimProject {
         public RegionNode(Node parent, String nodeName, String displayName) {
             super(parent, nodeName, null);
             this.displayName = displayName;
-            addChild(new AnyNaturalNode(this,"x",0));
-            addChild(new AnyNaturalNode(this,"y",0));
+            addChild(new AnyNaturalNode(this,"x",0)); //$NON-NLS-1$
+            addChild(new AnyNaturalNode(this,"y",0)); //$NON-NLS-1$
         }
         
         public String getNameDisplay() {
@@ -905,8 +906,8 @@ public class SimProject {
         protected void onUpdate(String s) {
         }
         public Object getDerivedValue() {
-            AnyNaturalNode xnode = (AnyNaturalNode) this.findChildByName("x");
-            AnyNaturalNode ynode = (AnyNaturalNode) this.findChildByName("y");
+            AnyNaturalNode xnode = (AnyNaturalNode) this.findChildByName("x"); //$NON-NLS-1$
+            AnyNaturalNode ynode = (AnyNaturalNode) this.findChildByName("y"); //$NON-NLS-1$
             Integer x = (Integer) xnode.getValue();
             Integer y = (Integer) ynode.getValue();
             return new Region(x.intValue(), y.intValue());
@@ -936,8 +937,8 @@ public class SimProject {
                 float f = Float.parseFloat(s);
                 
                 if (f < min || f > max) 
-                    return new NodeStatus(false, "number is out of range (" + min + " - " + max + ")");
-;
+                    return new NodeStatus(false, "number is out of range (" + min + " - " + max + ")");   //$NON-NLS-1$//$NON-NLS-2$//$NON-NLS-3$ TODO
+
                 return NodeStatus.OK;
             } catch (NumberFormatException e) {
                 return SimProject.BAD_FORMAT;
@@ -970,13 +971,14 @@ public class SimProject {
     
     public static class GridCoordinateNode extends Node {
         public static final int REGION_MAX = 256;
-        private static final NodeStatus OUT_OF_RANGE = new NodeStatus(false, "number is out of range (0-256");
-        private static final HashMap NAME_TO_DISPLAY = new HashMap();
+        private static final NodeStatus OUT_OF_RANGE = 
+        	new NodeStatus(false, "number is out of range (0-256"); //$NON-NLS-1$ TODO
+        private static final HashMap<String,String> NAME_TO_DISPLAY = new HashMap<String,String>();
         
         static {
-            NAME_TO_DISPLAY.put("x", "X Coordinate");
-            NAME_TO_DISPLAY.put("y", "Y Coordinate");
-            NAME_TO_DISPLAY.put("z", "Z Coordinate");
+            NAME_TO_DISPLAY.put("x", "X Coordinate");  //$NON-NLS-1$//$NON-NLS-2$ TODO
+            NAME_TO_DISPLAY.put("y", "Y Coordinate");  //$NON-NLS-1$//$NON-NLS-2$ TODO
+            NAME_TO_DISPLAY.put("z", "Z Coordinate");  //$NON-NLS-1$//$NON-NLS-2$ TODO
         }
         
         public static float clipCoordinate(float val) {
@@ -991,7 +993,7 @@ public class SimProject {
         }
 
         public String getNameDisplay() {
-            return (String) NAME_TO_DISPLAY.get(getName());
+            return NAME_TO_DISPLAY.get(getName());
         }
         
         public String getValueString() {
@@ -1047,9 +1049,11 @@ public class SimProject {
     }
 
     public static class AnyNaturalNode extends Node {
-        private String displayName;
+        @SuppressWarnings("unused")
+		private String displayName;
         private static final NodeFactory[] LEGAL_CHILD_NODES = new NodeFactory[0];
-        private static final NodeStatus OUT_OF_RANGE = new NodeStatus(false, "Value is out of range (must be greater than 0)");
+        private static final NodeStatus OUT_OF_RANGE = 
+        	new NodeStatus(false, "Value is out of range (must be greater than 0)"); //$NON-NLS-1$ TODO
         public AnyNaturalNode(Node parent, String name, int value) {
             this(parent, name, value, name);
         }
@@ -1105,11 +1109,11 @@ public class SimProject {
         
     }
 
-    protected static String computeNewName(List nodes, String prefix) {
+    protected static String computeNewName(List<Node> nodes, String prefix) {
         int index = 0;
         
-        for (Iterator i = nodes.iterator(); i.hasNext();) {
-            Node n = (Node) i.next();
+        for (Object element : nodes) {
+            Node n = (Node) element;
             
             if (n.getNameDisplay().startsWith(prefix)) {
                 String tail = n.getNameDisplay().substring(prefix.length());
@@ -1124,24 +1128,25 @@ public class SimProject {
             }
         }
         
-        String name = (index > 0) ? prefix + " " + index : prefix;
+        String name = (index > 0) ? prefix + " " + index : prefix; //$NON-NLS-1$
         return name;
     }
 
-    static NodeStatus checkNameUnique(Node n, String name, List list, NodeStatus error) {
-        for (Iterator i = list.iterator(); i.hasNext();) {
-            Node node = (Node) i.next();
+    static NodeStatus checkNameUnique(Node n, String name, List<Node> list, NodeStatus error) {
+        for (Node element : list) {
+            Node node = element;
             if (node == n) continue;
             if (node.getNameDisplay() != null && node.getNameDisplay().equals(name)) return error;
         }
         return NodeStatus.OK;
     }
 
-    static final NodeStatus BAD_FORMAT = new NodeStatus(false, "format of number is incorrect");
+    static final NodeStatus BAD_FORMAT = 
+    	new NodeStatus(false, "format of number is incorrect"); //$NON-NLS-1$ TODO
     private static XStream xstream = new XStream(new DomDriver());
     
     private static void configureXStream(XStream xstream) {
-        Class[] nodeTypes = new Class[] {
+        Class<?>[] nodeTypes = new Class<?>[] {
                 WorldNode.class, AvatarNode.class, ObjectNode.class,
                 PrimNode.class, ScriptNode.class, GridCoordinateNode.class,
                 AnyNaturalNode.class, StringNode.class, DefaultAvatarNode.class,
@@ -1156,7 +1161,7 @@ public class SimProject {
         xstream.omitField(Node.class, "children"); //$NON-NLS-1$
         xstream.omitField(Node.class, "listeners"); //$NON-NLS-1$
         for (int i = 0; i < nodeTypes.length; i++) {
-            Class c = nodeTypes[i];
+            Class<?> c = nodeTypes[i];
             String name = c.getSimpleName();
             name = name.substring(0, 1).toLowerCase() + name.substring(1);
             xstream.alias(name, c);
@@ -1181,39 +1186,39 @@ public class SimProject {
         return n;
     }
     
-    private static Object get(Map m, Object key, Object defaultVal) {
-        Object v = m.get(key);
-        if (v == null) v = defaultVal;
-        return v;
-    }
+//    private static Object get(Map m, Object key, Object defaultVal) {
+//        Object v = m.get(key);
+//        if (v == null) v = defaultVal;
+//        return v;
+//    }
     
     public static SimWorldDef toSimWorldDef(WorldNode node) {
         AnyNaturalNode max = (AnyNaturalNode) node.findChildByName("max_time"); //$NON-NLS-1$
         Integer max_tick = (Integer) max.getValue();
-        Node eNode = node.findChildByName("event-handler");
+        Node eNode = node.findChildByName("event-handler"); //$NON-NLS-1$
         String handler = (String) eNode.getValue();
         
-        List avatarNodes = node.findChildrenByType(AvatarNode.class);
+        List<Node> avatarNodes = node.findChildrenByType(AvatarNode.class);
         
         Avatar[] avatarArray = new Avatar[avatarNodes.size()];
         
         int index = 0;
-        for (Iterator i = avatarNodes.iterator(); i.hasNext();) {
-            AvatarNode an = (AvatarNode) i.next();
+        for (Node element : avatarNodes) {
+            AvatarNode an = (AvatarNode) element;
             avatarArray[index++] = (Avatar) an.getDerivedValue();
         }
         
-        List simObjectNodes = node.findChildrenByType(ObjectNode.class);
-        LinkedList allPrims = new LinkedList();
+        List<Node> simObjectNodes = node.findChildrenByType(ObjectNode.class);
+        LinkedList<Prim> allPrims = new LinkedList<Prim>();
         SimObject[] simObjects = new SimObject[simObjectNodes.size()];
         
         index = 0;
-        for (Iterator i = simObjectNodes.iterator(); i.hasNext();) {
+        for (Iterator<Node> i = simObjectNodes.iterator(); i.hasNext();) {
             ObjectNode on = (ObjectNode)i.next();
             simObjects[index++] = on.getSimObject(allPrims);
         }
         
-        Prim[] primArray = (Prim[]) allPrims.toArray(new Prim[allPrims.size()]);
+        Prim[] primArray = allPrims.toArray(new Prim[allPrims.size()]);
         return new SimWorldDef(max_tick.intValue(),1000, simObjects, primArray, avatarArray, handler);
     }
 

@@ -52,12 +52,12 @@ public class SimParamDefinition {
     }
     
     public static void configureXStream(XStream xstream) {
-        xstream.alias("param", SimParamDefinition.class);
-        xstream.aliasType("prim", SimParamPrim.class);
-        xstream.aliasType("avatar", SimParamAvatar.class);
-        xstream.aliasType("object", SimParamObject.class);
-        xstream.aliasType("script", SimParamScript.class);
-        xstream.aliasType("any-key", SimParamKey.class);
-        xstream.aliasType("value", SimParamValue.class);
+        xstream.alias("param", SimParamDefinition.class); //$NON-NLS-1$
+        xstream.aliasType("prim", SimParamPrim.class); //$NON-NLS-1$
+        xstream.aliasType("avatar", SimParamAvatar.class); //$NON-NLS-1$
+        xstream.aliasType("object", SimParamObject.class); //$NON-NLS-1$
+        xstream.aliasType("script", SimParamScript.class); //$NON-NLS-1$
+        xstream.aliasType("any-key", SimParamKey.class); //$NON-NLS-1$
+        xstream.aliasType("value", SimParamValue.class); //$NON-NLS-1$
     }
 }

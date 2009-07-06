@@ -25,7 +25,7 @@ public class InstallHandler extends BaseInstallHandler {
             IPluginEntry[] entries = feature.getPluginEntries();
             for (int i = 0; i < feature.getPluginEntries().length; i++) {
                 String s = entries[i].getVersionedIdentifier().toString();
-                String path1 = sitedir.getPath() + File.separator + "plugins" + File.separator + s;
+                String path1 = sitedir.getPath() + File.separator + "plugins" + File.separator + s; //$NON-NLS-1$
                 
                 File pluginDir = new File(path1);
                 doit(pluginDir);
@@ -42,13 +42,13 @@ public class InstallHandler extends BaseInstallHandler {
             for (int i = 0; i < files.length; i++) {
                 doit(files[i]);
             }
-        } else if ("LslPlus".equals(f.getName())) {
+        } else if ("LslPlus".equals(f.getName())) { //$NON-NLS-1$
             try {
                 Util.chmod(f);
             } catch (IOException e) {
                 e.printStackTrace();
             }
-            System.out.println("doit to: " + f.getAbsolutePath());
+            System.out.println("doit to: " + f.getAbsolutePath()); //$NON-NLS-1$
         }
     }
 

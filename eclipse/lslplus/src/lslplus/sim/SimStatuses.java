@@ -9,7 +9,7 @@ public class SimStatuses {
     private static XStream xstream = new XStream(new DomDriver());
     
     public static class Message {
-        public static final String INFO_LEVEL = "INFO";
+        public static final String INFO_LEVEL = "INFO"; //$NON-NLS-1$
         String time;
         String level;
         String source;
@@ -35,7 +35,7 @@ public class SimStatuses {
         public String getName() { return name; }
         
         public String toString() {
-            return name + " - " + key;
+            return name + " - " + key; //$NON-NLS-1$
         }
         
         public String getCombinedRepresentation() {
@@ -55,7 +55,7 @@ public class SimStatuses {
         }
         
         public String toString() {
-            return name + " - " + key;
+            return name + " - " + key; //$NON-NLS-1$
         }
     }
     

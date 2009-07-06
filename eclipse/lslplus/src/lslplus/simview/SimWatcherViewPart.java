@@ -1,7 +1,6 @@
 package lslplus.simview;
 
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.LinkedList;
 
 import lslplus.LslPlusPlugin;
@@ -77,7 +76,7 @@ public class SimWatcherViewPart extends ViewPart implements SimListener, SimMeta
             SimEventDefinition def = simManager.getAnEventDefinition(userEventName);
             
             if (def == null) {
-                Util.error("event definition not found: " + userEventName);
+                Util.error("event definition not found: " + userEventName); //$NON-NLS-1$
                 return;
             }
             EventDialog dlg = //new TouchDialog(parentShell);
@@ -105,10 +104,10 @@ public class SimWatcherViewPart extends ViewPart implements SimListener, SimMeta
         }
 
         public void run() {
-            SimEventDefinition def = simManager.getAnEventDefinition("Touch Prim");
+            SimEventDefinition def = simManager.getAnEventDefinition("Touch Prim"); //$NON-NLS-1$ TODO
             
             if (def == null) {
-                Util.error("event definition not found: Touch Prim");
+                Util.error("event definition not found: Touch Prim"); //$NON-NLS-1$
                 return;
             }
             EventDialog dlg = //new TouchDialog(parentShell);
@@ -142,7 +141,7 @@ public class SimWatcherViewPart extends ViewPart implements SimListener, SimMeta
     private LogViewerLabelProvider labelProvider;
     private Label timeText;
     private UserEventAction chatAction;
-    private LinkedList actions;
+    private LinkedList<Action> actions;
     private volatile String curTime;
     private boolean refreshPending = false;
     
@@ -182,7 +181,7 @@ public class SimWatcherViewPart extends ViewPart implements SimListener, SimMeta
         comp.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
 
         Label label0 = new Label(comp, SWT.SHADOW_NONE|SWT.RIGHT|SWT.HORIZONTAL);
-        label0.setText("Send an event");
+        label0.setText("Send an event"); //$NON-NLS-1$ TODO
         eventsCombo = new Combo(comp, SWT.READ_ONLY|SWT.DROP_DOWN);
         populateEventsCombo();
         eventsCombo.deselectAll();
@@ -196,7 +195,7 @@ public class SimWatcherViewPart extends ViewPart implements SimListener, SimMeta
         });
         eventsCombo.setLayoutData(new GridData(SWT.FILL,SWT.CENTER,true,false));
         eventsButton = new Button(comp, SWT.PUSH|SWT.CENTER);
-        eventsButton.setText("Go...");
+        eventsButton.setText("Go..."); //$NON-NLS-1$ TODO
         eventsButton.setEnabled(false);
         eventsButton.addSelectionListener(new SelectionListener() {
             public void widgetDefaultSelected(SelectionEvent e) {
@@ -229,9 +228,9 @@ public class SimWatcherViewPart extends ViewPart implements SimListener, SimMeta
         comp1.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
 
         Label timeLabel = new Label(comp1, SWT.SHADOW_NONE|SWT.RIGHT|SWT.HORIZONTAL);
-        timeLabel.setText("Simulation time:");
+        timeLabel.setText("Simulation time:"); //$NON-NLS-1$ TODO
         timeText = new Label(comp1, SWT.SHADOW_ETCHED_IN|SWT.RIGHT|SWT.HORIZONTAL);
-        timeText.setText("00:00:00.000");
+        timeText.setText("00:00:00.000"); //$NON-NLS-1$ TODO
         
         SashForm sashForm = createSashForm(parent);
         sashForm.setLayoutData(new GridData(GridData.FILL_BOTH));
@@ -306,9 +305,9 @@ public class SimWatcherViewPart extends ViewPart implements SimListener, SimMeta
     private void configureToolBar() {
         IActionBars actionBars = getViewSite().getActionBars();
         IToolBarManager toolBar = actionBars.getToolBarManager();
-        actions = new LinkedList();
+        actions = new LinkedList<Action>();
         chatAction = new UserEventAction(this.getSite().getShell(),
-                "Chat", "Chat", "Chat in Sim",
+                "Chat", "Chat", "Chat in Sim",  //$NON-NLS-1$//$NON-NLS-2$ //$NON-NLS-3$ TODO
                 "icons/chat.gif"); //$NON-NLS-1$
         touchAction = new TouchAction(this.getSite().getShell());
         stopAction = new StopAction(this.getSite().getShell());
@@ -324,8 +323,8 @@ public class SimWatcherViewPart extends ViewPart implements SimListener, SimMeta
     }
 
     private void enableActions(boolean enabled) {
-        for (Iterator i = actions.iterator(); i.hasNext();) {
-            Action action = (Action) i.next();
+        for (Action element : actions) {
+            Action action = element;
             action.setEnabled(enabled);
         }
     }

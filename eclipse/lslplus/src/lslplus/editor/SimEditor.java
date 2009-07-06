@@ -70,7 +70,7 @@ public class SimEditor extends EditorPart implements NodeListener {
         private String value;
         private String oldValue;
         public UpdateValueOperation(Node n, String value) {
-            super("Update Value");
+            super("Update Value"); //$NON-NLS-1$ TODO
             this.n = n;
             this.value = value;
         }
@@ -102,7 +102,7 @@ public class SimEditor extends EditorPart implements NodeListener {
         private String name;
         private String oldName;
         public UpdateNameOperation(Node n, String name) {
-            super("Update Value");
+            super("Update Value"); //$NON-NLS-1$ TODO
             this.n = n;
             this.name = name;
         }
@@ -134,7 +134,7 @@ public class SimEditor extends EditorPart implements NodeListener {
 	    private NodeFactory factory;
 	    private Node addedNode = null;
         public AddNodeOperation(Node n, NodeFactory factory) {
-            super("Add Child");
+            super("Add Child"); //$NON-NLS-1$ TODO
             this.n = n;
             this.factory = factory;
         }
@@ -164,7 +164,7 @@ public class SimEditor extends EditorPart implements NodeListener {
         private NodeFactory factory;
         private Node addedNode = null;
         public AddAfterOperation(Node n, NodeFactory factory) {
-            super("Add after");
+            super("Add after"); //$NON-NLS-1$ TODO
             this.n = n;
             this.factory = factory;
         }
@@ -202,7 +202,7 @@ public class SimEditor extends EditorPart implements NodeListener {
         private NodeFactory factory;
         private Node addedNode = null;
         public AddBeforeOperation(Node n, NodeFactory factory) {
-            super("Add before");
+            super("Add before"); //$NON-NLS-1$ TODO
             this.n = n;
             this.factory = factory;
         }
@@ -238,7 +238,7 @@ public class SimEditor extends EditorPart implements NodeListener {
 	    Node parent;
 	    Node child;
         public DeleteNodeOperation(Node parent, Node child) {
-            super("Delete node");
+            super("Delete node"); //$NON-NLS-1$ TODO
             this.parent = parent;
             this.child = child;
         }
@@ -276,7 +276,7 @@ public class SimEditor extends EditorPart implements NodeListener {
             try {
                 operationsHistory.execute(operation, null, null);
             } catch (ExecutionException e) {
-                Util.log(e, e.getLocalizedMessage());
+                Util.error(e, e.getLocalizedMessage());
             }
         }
     }
@@ -295,7 +295,7 @@ public class SimEditor extends EditorPart implements NodeListener {
             try {
                 operationsHistory.execute(operation, null, null);
             } catch (ExecutionException e) {
-                Util.log(e, e.getLocalizedMessage());
+                Util.error(e, e.getLocalizedMessage());
             }
         }
     }
@@ -314,7 +314,7 @@ public class SimEditor extends EditorPart implements NodeListener {
             try {
                 operationsHistory.execute(operation, null, null);
             } catch (ExecutionException e) {
-                Util.log(e, e.getLocalizedMessage());
+                Util.error(e, e.getLocalizedMessage());
             }
         }
     }
@@ -331,7 +331,7 @@ public class SimEditor extends EditorPart implements NodeListener {
             try {
                 operationsHistory.execute(operation, null, null);
             } catch (ExecutionException e) {
-                Util.log(e, e.getLocalizedMessage());
+                Util.error(e, e.getLocalizedMessage());
             }
         }
     }
@@ -356,13 +356,13 @@ public class SimEditor extends EditorPart implements NodeListener {
 			    String[] choices;
 			    if ("scripts".equals(n.getChoicesId())) { //$NON-NLS-1$
 			        choices = nature.getLslScripts();
-			    } else if ("optional-module".equals(n.getChoicesId())) {
-			        List modules = nature.getLslModules();
-			        modules.add(0, "(none)");
-			        choices = (String[]) modules.toArray(new String[modules.size()]);
-			    } else if ("avatars".equals(n.getChoicesId())) {
+			    } else if ("optional-module".equals(n.getChoicesId())) { //$NON-NLS-1$
+			        List<String> modules = nature.getLslModules();
+			        modules.add(0, "(none)"); //$NON-NLS-1$ TODO
+			        choices = modules.toArray(new String[modules.size()]);
+			    } else if ("avatars".equals(n.getChoicesId())) { //$NON-NLS-1$
 			        Node root = n.findRoot();
-			        final LinkedList avnames = new LinkedList();
+			        final LinkedList<String> avnames = new LinkedList<String>();
 			        root.accept(new NodeVisitor() {
                         public void visit(Node n) {
                             if (n instanceof SimProject.AvatarNode) {
@@ -370,7 +370,7 @@ public class SimEditor extends EditorPart implements NodeListener {
                             }
                         }
 			        });
-			        choices = (String[]) avnames.toArray(new String[avnames.size()]);
+			        choices = avnames.toArray(new String[avnames.size()]);
 			    } else {
 			        choices = new String[0];
 			    }
@@ -432,7 +432,7 @@ public class SimEditor extends EditorPart implements NodeListener {
             try {
                 operationsHistory.execute(operation, null, null);
             } catch (ExecutionException e) {
-                Util.log(e, e.getLocalizedMessage());
+                Util.error(e, e.getLocalizedMessage());
             }
 		}
 	}
@@ -479,7 +479,7 @@ public class SimEditor extends EditorPart implements NodeListener {
             try {
                 operationsHistory.execute(operation, null, null);
             } catch (ExecutionException e) {
-                Util.log(e, e.getLocalizedMessage());
+                Util.error(e, e.getLocalizedMessage());
             }
         }
     }
@@ -490,6 +490,7 @@ public class SimEditor extends EditorPart implements NodeListener {
 	private Tree fTree;
 	private SimProjectLabelProvider fLabelProvider;
 	private SimProject.WorldNode world = null;
+	@SuppressWarnings("unused")
 	private String simProjectName = null;
 	private LslProjectNature nature = null;
 	private int changeCount = 0;
@@ -532,14 +533,14 @@ public class SimEditor extends EditorPart implements NodeListener {
 			file.setContents(new ByteArrayInputStream(val.getBytes()), IResource.FORCE | IResource.KEEP_HISTORY, monitor);
 			zeroChangeCount();
 		} catch (CoreException e) {
-			Util.log(e, e.getLocalizedMessage());
+			Util.error(e, e.getLocalizedMessage());
 		}
 		
 		try {
 		    SimWorldDef def = SimProject.toSimWorldDef(world);
 		    Util.log(SimWorldDef.toXML(def));
 		} catch (Exception e) {
-		    Util.log(e, e.getLocalizedMessage());
+		    Util.error(e, e.getLocalizedMessage());
 		}
 	}
 
@@ -565,7 +566,7 @@ public class SimEditor extends EditorPart implements NodeListener {
 			try {
 				world = SimProject.fromXml(file.getContents(), file);
 			} catch (CoreException e) {
-				Util.log(e, "Corrupted sim project file: " + e.getMessage()); //$NON-NLS-1$
+				Util.error(e, "Corrupted sim project file: " + e.getMessage()); //$NON-NLS-1$
 				world = null;
 			}
 		}
@@ -580,7 +581,7 @@ public class SimEditor extends EditorPart implements NodeListener {
 	}
 
 	public void createPartControl(Composite parent) {
-        PlatformUI.getWorkbench().getHelpSystem().setHelp(parent, "lslplus.simProjectEditor");
+        PlatformUI.getWorkbench().getHelpSystem().setHelp(parent, "lslplus.simProjectEditor"); //$NON-NLS-1$
 		//control = new Composite(parent, SWT.NULL);
 		//control.setVisible(true);
 		createViewer(parent);
@@ -600,6 +601,7 @@ public class SimEditor extends EditorPart implements NodeListener {
 		fTreeViewer.setLabelProvider(fLabelProvider = new SimProjectLabelProvider());
 		fTreeViewer.addSelectionChangedListener(new ISelectionChangedListener() {
 			public void selectionChanged(SelectionChangedEvent e) {
+				@SuppressWarnings("unused") // TODO
 				TreeSelection selection = (TreeSelection) e.getSelection();
 				
 			}
@@ -637,7 +639,7 @@ public class SimEditor extends EditorPart implements NodeListener {
 				NodeFactory[] factories = n.legalChildNodes();
 				
 				if (factories.length > 0) {
-				    MenuManager addChildSubMenu = new MenuManager("Add Child");
+				    MenuManager addChildSubMenu = new MenuManager("Add Child"); //$NON-NLS-1$ TODO
 	                for (int i = 0; i < factories.length; i++) {
 	                    manager.add(new AddNodeAction(factories[i]));
 	                }
@@ -648,8 +650,8 @@ public class SimEditor extends EditorPart implements NodeListener {
 				if (parent != null) {
 				    factories = parent.legalChildNodes();
 				    if (factories.length > 0) {
-    				    MenuManager addItemBeforeSubMenu = new MenuManager("Add Item Before");
-                        MenuManager addItemAfterSubMenu = new MenuManager("Add Item After");
+    				    MenuManager addItemBeforeSubMenu = new MenuManager("Add Item Before"); //$NON-NLS-1$ TODO NLS
+                        MenuManager addItemAfterSubMenu = new MenuManager("Add Item After"); //$NON-NLS-1$ TODO NLS
                         
                         for (int i = 0; i < factories.length; i++) {
                             addItemBeforeSubMenu.add(new AddNodeBeforeAction(factories[i]));

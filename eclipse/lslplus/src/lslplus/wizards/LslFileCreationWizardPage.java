@@ -201,7 +201,7 @@ abstract public class LslFileCreationWizardPage extends WizardPage implements Li
 		} catch (InvocationTargetException e) {
 			// Execution Exceptions are handled above but we may still get
 			// unexpected runtime errors.
-			Util.log(e,e.getLocalizedMessage());
+			Util.error(e,e.getLocalizedMessage());
 			MessageDialog.openError(
 					getContainer().getShell(),
 					Messages.getString("LslFileCreationWizardPage.CREATION_PROBLEMS"), //$NON-NLS-1$
@@ -209,7 +209,7 @@ abstract public class LslFileCreationWizardPage extends WizardPage implements Li
 
 			return null;
 		} catch (CoreException e) {
-			Util.log(e,e.getLocalizedMessage());
+			Util.error(e,e.getLocalizedMessage());
 			MessageDialog.openError(
 					getContainer().getShell(),
 					Messages.getString("LslFileCreationWizardPage.CREATION_PROBLEMS"), //$NON-NLS-1$
@@ -309,7 +309,7 @@ abstract public class LslFileCreationWizardPage extends WizardPage implements Li
 		if (initialContainerFullPath != null) {
 			resourceGroup.setContainerFullPath(initialContainerFullPath);
 		} else {
-			Iterator it = currentSelection.iterator();
+			Iterator<?> it = currentSelection.iterator();
 			if (it.hasNext()) {
 				Object object = it.next();
 				IResource selectedResource = null;

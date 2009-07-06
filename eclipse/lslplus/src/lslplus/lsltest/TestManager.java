@@ -19,10 +19,10 @@ import org.eclipse.ui.PartInitException;
 
 public class TestManager {
 
-    private HashSet listeners = new HashSet();
+    private HashSet<ITestListener> listeners = new HashSet<ITestListener>();
     private ILaunchConfiguration currentConfig = null;
     private ILaunch launch;
-    private LinkedList testResults = new LinkedList();
+    private LinkedList<TestResult> testResults = new LinkedList<TestResult>();
     private boolean active = false;
     private int numTests = 0;
     private int numRun = 0;
@@ -35,8 +35,8 @@ public class TestManager {
                     if (events[0].getKind() == DebugEvent.TERMINATE) {
                         active = false;
                         
-                        for (Iterator i = listeners.iterator(); i.hasNext(); ) {
-                            ITestListener listener = (ITestListener) i.next();
+                        for (Iterator<ITestListener> i = listeners.iterator(); i.hasNext(); ) {
+                            ITestListener listener = i.next();
                             listener.testFinished();
                         }
                     }
@@ -49,8 +49,8 @@ public class TestManager {
         numRun++;
         if (result.getResultInfo().getResultCode() == TestResult.ERROR) numErrors++;
         if (result.getResultInfo().getResultCode() == TestResult.FAILURE) numFailures++;
-        for (Iterator i = listeners.iterator(); i.hasNext();) {
-            ITestListener listener = (ITestListener) i.next();
+        for (Iterator<ITestListener> i = listeners.iterator(); i.hasNext();) {
+            ITestListener listener = i.next();
             listener.newTestResult(result);
         }
     }
@@ -88,8 +88,8 @@ public class TestManager {
         LslPlusPlugin.getDefault().getWorkbench().getDisplay().asyncExec(new Runnable() {
             public void run() { showTestRunnerViewPartInActivePage(findTestRunnerViewPartInActivePage());}
         });
-        for (Iterator i = listeners.iterator(); i.hasNext();) {
-            ITestListener listener = (ITestListener) i.next();
+        for (Iterator<ITestListener> i = listeners.iterator(); i.hasNext();) {
+            ITestListener listener = i.next();
             listener.testLaunched(numTests);
         }
     }
@@ -116,7 +116,7 @@ public class TestManager {
             //  show the result view if it isn't shown yet
             return (TestRunnerViewPart) page.showView(TestRunnerViewPart.ID);
         } catch (PartInitException pie) {
-            Util.log(pie, pie.getLocalizedMessage());
+            Util.error(pie, pie.getLocalizedMessage());
             return null;
         } finally{
             //restore focus stolen by the creation of the result view

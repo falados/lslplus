@@ -29,7 +29,7 @@ public class SimLaunchTabGroup extends AbstractLaunchConfigurationTabGroup {
 			}
 
 			public String getName() {
-				return "info";
+				return "info"; //$NON-NLS-1$
 			}
 
 			public void initializeFrom(ILaunchConfiguration configuration) {

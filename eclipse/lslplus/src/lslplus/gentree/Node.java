@@ -14,9 +14,9 @@ public abstract class Node {
     private String nodeName;
     private Object value;
     private Node parent;
-    private ArrayList children;
+    private ArrayList<Node> children;
     private Node[] childrenArray;
-    private HashSet listeners = new HashSet();
+    private HashSet<NodeListener> listeners = new HashSet<NodeListener>();
     
     public Node(Node parent, String nodeName, Object value) {
         this.parent = parent;
@@ -25,11 +25,11 @@ public abstract class Node {
     }
     
     public void addListener(NodeListener l) {
-        if (listeners == null) listeners = new HashSet();
+        if (listeners == null) listeners = new HashSet<NodeListener>();
         listeners.add(l);
         
-        for (Iterator i = getChildren().iterator(); i.hasNext();) {
-            Node n = (Node) i.next();
+        for (Iterator<Node> i = getChildren().iterator(); i.hasNext();) {
+            Node n = i.next();
             n.addListener(l);
         }
     }
@@ -37,8 +37,8 @@ public abstract class Node {
     public void removeListener(NodeListener l) {
         if (listeners == null) return;
         listeners.remove(l);
-        for (Iterator i = getChildren().iterator(); i.hasNext(); ) {
-            Node n = (Node) i.next();
+        for (Iterator<Node> i = getChildren().iterator(); i.hasNext(); ) {
+            Node n = i.next();
             n.removeListener(l);
         }
     }
@@ -80,8 +80,8 @@ public abstract class Node {
     }
     
     private void fireValueChanged() {
-        for (Iterator i = listeners.iterator(); i.hasNext();) {
-            NodeListener listener = (NodeListener) i.next();
+        for (Iterator<NodeListener> i = listeners.iterator(); i.hasNext();) {
+            NodeListener listener = i.next();
             listener.nodeValueChanged(this);
         }
     }
@@ -94,10 +94,10 @@ public abstract class Node {
         this.parent = parent;
     }
     
-    public ArrayList getChildren() {
+    public ArrayList<Node> getChildren() {
         if (children == null) {
             if (childrenArray == null) childrenArray = new Node[0];
-            children = new ArrayList();
+            children = new ArrayList<Node>();
             Collections.addAll(children, childrenArray);
         }
         return children;
@@ -118,8 +118,8 @@ public abstract class Node {
     }
 
     private void propagateListeners(Node n) {
-        for (Iterator i = listeners.iterator(); i.hasNext();) {
-            NodeListener l = (NodeListener) i.next();
+        for (Iterator<NodeListener> i = listeners.iterator(); i.hasNext();) {
+            NodeListener l = i.next();
             n.addListener(l);
         }
     }
@@ -150,8 +150,8 @@ public abstract class Node {
     }
     
     private void fireStructureChanged() {
-        for (Iterator i = listeners.iterator(); i.hasNext();) {
-            NodeListener listener = (NodeListener) i.next();
+        for (Iterator<NodeListener> i = listeners.iterator(); i.hasNext();) {
+            NodeListener listener = i.next();
             listener.nodeStructureChanged(this);
         }
     }
@@ -217,14 +217,14 @@ public abstract class Node {
     
     public void accept(NodeVisitor visitor) {
         visitor.visit(this);
-        for (Iterator i = getChildren().iterator(); i.hasNext();) {
+        for (Iterator<?> i = getChildren().iterator(); i.hasNext();) {
             Node n = (Node) i.next();
             n.accept(visitor);
         }
     }
     
     public Node findChildByName(String name) {
-        for (Iterator i = getChildren().iterator(); i.hasNext();) {
+        for (Iterator<?> i = getChildren().iterator(); i.hasNext();) {
             Node n = (Node) i.next();
             if (n.getName().equals(name)) {
                 return n;
@@ -234,9 +234,9 @@ public abstract class Node {
         return null;
     }
     
-    public List findChildrenByType(Class c) {
-        ArrayList list = new ArrayList();
-        for (Iterator i = getChildren().iterator(); i.hasNext();) {
+    public List<Node> findChildrenByType(Class<?> c) {
+        ArrayList<Node> list = new ArrayList<Node>();
+        for (Iterator<?> i = getChildren().iterator(); i.hasNext();) {
             Node n = (Node) i.next();
             if (c.isAssignableFrom(n.getClass())) {
                 list.add(n);
@@ -255,7 +255,7 @@ public abstract class Node {
     }
     
     public void propagateParent() {
-        for (Iterator i = getChildren().iterator(); i.hasNext();) {
+        for (Iterator<?> i = getChildren().iterator(); i.hasNext();) {
             Node n = (Node) i.next();
             n.setParent(this);
             n.propagateParent();
@@ -263,9 +263,9 @@ public abstract class Node {
     }
     
     public final void fix() {
-        if (this.listeners == null) this.listeners = new HashSet();
+        if (this.listeners == null) this.listeners = new HashSet<NodeListener>();
         onFix();
-        for (Iterator i = getChildren().iterator(); i.hasNext();) {
+        for (Iterator<?> i = getChildren().iterator(); i.hasNext();) {
             Node n = (Node) i.next();
             n.fix();
         }
@@ -275,8 +275,8 @@ public abstract class Node {
     }
     
     public void syncChildren() {
-        List children = getChildren();
-        childrenArray = (Node[]) children.toArray(new Node[children.size()]);
+        List<?> children = getChildren();
+        childrenArray = children.toArray(new Node[children.size()]);
         
         for (int i = 0; i < childrenArray.length; i++) {
             childrenArray[i].syncChildren();
@@ -288,13 +288,13 @@ public abstract class Node {
         return getParent().findRoot();
     }
     
-    public boolean isFirstChildOfType(Node n, Class c) {
-        List l = findChildrenByType(c);
+    public boolean isFirstChildOfType(Node n, Class<?> c) {
+        List<Node> l = findChildrenByType(c);
         
         return l.size() > 0 && n == l.get(0);
     }
     
-    public Node findAncestorOfType(Class c) {
+    public Node findAncestorOfType(Class<?> c) {
         Node n = this;
         
         while (n != null && !n.getClass().isAssignableFrom(c)) {

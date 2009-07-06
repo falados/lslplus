@@ -13,7 +13,7 @@ import org.eclipse.ui.IEditorInput;
 
 public class LslDebugModelPresentation implements IDebugModelPresentation {
     private ISourcePresentation presentation = new LslSourceLocator();
-    private HashSet listeners = new HashSet();
+    private HashSet<ILabelProviderListener> listeners = new HashSet<ILabelProviderListener>();
     public void computeDetail(IValue value, IValueDetailListener listener) {
         String result;
         try {

@@ -74,7 +74,8 @@ public class LslThread implements IThread, InteractorListener {
         return getDebugTarget().getModelIdentifier();
     }
 
-    public Object getAdapter(Class adapter) {
+    @SuppressWarnings("unchecked")
+	public Object getAdapter(Class adapter) {
         // TODO Auto-generated method stub
         return null;
     }

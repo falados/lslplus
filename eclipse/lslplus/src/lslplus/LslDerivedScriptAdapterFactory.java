@@ -12,6 +12,8 @@ import org.eclipse.core.runtime.IAdapterFactory;
  */
 public class LslDerivedScriptAdapterFactory implements IAdapterFactory {
 
+	
+	@SuppressWarnings("unchecked")
 	public Object getAdapter(Object adaptableObject, Class adapterType) {
 		if (adaptableObject instanceof LslDerivedScript && adapterType == IResource.class) {
 			return ((LslDerivedScript)adaptableObject).getResource();
@@ -19,6 +21,7 @@ public class LslDerivedScriptAdapterFactory implements IAdapterFactory {
 		return null;
 	}
 
+	@SuppressWarnings("unchecked")
 	public Class[] getAdapterList() {
 		return new Class[] {
 				IResource.class

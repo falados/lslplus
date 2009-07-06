@@ -8,7 +8,8 @@ import java.util.SortedSet;
 import java.util.TreeSet;
 
 import lslplus.LslProjectNature;
-import lslplus.language_metadata.LslParam;
+import lslplus.generated.LSLType;
+import lslplus.generated.Tuple2;
 import lslplus.util.Util;
 
 import com.thoughtworks.xstream.XStream;
@@ -26,8 +27,8 @@ public class LslTest {
 	private LslValue[] arguments = null;
 	private MaybeValue expectedReturn = null;
 	private CallExpectations expectations = new CallExpectations();
-	private ArrayList initialBindings = new ArrayList();
-	private ArrayList finalBindings = new ArrayList();
+	private ArrayList<GlobBinding> initialBindings = new ArrayList<GlobBinding>();
+	private ArrayList<GlobBinding> finalBindings = new ArrayList<GlobBinding>();
     private LslTestSuite suite;
 	
 	public static class LslValue {
@@ -35,7 +36,7 @@ public class LslTest {
 	
 	public static class MaybeValue {
 	    private LslValue val = null;
-	    private Class type = null;
+	    private Class<?> type = null;
 	    
 	    public MaybeValue() {
 	        this.val = null;
@@ -46,7 +47,7 @@ public class LslTest {
 
         public LslValue getVal() { return val; }
 	    
-	    public Class getType() { return type; }
+	    public Class<?> getType() { return type; }
 	    
 	    public String toString() {
 	        return val == null ? BLANK : val.toString();
@@ -111,14 +112,14 @@ public class LslTest {
 	}
 	
 	public static class LslList extends LslValue {
-		private List val;
+		private List<LslValue> val;
 
 		public LslList() {
-		    val = new LinkedList();
+		    val = new LinkedList<LslValue>();
 		}
 		
-		public LslList(List val) {
-			if (val == null) this.val = new LinkedList();
+		public LslList(List<LslValue> val) {
+			if (val == null) this.val = new LinkedList<LslValue>();
 			else this.val = val;
 		}
 		
@@ -126,7 +127,7 @@ public class LslTest {
 			StringBuilder buf = new StringBuilder("["); //$NON-NLS-1$
 			String sep = BLANK;
 
-			for (Iterator it = getVal().iterator(); it.hasNext(); ) {
+			for (Iterator<LslValue> it = getVal().iterator(); it.hasNext(); ) {
 				buf.append(sep).append(it.next().toString());
 				sep = ","; //$NON-NLS-1$
 			}
@@ -134,13 +135,13 @@ public class LslTest {
 			return buf.append(']').toString();
 		}
 
-        public void setVal(List val) {
-            if (val == null) val = new LinkedList();
+        public void setVal(List<LslValue> val) {
+            if (val == null) val = new LinkedList<LslValue>();
             this.val = val;
         }
 
-        public List getVal() {
-            if (val == null) val = new LinkedList();
+        public List<LslValue> getVal() {
+            if (val == null) val = new LinkedList<LslValue>();
             return val;
         }
 	}
@@ -207,7 +208,7 @@ public class LslTest {
 	public static class ExpectedCall {
 		private String name;
 		private LslValue returns;
-		private List args = new ArrayList();
+		private List<MaybeValue> args = new ArrayList<MaybeValue>();
 		
         public void setName(String funcName) {
             this.name = funcName;
@@ -221,11 +222,11 @@ public class LslTest {
         public LslValue getReturns() {
             return returns;
         }
-        public void setArgs(List args) {
+        public void setArgs(List<MaybeValue> args) {
             this.args = args;
         }
-        public List getArgs() {
-            if (args == null) args = new ArrayList();
+        public List<MaybeValue> getArgs() {
+            if (args == null) args = new ArrayList<MaybeValue>();
             return args;
         }
 	}
@@ -236,23 +237,24 @@ public class LslTest {
         private static final String NORMAL = "normal"; //$NON-NLS-1$
         private static final String NICE = "nice"; //$NON-NLS-1$
         private String mode = NICE;
-	    private ArrayList calls = new ArrayList();
-	    private static TreeSet modeSet;
+	    private ArrayList<ExpectedCall> calls = new ArrayList<ExpectedCall>();
+	    private static TreeSet<String> modeSet;
 	    
 	    static {
-	        modeSet = new TreeSet();
+	        modeSet = new TreeSet<String>();
 	        modeSet.add(NICE);
 	        modeSet.add(NORMAL);
 	        modeSet.add(EXHAUST);
 	        modeSet.add(STRICT);
 	    }
 	    
-	    public static SortedSet getModes() {
-	        return (SortedSet) modeSet.clone();
+	    @SuppressWarnings("unchecked")
+		public static SortedSet<String> getModes() {
+	        return (SortedSet<String>) modeSet.clone();
 	    }
 	    
-	    public List getExpectedCalls() {
-	        if (calls == null) calls = new ArrayList();
+	    public List<ExpectedCall> getExpectedCalls() {
+	        if (calls == null) calls = new ArrayList<ExpectedCall>();
 	        return calls;
 	    }
 	    
@@ -272,7 +274,7 @@ public class LslTest {
 	    
 	    public void postInit() {
 	        if (mode == null) mode = NICE;
-	        if (calls == null) calls = new ArrayList();
+	        if (calls == null) calls = new ArrayList<ExpectedCall>();
 	    }
 	}
 	
@@ -296,7 +298,7 @@ public class LslTest {
 	    if (this.expectedReturn == null) this.expectedReturn = new MaybeValue();
 	    if (this.name == null) this.name = BLANK;
 	    if (this.expectations == null) this.expectations = new CallExpectations();
-	    if (this.initialBindings == null) this.initialBindings = new ArrayList();
+	    if (this.initialBindings == null) this.initialBindings = new ArrayList<GlobBinding>();
 	    this.expectations.postInit();
 	}
 
@@ -317,7 +319,7 @@ public class LslTest {
 		System.out.println(xstream.toXML(tst));
 	}
 
-	public static LslValue defaultValueFor(Class argType) {
+	public static LslValue defaultValueFor(Class<?> argType) {
 		if (LslString.class.equals(argType)) {
 			return new LslString(EMPTY_STRING);
 		} else if (LslKey.class.equals(argType)) {
@@ -336,19 +338,19 @@ public class LslTest {
 	}
 	
     public static String defaultValueFor(String argType) {
-        if ("string".equals(argType)) {
+        if ("string".equals(argType)) { //$NON-NLS-1$
             return EMPTY_STRING;
-        } else if ("key".equals(argType)) {
+        } else if ("key".equals(argType)) { //$NON-NLS-1$
             return EMPTY_STRING;
-        } else if ("integer".equals(argType)) {
+        } else if ("integer".equals(argType)) { //$NON-NLS-1$
             return "0"; //$NON-NLS-1$
-        } else if ("float".equals(argType)) {
+        } else if ("float".equals(argType)) { //$NON-NLS-1$
             return "0.0"; //$NON-NLS-1$
-        } else if ("list".equals(argType)) {
+        } else if ("list".equals(argType)) { //$NON-NLS-1$
             return "[]"; //$NON-NLS-1$
-        } else if ("vector".equals(argType)) {
+        } else if ("vector".equals(argType)) { //$NON-NLS-1$
             return "<0,0,0>"; //$NON-NLS-1$
-        } else if ("rotation".equals(argType)) {
+        } else if ("rotation".equals(argType)) { //$NON-NLS-1$
             return "<0,0,0,1>"; //$NON-NLS-1$
         } else return ""; //$NON-NLS-1$
     }
@@ -370,12 +372,12 @@ public class LslTest {
         this.expectations = o;
     }
 
-    public ArrayList getInitialBindings() { return initialBindings; }
-    public void setInitialBindings(ArrayList bindings) {
+    public ArrayList<GlobBinding> getInitialBindings() { return initialBindings; }
+    public void setInitialBindings(ArrayList<GlobBinding> bindings) {
         this.initialBindings = bindings;
     }
     
-    public static Class stringToLslType(String s) {
+    public static Class<?> stringToLslType(String s) {
     	if ("integer".equals(s)) return LslInteger.class; //$NON-NLS-1$
     	else if ("float".equals(s)) return LslFloat.class; //$NON-NLS-1$
     	else if ("string".equals(s)) return LslString.class; //$NON-NLS-1$
@@ -388,7 +390,7 @@ public class LslTest {
     	return LslValue.class;
     }
 
-    public static String lslTypeToString(Class c) {
+    public static String lslTypeToString(Class<?> c) {
         if (LslInteger.class.equals(c)) return "integer"; //$NON-NLS-1$
         else if (LslFloat.class.equals(c)) return "float"; //$NON-NLS-1$
         else if (LslString.class.equals(c)) return "string"; //$NON-NLS-1$
@@ -412,11 +414,11 @@ public class LslTest {
         else if (BLANK.equals(s)) return new LslVoid();
         return new LslVoid();
     }
-    public void setFinalBindings(ArrayList finalBindings) {
+    public void setFinalBindings(ArrayList<GlobBinding> finalBindings) {
         this.finalBindings = finalBindings;
     }
 
-    public ArrayList getFinalBindings() {
+    public ArrayList<GlobBinding> getFinalBindings() {
         return finalBindings;
     }
 
@@ -426,15 +428,15 @@ public class LslTest {
         this.expectations = new CallExpectations();
         this.expectations.postInit();
         this.expectedReturn = new MaybeValue();
-        this.initialBindings = new ArrayList();
-        this.finalBindings = new ArrayList();
+        this.initialBindings = new ArrayList<GlobBinding>();
+        this.finalBindings = new ArrayList<GlobBinding>();
         
-        LslParam[] params = nature().getParams(entryPoint.getFileName(), entryPoint.getPath());
+        LinkedList<Tuple2<String,LSLType>> params = nature().getParams(entryPoint.getFileName(), entryPoint.getPath());
         
-        this.arguments = new LslValue[params.length];
+        this.arguments = new LslValue[params.size()];
         
-        for (int i = 0; i < params.length; i++) {
-            this.arguments[i] = defaultValueFor(stringToLslType(params[i].getType()));
+        for (int i = 0; i < params.size(); i++) {
+            this.arguments[i] = defaultValueFor(stringToLslType(TestProject.lslTypeToString(params.get(i).el2)));
         }
     }
 

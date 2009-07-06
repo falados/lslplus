@@ -26,14 +26,14 @@ public class SimProjectNodes {
 
         public InventoryPropertiesNode(Node parent, String creator) {
             super(parent, "properties", null); //$NON-NLS-1$
-            addChild(new AvatarReferenceNode(this, "creator", creator));
+            addChild(new AvatarReferenceNode(this, "creator", creator)); //$NON-NLS-1$
         }
 
-        public String getNameDisplay() { return "Properties"; }
-        public Map getData() {
-            HashMap map = new HashMap();
-            for (Iterator i = this.getChildren().iterator(); i.hasNext();) {
-                Node n = (Node) i.next();
+        public String getNameDisplay() { return "Properties"; } //$NON-NLS-1$ TODO
+        public Map<String,Object> getData() {
+            HashMap<String,Object> map = new HashMap<String,Object>();
+            for (Iterator<Node> i = this.getChildren().iterator(); i.hasNext();) {
+                Node n = i.next();
                 
                 String name = n.getName();
                 if (n instanceof AvatarReferenceNode) {
@@ -50,7 +50,8 @@ public class SimProjectNodes {
         
     }
     public static abstract class InventoryNode extends Node {
-        private static final NodeStatus SCRIPT_NAME_IN_USE = new NodeStatus(false, "Script name already in use");
+        private static final NodeStatus SCRIPT_NAME_IN_USE = 
+        	new NodeStatus(false, "Script name already in use"); //$NON-NLS-1$ TODO
         
         public InventoryNode(Node parent, String nodeName, Object value) {
             super(parent, nodeName, value);
@@ -65,7 +66,7 @@ public class SimProjectNodes {
         }
         
         protected void addProperty(Node n) {
-            InventoryPropertiesNode pn = (InventoryPropertiesNode) findChildByName("properties");
+            InventoryPropertiesNode pn = (InventoryPropertiesNode) findChildByName("properties"); //$NON-NLS-1$
             pn.addChild(n);
         }
         
@@ -73,15 +74,15 @@ public class SimProjectNodes {
             return SimProject.checkNameUnique(this, name, getParent().getChildren(), SCRIPT_NAME_IN_USE);
         }
 
-        protected Map getProperties() {
-            InventoryPropertiesNode node = (InventoryPropertiesNode) findChildByName("properties");
+        protected Map<String,Object> getProperties() {
+            InventoryPropertiesNode node = (InventoryPropertiesNode) findChildByName("properties"); //$NON-NLS-1$
             return node.getData();
         }
         
         public abstract InventoryItem getInventoryItem();
         
         public String getValueString() {
-            return "";
+            return ""; //$NON-NLS-1$
         }
 
         public boolean isDeletable() {
@@ -108,7 +109,7 @@ public class SimProjectNodes {
     public static class NotecardLineNode extends StringNode {
 
         public NotecardLineNode(Node parent, String value) {
-            super(parent, "line", value);
+            super(parent, "line", value); //$NON-NLS-1$
         }
 
         public boolean isDeletable() {
@@ -119,11 +120,11 @@ public class SimProjectNodes {
     static final NodeFactory notecardLineFactory = new NodeFactory() {
 
         public Node createNode(Node parent) {
-            return new NotecardLineNode(parent,"");
+            return new NotecardLineNode(parent,""); //$NON-NLS-1$
         }
 
         public String getNodeTypeName() {
-            return "Line";
+            return "Line"; //$NON-NLS-1$ TODO
         }
         
     };
@@ -132,14 +133,14 @@ public class SimProjectNodes {
 
         public Node createNode(Node parent) {
             PrimNode node = (PrimNode) parent;
-            List nodes = node.getChildren();
-            String name = SimProject.computeNewName(nodes, "New Notecard");
+            List<Node> nodes = node.getChildren();
+            String name = SimProject.computeNewName(nodes, "New Notecard"); //$NON-NLS-1$ TODO
             
             return new NotecardNode(parent, name, null);
         }
 
         public String getNodeTypeName() {
-            return "Notecard";
+            return "Notecard"; //$NON-NLS-1$ TODO
         }
     };
     
@@ -154,12 +155,12 @@ public class SimProjectNodes {
         }
 
         public InventoryItem getInventoryItem() {
-            Map props = getProperties();
-            String creator = (String) props.get("creator");
-            List lineNodes = findChildrenByType(NotecardLineNode.class);
+            Map<String,Object> props = getProperties();
+            String creator = (String) props.get("creator"); //$NON-NLS-1$
+            List<Node> lineNodes = findChildrenByType(NotecardLineNode.class);
             String[] lines = new String[lineNodes.size()];
             int j = 0;
-            for (Iterator i = lineNodes.iterator(); i.hasNext(); ) {
+            for (Iterator<Node> i = lineNodes.iterator(); i.hasNext(); ) {
                 lines[j++] = ((NotecardLineNode)i.next()).getValueString();  
             }
             return new SimWorldDef.Notecard(getName(), creator, lines);
@@ -170,14 +171,14 @@ public class SimProjectNodes {
 
         public Node createNode(Node parent) {
             PrimNode node = (PrimNode) parent;
-            List nodes = node.getChildren();
-            String name = SimProject.computeNewName(nodes, "New Texture");
+            List<Node> nodes = node.getChildren();
+            String name = SimProject.computeNewName(nodes, "New Texture"); //$NON-NLS-1$ TODO
             
             return new TextureNode(parent, name, null);
         }
 
         public String getNodeTypeName() {
-            return "Texture";
+            return "Texture"; //$NON-NLS-1$ TODO
         }
     };
     
@@ -190,8 +191,8 @@ public class SimProjectNodes {
         public NodeFactory[] legalChildNodes() { return SimProject.EMPTY_FACTORY_LIST; }
         
         public InventoryItem getInventoryItem() {
-            Map props = getProperties();
-            String creator = (String) props.get("creator");
+            Map<String,Object> props = getProperties();
+            String creator = (String) props.get("creator"); //$NON-NLS-1$
             return new SimWorldDef.Texture(getName(), creator);
         }
     }
@@ -200,14 +201,14 @@ public class SimProjectNodes {
 
         public Node createNode(Node parent) {
             PrimNode node = (PrimNode) parent;
-            List nodes = node.getChildren();
-            String name = SimProject.computeNewName(nodes, "New Body Part");
+            List<Node> nodes = node.getChildren();
+            String name = SimProject.computeNewName(nodes, "New Body Part"); //$NON-NLS-1$ TODO
             
             return new BodyPartNode(parent, name, null);
         }
 
         public String getNodeTypeName() {
-            return "Body Part";
+            return "Body Part"; //$NON-NLS-1$ TODO
         }
     };
 
@@ -220,8 +221,8 @@ public class SimProjectNodes {
         public NodeFactory[] legalChildNodes() { return SimProject.EMPTY_FACTORY_LIST; }
         
         public InventoryItem getInventoryItem() {
-            Map props = getProperties();
-            String creator = (String) props.get("creator");
+            Map<String,Object> props = getProperties();
+            String creator = (String) props.get("creator"); //$NON-NLS-1$
             return new SimWorldDef.BodyPart(getName(), creator);
         }
     }
@@ -230,14 +231,14 @@ public class SimProjectNodes {
 
         public Node createNode(Node parent) {
             PrimNode node = (PrimNode) parent;
-            List nodes = node.getChildren();
-            String name = SimProject.computeNewName(nodes, "New Gesture");
+            List<Node> nodes = node.getChildren();
+            String name = SimProject.computeNewName(nodes, "New Gesture"); //$NON-NLS-1$ TODO
             
             return new GestureNode(parent, name, null);
         }
 
         public String getNodeTypeName() {
-            return "Gesture";
+            return "Gesture"; //$NON-NLS-1$ TODO
         }
     };
 
@@ -250,8 +251,8 @@ public class SimProjectNodes {
         public NodeFactory[] legalChildNodes() { return SimProject.EMPTY_FACTORY_LIST; }
         
         public InventoryItem getInventoryItem() {
-            Map props = getProperties();
-            String creator = (String) props.get("creator");
+            Map<String,Object> props = getProperties();
+            String creator = (String) props.get("creator"); //$NON-NLS-1$
             return new SimWorldDef.Gesture(getName(), creator);
         }
     }
@@ -260,14 +261,14 @@ public class SimProjectNodes {
 
         public Node createNode(Node parent) {
             PrimNode node = (PrimNode) parent;
-            List nodes = node.getChildren();
-            String name = SimProject.computeNewName(nodes, "New Clothing");
+            List<Node> nodes = node.getChildren();
+            String name = SimProject.computeNewName(nodes, "New Clothing"); //$NON-NLS-1$ TODO
             
             return new ClothingNode(parent, name, null);
         }
 
         public String getNodeTypeName() {
-            return "Clothing";
+            return "Clothing"; //$NON-NLS-1$ TODO
         }
     };
 
@@ -280,8 +281,8 @@ public class SimProjectNodes {
         public NodeFactory[] legalChildNodes() { return SimProject.EMPTY_FACTORY_LIST; }
         
         public InventoryItem getInventoryItem() {
-            Map props = getProperties();
-            String creator = (String) props.get("creator");
+            Map<String,Object> props = getProperties();
+            String creator = (String) props.get("creator"); //$NON-NLS-1$
             return new SimWorldDef.Clothing(getName(), creator);
         }
     }
@@ -290,14 +291,14 @@ public class SimProjectNodes {
 
         public Node createNode(Node parent) {
             PrimNode node = (PrimNode) parent;
-            List nodes = node.getChildren();
-            String name = SimProject.computeNewName(nodes, "New Sound");
+            List<Node> nodes = node.getChildren();
+            String name = SimProject.computeNewName(nodes, "New Sound"); //$NON-NLS-1$ TODO
             
             return new SoundNode(parent, name, null);
         }
 
         public String getNodeTypeName() {
-            return "Sound";
+            return "Sound"; //$NON-NLS-1$ TODO
         }
     };
 
@@ -305,15 +306,16 @@ public class SimProjectNodes {
 
         public SoundNode(Node parent, String nodeName, Object value) {
             super(parent, nodeName, value);
-            addProperty(new SimProject.ConstrainedFloatNode(this, "duration", new Float(1.0f), 0.0f, 10f, "Duration"));
+            addProperty(new SimProject.ConstrainedFloatNode(this, "duration", //$NON-NLS-1$
+            		new Float(1.0f), 0.0f, 10f, "Duration")); //$NON-NLS-1$ TODO
         }
 
         public NodeFactory[] legalChildNodes() { return SimProject.EMPTY_FACTORY_LIST; }
         
         public InventoryItem getInventoryItem() {
-            Map props = getProperties();
-            String creator = (String) props.get("creator");
-            Float duration = (Float) props.get("duration");
+            Map<String,Object> props = getProperties();
+            String creator = (String) props.get("creator"); //$NON-NLS-1$
+            Float duration = (Float) props.get("duration"); //$NON-NLS-1$
             return new SimWorldDef.Sound(getName(), creator, duration.floatValue());
         }
     }
@@ -322,14 +324,14 @@ public class SimProjectNodes {
 
         public Node createNode(Node parent) {
             PrimNode node = (PrimNode) parent;
-            List nodes = node.getChildren();
-            String name = SimProject.computeNewName(nodes, "New Animation");
+            List<Node> nodes = node.getChildren();
+            String name = SimProject.computeNewName(nodes, "New Animation"); //$NON-NLS-1$ TODO
             
             return new AnimationNode(parent, name, null);
         }
 
         public String getNodeTypeName() {
-            return "Animation";
+            return "Animation"; //$NON-NLS-1$ TODO
         }
     };
 
@@ -337,15 +339,16 @@ public class SimProjectNodes {
 
         public AnimationNode(Node parent, String nodeName, Object value) {
             super(parent, nodeName, value);
-            addProperty(new SimProject.ConstrainedFloatNode(this, "duration", new Float(1.0f), 0.0f, 120f, "Duration"));
+            addProperty(new SimProject.ConstrainedFloatNode(this, "duration", //$NON-NLS-1$
+            		new Float(1.0f), 0.0f, 120f, "Duration")); //$NON-NLS-1$ TODO
         }
 
         public NodeFactory[] legalChildNodes() { return SimProject.EMPTY_FACTORY_LIST; }
         
         public InventoryItem getInventoryItem() {
-            Map props = getProperties();
-            String creator = (String) props.get("creator");
-            Float duration = (Float) props.get("duration");
+            Map<String,Object> props = getProperties();
+            String creator = (String) props.get("creator"); //$NON-NLS-1$
+            Float duration = (Float) props.get("duration"); //$NON-NLS-1$
             return new SimWorldDef.Animation(getName(), creator, duration.floatValue());
         }
     }
@@ -354,14 +357,14 @@ public class SimProjectNodes {
 
         public Node createNode(Node parent) {
             PrimNode node = (PrimNode) parent;
-            List nodes = node.getChildren();
-            String name = SimProject.computeNewName(nodes, "New Landmark");
+            List<Node> nodes = node.getChildren();
+            String name = SimProject.computeNewName(nodes, "New Landmark"); //$NON-NLS-1$ TODO
             
             return new LandmarkNode(parent, name, null);
         }
 
         public String getNodeTypeName() {
-            return "Landmark";
+            return "Landmark"; //$NON-NLS-1$ TODO
         }
     };
     
@@ -374,7 +377,7 @@ public class SimProjectNodes {
         }
 
         public InventoryItem getInventoryItem() {
-            Map props = getProperties();
+            Map<String,Object> props = getProperties();
             Region region = (Region) props.get("region"); //$NON-NLS-1$
             LVector position = (LVector) props.get("position"); //$NON-NLS-1$
             String creator = (String) props.get("creator"); //$NON-NLS-1$
@@ -390,8 +393,8 @@ public class SimProjectNodes {
 
         public Node createNode(Node parent) {
             PrimNode node = (PrimNode) parent;
-            List nodes = node.getChildren();
-            String name = SimProject.computeNewName(nodes, "Object");
+            List<Node> nodes = node.getChildren();
+            String name = SimProject.computeNewName(nodes, "Object"); //$NON-NLS-1$ TODO
             
             InventoryObjectNode object = new InventoryObjectNode(parent, name, null);
             
@@ -402,7 +405,7 @@ public class SimProjectNodes {
         }
 
         public String getNodeTypeName() {
-            return "Inventory Object";
+            return "Inventory Object"; //$NON-NLS-1$ TODO
         }
     };
     
@@ -413,14 +416,14 @@ public class SimProjectNodes {
         }
 
         public InventoryItem getInventoryItem() {
-            List primNodes = findChildrenByType(PrimNode.class);
+            List<Node> primNodes = findChildrenByType(PrimNode.class);
             Prim prims[] = new Prim[primNodes.size()];
             int j = 0;
-            for (Iterator i = primNodes.iterator(); i.hasNext(); ) {
+            for (Iterator<Node> i = primNodes.iterator(); i.hasNext(); ) {
                 prims[j++] = (Prim) ((PrimNode)i.next()).getDerivedValue();
             }
             
-            Map props = getProperties();
+            Map<String,Object> props = getProperties();
             String creator = (String) props.get("creator"); //$NON-NLS-1$
             return new SimWorldDef.InventoryObject(getName(),creator,prims);
         }

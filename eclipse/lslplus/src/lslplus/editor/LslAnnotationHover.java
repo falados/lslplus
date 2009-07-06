@@ -17,10 +17,10 @@ import org.eclipse.jface.text.source.ISourceViewer;
  * The LslAnnotationHover provides the hover support for editors.
  */
 public class LslAnnotationHover implements IAnnotationHover {
-    private static final List ANNOTATIONS_TO_DISPLAY; 
+    private static final List<String> ANNOTATIONS_TO_DISPLAY; 
 
     static {
-        ANNOTATIONS_TO_DISPLAY = new LinkedList();
+        ANNOTATIONS_TO_DISPLAY = new LinkedList<String>();
         ANNOTATIONS_TO_DISPLAY.add("org.eclipse.ui.workbench.texteditor.error"); //$NON-NLS-1$
         ANNOTATIONS_TO_DISPLAY.add("org.eclipse.ui.workbench.texteditor.warning");   //$NON-NLS-1$
     }
@@ -32,7 +32,7 @@ public class LslAnnotationHover implements IAnnotationHover {
         IDocument document= sourceViewer.getDocument();
 	    try {
 	        IRegion info = document.getLineInformation(lineNumber);
-	        for (Iterator i = m.getAnnotationIterator(); i.hasNext(); ) {
+	        for (Iterator<?> i = m.getAnnotationIterator(); i.hasNext(); ) {
 	            Annotation a = (Annotation) i.next();
 	            if (!ANNOTATIONS_TO_DISPLAY.contains(a.getType())) continue;
 	            Position p = m.getPosition(a);

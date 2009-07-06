@@ -126,7 +126,7 @@ public class LslTestInteractor implements Runnable, Interactor {
     }
     
     
-    private HashSet listeners = new HashSet();
+    private HashSet<InteractorListener> listeners = new HashSet<InteractorListener>();
     private BufferedReader reader;
     private PrintStream writer;
     private String testDescriptor;
@@ -195,7 +195,7 @@ public class LslTestInteractor implements Runnable, Interactor {
     private BreakpointData[] createBreakpointData() {
         IBreakpointManager bpm = getBreakpointManager();
         IBreakpoint[] breakpoints = bpm.getBreakpoints(LslDebugTarget.LSLPLUS);
-        LinkedList list = new LinkedList();
+        LinkedList<BreakpointData> list = new LinkedList<BreakpointData>();
         for (int i = 0; i < breakpoints.length; i++) {
             try {
                 if (breakpoints[i] instanceof LslLineBreakpoint) {
@@ -211,10 +211,10 @@ public class LslTestInteractor implements Runnable, Interactor {
                     list.add(new BreakpointData(fullPath.toOSString(), line));
                 }
             } catch (CoreException e) {
-                Util.log(e, e.getLocalizedMessage());
+                Util.error(e, e.getLocalizedMessage());
             }
         }
-        return (BreakpointData[]) list.toArray(new BreakpointData[list.size()]);
+        return list.toArray(new BreakpointData[list.size()]);
     }
     
     public void continueExecution() {
@@ -248,14 +248,14 @@ public class LslTestInteractor implements Runnable, Interactor {
     }
     
     private void fireSuspended(LslScriptExecutionState state) {
-        for (Iterator i = listeners.iterator(); i.hasNext();) {
-            ((InteractorListener)i.next()).suspended(state);
+        for (Iterator<InteractorListener> i = listeners.iterator(); i.hasNext();) {
+            i.next().suspended(state);
         }
     }
     
     private void fireComplete() {
-        for (Iterator i = listeners.iterator(); i.hasNext();) {
-            ((InteractorListener)i.next()).completed();
+        for (Iterator<InteractorListener> i = listeners.iterator(); i.hasNext();) {
+            i.next().completed();
         }
     }
     public void run() {
@@ -285,9 +285,9 @@ public class LslTestInteractor implements Runnable, Interactor {
                 }
             }
         } catch (IOException e) {
-            Util.log(e, e.getLocalizedMessage());
+            Util.error(e, e.getLocalizedMessage());
         } catch (RuntimeException e) {
-            Util.log(e, e.getLocalizedMessage());
+            Util.error(e, e.getLocalizedMessage());
             try {
                 endSession();
             } catch (Exception e1) {

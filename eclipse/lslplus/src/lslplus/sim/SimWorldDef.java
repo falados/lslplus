@@ -16,9 +16,12 @@ import com.thoughtworks.xstream.mapper.Mapper;
  */
 public class SimWorldDef {
     public static class Script {
-        private String primKey;
-        private String scriptName;
-        private String scriptId;
+        @SuppressWarnings("unused")
+		private String primKey;
+        @SuppressWarnings("unused")
+		private String scriptName;
+        @SuppressWarnings("unused")
+		private String scriptId;
         
         public Script(String primKey, String scriptName, String scriptId) {
             this.primKey = primKey;
@@ -28,8 +31,10 @@ public class SimWorldDef {
     }
     
     public static class ScriptInfo {
-    	private String scriptName;
-    	private String scriptId;
+    	@SuppressWarnings("unused")
+		private String scriptName;
+    	@SuppressWarnings("unused")
+		private String scriptId;
     	public ScriptInfo(String scriptName, String scriptId) {
     		this.scriptName = scriptName;
     		this.scriptId = scriptId;
@@ -37,8 +42,10 @@ public class SimWorldDef {
     }
     
     public static abstract class InventoryItem {
-        private String name;
-        private String creator;
+        @SuppressWarnings("unused")
+		private String name;
+        @SuppressWarnings("unused")
+		private String creator;
         public InventoryItem(String name, String creator) {
             this.name = name;
             this.creator = creator;
@@ -46,6 +53,7 @@ public class SimWorldDef {
     }
     
     public static class Notecard extends InventoryItem {
+        @SuppressWarnings("unused")
         private String[] lines;
         public Notecard(String name, String creator, String[] lines) {
             super(name,creator);
@@ -78,6 +86,7 @@ public class SimWorldDef {
     }
     
     public static class Animation extends InventoryItem {
+        @SuppressWarnings("unused")
         private float duration;
 
         public Animation(String name, String creator, float duration) {
@@ -86,6 +95,7 @@ public class SimWorldDef {
         }
     }
     public static class Sound extends InventoryItem {
+        @SuppressWarnings("unused")
         private float duration;
 
         public Sound(String name, String creator, float duration) {
@@ -95,7 +105,9 @@ public class SimWorldDef {
     }
     
     public static class Landmark extends InventoryItem {
+        @SuppressWarnings("unused")
         private Region region;
+        @SuppressWarnings("unused")
         private LVector position;
         public Landmark(String name, String creator, Region region, LVector position) {
             super(name,creator);
@@ -105,6 +117,7 @@ public class SimWorldDef {
     }
     
     public static class InventoryObject extends InventoryItem {
+        @SuppressWarnings("unused")
         private Prim[] prims;
         public InventoryObject(String name, String creator, Prim[] prims) {
             super(name,creator);
@@ -113,7 +126,9 @@ public class SimWorldDef {
     }
     
     public static class SimObject {
+        @SuppressWarnings("unused")
         private String[] primKeys;
+        @SuppressWarnings("unused")
         private LVector position;
         public SimObject(String[] primKeys, LVector position) {
             this.primKeys = primKeys;
@@ -122,13 +137,20 @@ public class SimWorldDef {
     }
     
     public static class Prim {
+        @SuppressWarnings("unused")
         private String name;
         private String key;
+        @SuppressWarnings("unused")
         private ScriptInfo[] scripts;
+        @SuppressWarnings("unused")
         private InventoryItem[] inventory;
+        @SuppressWarnings("unused")
         private String description;
+        @SuppressWarnings("unused")
         private String owner;
+        @SuppressWarnings("unused")
         private LVector position;
+        @SuppressWarnings("unused")
         private LVector rotation;
         
         public Prim(String name, String key, ScriptInfo[] scripts, InventoryItem[] inventory,
@@ -149,10 +171,15 @@ public class SimWorldDef {
     }
     
     public static class Avatar {
+        @SuppressWarnings("unused")
         private String name;
+        @SuppressWarnings("unused")
         private float xPos;
+        @SuppressWarnings("unused")
         private float yPos;
+        @SuppressWarnings("unused")
         private float zPos;
+        @SuppressWarnings("unused")
         private String avatarEventHandler;
         
         public Avatar(String name, float x, float y, float z, String avatarEventHandler) {
@@ -177,6 +204,7 @@ public class SimWorldDef {
     }
     
     public static class LRotation {
+        @SuppressWarnings("unused")
         private float x,y,z,s;
         
         public LRotation(float x, float y, float z, float s) {
@@ -188,6 +216,7 @@ public class SimWorldDef {
     }
     
     public static class Region {
+        @SuppressWarnings("unused")
         private int x,y;
         public Region(int x, int y) { this.x = x; this.y = y; }
     }
@@ -208,17 +237,17 @@ public class SimWorldDef {
         xstream.alias("map", Map.class); //$NON-NLS-1$
         xstream.alias("vector", LVector.class); //$NON-NLS-1$
         xstream.alias("rotation", LRotation.class); //$NON-NLS-1$
-        xstream.alias("region", Region.class);
+        xstream.alias("region", Region.class); //$NON-NLS-1$
         xstream.alias("inventoryItem", InventoryItem.class); //$NON-NLS-1$
         xstream.aliasType("notecardItem", Notecard.class); //$NON-NLS-1$
-        xstream.aliasType("bodyPartItem", BodyPart.class);
-        xstream.aliasType("textureItem", Texture.class);
-        xstream.aliasType("animationItem", Animation.class);
-        xstream.aliasType("soundItem", Sound.class);
-        xstream.aliasType("gestureItem", Gesture.class);
-        xstream.aliasType("clothingItem", Clothing.class);
-        xstream.aliasType("landmarkItem", Landmark.class);
-        xstream.aliasType("inventoryObjectItem", InventoryObject.class);
+        xstream.aliasType("bodyPartItem", BodyPart.class); //$NON-NLS-1$
+        xstream.aliasType("textureItem", Texture.class); //$NON-NLS-1$
+        xstream.aliasType("animationItem", Animation.class); //$NON-NLS-1$
+        xstream.aliasType("soundItem", Sound.class); //$NON-NLS-1$
+        xstream.aliasType("gestureItem", Gesture.class); //$NON-NLS-1$
+        xstream.aliasType("clothingItem", Clothing.class); //$NON-NLS-1$
+        xstream.aliasType("landmarkItem", Landmark.class); //$NON-NLS-1$
+        xstream.aliasType("inventoryObjectItem", InventoryObject.class); //$NON-NLS-1$
     }
     
     static {
@@ -229,12 +258,18 @@ public class SimWorldDef {
         return xstream.toXML(def);
     }
     
-    private long maxTime;
+    @SuppressWarnings("unused")
+	private long maxTime;
+    @SuppressWarnings("unused")
     private int sliceSize;
     //private Script[] scripts;
+    @SuppressWarnings("unused")
     private SimObject[] objects;
+    @SuppressWarnings("unused")
     private Prim[] prims;
+    @SuppressWarnings("unused")
     private Avatar[] avatars;
+    @SuppressWarnings("unused")
     private String simEventHandler;
     
     public SimWorldDef(long maxTime, int sliceSize, SimObject[] objects,
@@ -249,11 +284,12 @@ public class SimWorldDef {
 
     public static SimWorldDef mkSimpleWorld(SimKeyManager keyManager, String name) {
         String primKey = keyManager.getNextKey();
+        @SuppressWarnings("unused")
         String avKey = keyManager.getNextKey();
         
         SimWorldDef.Prim[] prims = new SimWorldDef.Prim[] {
-                new SimWorldDef.Prim("defaultPrim", primKey, new ScriptInfo[] { new ScriptInfo(name,name) }, null,
-                        "an object", "Default Avatar", new LVector(0,0,0), new LVector(0,0,0))
+                new SimWorldDef.Prim("defaultPrim", primKey, new ScriptInfo[] { new ScriptInfo(name,name) }, null, //$NON-NLS-1$
+                        "an object", "Default Avatar", new LVector(0,0,0), new LVector(0,0,0))  //$NON-NLS-1$//$NON-NLS-2$
         };
         
         SimWorldDef.SimObject[] objects = new SimWorldDef.SimObject[] {
@@ -261,7 +297,7 @@ public class SimWorldDef {
         };
         
         SimWorldDef.Avatar[] avatars = new SimWorldDef.Avatar[] {
-                new SimWorldDef.Avatar("Default Avatar", 128, 128, 0, null)
+                new SimWorldDef.Avatar("Default Avatar", 128, 128, 0, null) //$NON-NLS-1$
         };
         
         SimWorldDef def = new SimWorldDef(10000000,1000,objects,prims,avatars, null);

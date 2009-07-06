@@ -16,7 +16,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.lang.reflect.InvocationTargetException;
-import java.net.URI;
 import java.util.Iterator;
 import java.util.List;
 
@@ -75,7 +74,7 @@ abstract public class LslSampleCreationWizardPage extends WizardPage implements 
             // if we are filtering, we'll just assume the files small enough to fit in memory...
             // could be smarter, but...
             if (filter) {
-                String id = folder.getProjectRelativePath().toString().replace("/", ".");
+                String id = folder.getProjectRelativePath().toString().replace("/", ".");  //$NON-NLS-1$//$NON-NLS-2$
                 InputStream in = FileLocator.openStream(bundle, path, false);
                 InputStreamReader reader = new InputStreamReader(in);
                 char buf[] = new char[1024];
@@ -85,8 +84,8 @@ abstract public class LslSampleCreationWizardPage extends WizardPage implements 
                     str.append(buf,0,numRead);
                 }
                 
-                if (!id.endsWith(".")) id = id + ".";
-                return new ByteArrayInputStream(str.toString().replace("@PREFIX@", id).getBytes());
+                if (!id.endsWith(".")) id = id + ".";  //$NON-NLS-1$//$NON-NLS-2$
+                return new ByteArrayInputStream(str.toString().replace("@PREFIX@", id).getBytes()); //$NON-NLS-1$
             } else {
                 return FileLocator.openStream(bundle, path, false);
             }
@@ -95,26 +94,26 @@ abstract public class LslSampleCreationWizardPage extends WizardPage implements 
     
 	private final class CreateSampleRunnable implements IRunnableWithProgress {
 	    private final IFolder folder;
-	    private List samples;
+	    private List<Sample> samples;
 
 		private CreateSampleRunnable(IFolder folder,
-				List samples) {
+				List<Sample> samples) {
 			this.folder = folder;
 			this.samples = samples;
 		}
 
 		public void run(IProgressMonitor monitor) {
-		    CreateFolderOperation crFolderOp = new CreateFolderOperation(folder, null, "create folder");
+		    CreateFolderOperation crFolderOp = new CreateFolderOperation(folder, null, "create folder"); //$NON-NLS-1$ TODO
 			try {
 			    IOperationHistory history = PlatformUI.getWorkbench().getOperationSupport().getOperationHistory();
 			    IAdaptable info = WorkspaceUndoUtil.getUIInfoAdapter(getShell());
 				history.execute(crFolderOp,	monitor, info);
 				
-				for (Iterator i = samples.iterator(); i.hasNext(); ) {
-				    Sample sample = (Sample) i.next();
+				for (Iterator<Sample> i = samples.iterator(); i.hasNext(); ) {
+				    Sample sample = i.next();
 				    
 				    IFile file = folder.getFile(sample.getName());
-				    CreateFileOperation op = new CreateFileOperation(file, null, sample.getInputStream(folder), "create file");
+				    CreateFileOperation op = new CreateFileOperation(file, null, sample.getInputStream(folder), "create file"); //$NON-NLS-1$ TODO
 				    history.execute(op, monitor, info);
 				}
 			} catch (IOException e) {
@@ -146,11 +145,6 @@ abstract public class LslSampleCreationWizardPage extends WizardPage implements 
 
 	// the current resource selection
 	private IStructuredSelection currentSelection;
-
-	// cache of newly-created file
-	private IFile newFile;
-
-	private URI linkTargetPath;
 
 	// widgets
 	private ResourceAndContainerGroup resourceGroup;
@@ -232,7 +226,7 @@ abstract public class LslSampleCreationWizardPage extends WizardPage implements 
 		} catch (InvocationTargetException e) {
 			// Execution Exceptions are handled above but we may still get
 			// unexpected runtime errors.
-			Util.log(e,e.getLocalizedMessage());
+			Util.error(e,e.getLocalizedMessage());
 			MessageDialog.openError(
 					getContainer().getShell(),
 					Messages.getString("LslFileCreationWizardPage.CREATION_PROBLEMS"), //$NON-NLS-1$
@@ -293,7 +287,7 @@ abstract public class LslSampleCreationWizardPage extends WizardPage implements 
 	 * 
 	 * @return initial contents to be given to new file resource instances
 	 */
-	protected List getSampleItems() {
+	protected List<Sample> getSampleItems() {
 		return null;
 	}
 
@@ -330,7 +324,7 @@ abstract public class LslSampleCreationWizardPage extends WizardPage implements 
 		if (initialContainerFullPath != null) {
 			resourceGroup.setContainerFullPath(initialContainerFullPath);
 		} else {
-			Iterator it = currentSelection.iterator();
+			Iterator<?> it = currentSelection.iterator();
 			if (it.hasNext()) {
 				Object object = it.next();
 				IResource selectedResource = null;

@@ -31,8 +31,8 @@ public class SimLaunchDelegate extends LaunchConfigurationDelegate {
         Path path = new Path(fullPath);
         IResource resource = ResourcesPlugin.getWorkspace().getRoot().findMember(path);
         if (resource == null) {
-            MessageDialog.openError(null, "Resource no longer exists",
-                    "Referenced resource no longer exists!");
+            MessageDialog.openError(null, "Resource no longer exists", //$NON-NLS-1$ TODO NLS
+                    "Referenced resource no longer exists!"); //$NON-NLS-1$ TODO NLS
             return;
         }
         

@@ -25,12 +25,12 @@ public class NewHttpRpcSampleWizard extends Wizard implements INewWizard {
 			super("createSample", selection); //$NON-NLS-1$
 			setTitle(Messages.getString("NewHttpRpcSampleWizard.0")); //$NON-NLS-1$
 			setPageComplete(false);
-			setFileExtension(null); //$NON-NLS-1$
+			setFileExtension(null);
 			setDefaultPageImageDescriptor(image());
 		}
 
 		
-		protected List getSampleItems() {
+		protected List<Sample> getSampleItems() {
 		    Bundle bundle = LslPlusPlugin.getDefault().getBundle();
 		    Sample evhandlerSample =
 		        new Sample("eventhandler.lslm", bundle, //$NON-NLS-1$
@@ -40,7 +40,7 @@ public class NewHttpRpcSampleWizard extends Wizard implements INewWizard {
 		    Sample rpcSimSample = new Sample("rpcsim.simp", bundle, //$NON-NLS-1$
 		            new Path("samples/http_rpc_example/rpcsim.simp"), true); //$NON-NLS-1$
 		    
-		    LinkedList list = new LinkedList();
+		    LinkedList<Sample> list = new LinkedList<Sample>();
 		    Collections.addAll(list, new Sample[] { evhandlerSample, rpcServerSample, rpcSimSample });
 		    return list;
         }

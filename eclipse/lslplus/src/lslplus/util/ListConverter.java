@@ -18,10 +18,11 @@ public class ListConverter implements Converter {
         this.mapper = mapper;
     }
     
-    public void marshal(Object source, HierarchicalStreamWriter writer, MarshallingContext context) {
-        List list = (List) source;
+	public void marshal(Object source, HierarchicalStreamWriter writer, MarshallingContext context) {
+	    @SuppressWarnings("unchecked")
+        List<Object> list = (List<Object>) source;
         
-        for (Iterator iterator = list.iterator(); iterator.hasNext();) {
+        for (Iterator<Object> iterator = list.iterator(); iterator.hasNext();) {
             Object value = iterator.next();
 
             ExtendedHierarchicalStreamWriterHelper.startNode(writer, "value", value.getClass()); //$NON-NLS-1$
@@ -34,17 +35,18 @@ public class ListConverter implements Converter {
         }
     }
 
-    public Object unmarshal(HierarchicalStreamReader reader, UnmarshallingContext context) {
-        List l = (List) createCollection(context.getRequiredType());
+	public Object unmarshal(HierarchicalStreamReader reader, UnmarshallingContext context) {
+	    @SuppressWarnings("unchecked")
+        List<Object> l = (List<Object>) createCollection(context.getRequiredType());
         while (reader.hasMoreChildren()) {
             reader.moveDown();
             Object value = null;
                 
             if ("value".equals(reader.getNodeName())) { //$NON-NLS-1$
-                if (value != null) throw new ConversionException("multiple values in single entry");
+                if (value != null) throw new ConversionException("multiple values in single entry"); //$NON-NLS-1$
                 value = readItem(reader, context, l);
             } else {
-                throw new ConversionException("unrecognized list element");
+                throw new ConversionException("unrecognized list element"); //$NON-NLS-1$
             }
                 
             reader.moveUp();
@@ -54,11 +56,13 @@ public class ListConverter implements Converter {
         return l;
     }
 
-    public boolean canConvert(Class type) {
+    @SuppressWarnings("unchecked")
+	public boolean canConvert(Class type) {
         return List.class.isAssignableFrom(type);
     }
 
-    private Object createCollection(Class type) {
+    @SuppressWarnings("unchecked")
+	private Object createCollection(Class type) {
         Class defaultType = mapper.defaultImplementationOf(type);
         try {
             return defaultType.newInstance();
@@ -71,7 +75,7 @@ public class ListConverter implements Converter {
     
     private Object readItem(HierarchicalStreamReader reader, UnmarshallingContext context, Object current) {
         String classAttribute = reader.getAttribute(mapper.aliasForAttribute("class")); //$NON-NLS-1$
-        Class type;
+        Class<?> type;
         if (classAttribute == null) {
             type = mapper.realClass(reader.getNodeName());
         } else {

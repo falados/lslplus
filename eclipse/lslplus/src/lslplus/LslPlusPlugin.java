@@ -60,8 +60,8 @@ import com.thoughtworks.xstream.io.xml.DomDriver;
  */
 public class LslPlusPlugin extends AbstractUIPlugin {
 	public static final String LSLPLUS_NATIVE_PATH = "lslplus.native_path"; //$NON-NLS-1$
-    private static final Pattern LSLPLUS_CORE_VERSION_PAT = Pattern.compile("^0\\.3(\\..*)?$"); //$NON-NLS-1$
-	private static final String LSLPLUS_CORE_VERSION = "0.3.*"; //$NON-NLS-1$
+    private static final Pattern LSLPLUS_CORE_VERSION_PAT = Pattern.compile("^0\\.4(\\..*)?$"); //$NON-NLS-1$
+	private static final String LSLPLUS_CORE_VERSION = "0.4.*"; //$NON-NLS-1$
 	private static final String LSL_EXECUTABLE = "LslPlus" + ((File.separatorChar == '\\') ? ".exe" : "");  //$NON-NLS-1$//$NON-NLS-2$ //$NON-NLS-3$
 	private static final String LSL_COMMAND = "LslPlus"; //$NON-NLS-1$
 	
@@ -107,7 +107,7 @@ public class LslPlusPlugin extends AbstractUIPlugin {
                         try {
                             IDE.openEditor(activePage, resource, true);
                         } catch (PartInitException e) {
-                            Util.log(e, e.getLocalizedMessage());
+                            Util.error(e, e.getLocalizedMessage());
                         }
                     }
                 });
@@ -135,7 +135,7 @@ public class LslPlusPlugin extends AbstractUIPlugin {
             writer.close();
             return process;
         } catch (IOException e) {
-            Util.log(e, e.getMessage());
+            Util.error(e, e.getMessage());
             return null;
         }
     }
@@ -162,7 +162,7 @@ public class LslPlusPlugin extends AbstractUIPlugin {
         try {
             Util.chmod(new File(exeName));
         } catch (IOException e) {
-            Util.log(e, "can't change mode of native executable"); //$NON-NLS-1$
+            Util.error(e, "can't change mode of native executable"); //$NON-NLS-1$
         }
         return execute(command, redir, exeName);
     }
@@ -175,7 +175,7 @@ public class LslPlusPlugin extends AbstractUIPlugin {
 
             return process;
         } catch (IOException e) {
-            Util.log(e, e.getLocalizedMessage());
+            Util.error(e, e.getLocalizedMessage());
             return null;
         }
     }
@@ -206,7 +206,7 @@ public class LslPlusPlugin extends AbstractUIPlugin {
                     return true;
                 }
             } catch (IOException e) {
-                Util.log(e, "can't locate " + url); //$NON-NLS-1$
+                Util.error(e, "can't locate " + url); //$NON-NLS-1$
             }
         }
         
@@ -221,7 +221,7 @@ public class LslPlusPlugin extends AbstractUIPlugin {
                     return true;
                 }
             } catch (IOException e) {
-                Util.log(e, "can't locate " + url); //$NON-NLS-1$
+                Util.error(e, "can't locate " + url); //$NON-NLS-1$
             }
         }
         
@@ -234,39 +234,40 @@ public class LslPlusPlugin extends AbstractUIPlugin {
         StringBuilder versions = new StringBuilder();
         boolean versionFound = false;
         if (preferredVersion != null) {
-            versions.append(preferredVersion).append(" (version of executable set in LSL Plus Preferences)\n");
+            versions.append(preferredVersion).append(
+            		" (version of executable set in LSL Plus Preferences)\n"); //$NON-NLS-1$ TODO
             versionFound = true;
         }
         if (embeddedVersion != null) {
-            versions.append(embeddedVersion).append(" (version installed as part of plugin)\n");
+            versions.append(embeddedVersion).append(" (version installed as part of plugin)\n"); //$NON-NLS-1$ TODO
             versionFound = true;
         }
         if (installedVersion != null) {
-            versions.append(installedVersion).append(" (version found on PATH)\n");
+            versions.append(installedVersion).append(" (version found on PATH)\n"); //$NON-NLS-1$ TODO
             versionFound = true;
         }
         
         final StringBuilder buf = new StringBuilder();
         if (versionFound) {
-            buf.append("The following versions of the LSL Plus native executable were found:\n");
+            buf.append("The following versions of the LSL Plus native executable were found:\n"); //$NON-NLS-1$ TODO
             buf.append(versions);
-            buf.append("\nNone of these version are compatible with this plugin, which requires\n");
-            buf.append("version ").append(LSLPLUS_CORE_VERSION).append(".\n");
+            buf.append("\nNone of these version are compatible with this plugin, which requires\n"); //$NON-NLS-1$ TODO
+            buf.append("version ").append(LSLPLUS_CORE_VERSION).append(".\n");  //$NON-NLS-1$//$NON-NLS-2$ TODO
         } else {
-            buf.append("The LSL Plus native executable was not found!\n");
+            buf.append("The LSL Plus native executable was not found!\n"); //$NON-NLS-1$ TODO
         }
-        buf.append("The LSLPlus native executable is available from Hackage:\n");
-        buf.append("http://hackage.haskell.org/cgi-bin/hackage-scripts/pacakge/LslPlus\n\n");
-        buf.append("Please also see the Help documentation for LSL Plus, under 'Installation'");
+        buf.append("The LSLPlus native executable is available from Hackage:\n"); //$NON-NLS-1$ TODO
+        buf.append("http://hackage.haskell.org/cgi-bin/hackage-scripts/pacakge/LslPlus\n\n"); //$NON-NLS-1$ TODO
+        buf.append("Please also see the Help documentation for LSL Plus, under 'Installation'"); //$NON-NLS-1$ TODO
         getWorkbench().getDisplay().asyncExec(new Runnable() {
             public void run() {
                 MessageDialog dlg = new MessageDialog(
                         getWorkbench().getActiveWorkbenchWindow().getShell(),
-                        "LSL Plus Native Executable Problem",
+                        "LSL Plus Native Executable Problem", //$NON-NLS-1$ TODO
                         null,
                         buf.toString(),
                         MessageDialog.ERROR,
-                        new String[] { "Ok" },
+                        new String[] { "Ok" }, //$NON-NLS-1$ TODO
                         0);
                 dlg.open();
             }
@@ -296,7 +297,7 @@ public class LslPlusPlugin extends AbstractUIPlugin {
     }
     
     private void setExecutablePath(String path) {
-        Util.log("executablePath = " + path);
+        Util.log("executablePath = " + path); //$NON-NLS-1$
         this.executablePath = path;
     }
     
@@ -328,7 +329,7 @@ public class LslPlusPlugin extends AbstractUIPlugin {
             
             return f.getAbsolutePath();
         } catch (IOException e) {
-            Util.log(e, "can't compute default path"); //$NON-NLS-1$
+            Util.error(e, "can't compute default path"); //$NON-NLS-1$
             return ""; //$NON-NLS-1$
         }
     }
@@ -352,23 +353,23 @@ public class LslPlusPlugin extends AbstractUIPlugin {
             
             return buf.toString();
         } catch (IOException e) {
-            Util.log(e,e.getLocalizedMessage());
+            Util.error(e,e.getLocalizedMessage());
             return null;
         } finally {
             try { 
                 reader.close();
             } catch (IOException e) {
-                Util.log(e, e.getLocalizedMessage());
+                Util.error(e, e.getLocalizedMessage());
             }
         }
     }
     
     static String validateExpression(String expression) {
-        if (DEBUG) Util.log("expression: " + expression);
+        if (DEBUG) Util.log("expression: " + expression); //$NON-NLS-1$
         String result = runTask("ExpressionHandler", expression); //$NON-NLS-1$
-        if (DEBUG) Util.log("result: " + result);
+        if (DEBUG) Util.log("result: " + result); //$NON-NLS-1$
         if (result == null) {
-            return "Can't evaluate expression (internal error)";
+            return "Can't evaluate expression (internal error)"; //$NON-NLS-1$ TODO
         }
         XStream xstream = new XStream(new DomDriver());
         xstream.alias("result", ValidationResult.class); //$NON-NLS-1$
@@ -419,7 +420,7 @@ public class LslPlusPlugin extends AbstractUIPlugin {
         try {
             md = (LslMetaData) xstream.fromXML(result);
         } catch (Exception e) {
-            Util.log(e, Messages.LslPlusPlugin_COULD_NOT_DESERIALIZE_META_DATA);
+            Util.error(e, Messages.LslPlusPlugin_COULD_NOT_DESERIALIZE_META_DATA);
             md = new LslMetaData();
         }
         return md;
@@ -442,30 +443,30 @@ public class LslPlusPlugin extends AbstractUIPlugin {
      */
     public LslCodeScanner getLslCodeScanner() {
         if (fCodeScanner == null) {
-            String[] handlerNames = (String[]) Util.arrayMap(new Util.ArrayMapFunc() {
-                public Class elementType() {
+            String[] handlerNames = Util.arrayMap(new Util.ArrayMapFunc<String>() {
+                public Class<String> elementType() {
                     return String.class;
                 }
 
-                public Object map(Object o) {
+                public String map(Object o) {
                     return ((LslHandler) o).getName();
                 }
             }, getLslMetaData().getHandlers());
-            String[] predefFuncs = (String[]) Util.arrayMap(new Util.ArrayMapFunc() {
-                public Class elementType() {
+            String[] predefFuncs = Util.arrayMap(new Util.ArrayMapFunc<String>() {
+                public Class<String> elementType() {
                     return String.class;
                 }
 
-                public Object map(Object o) {
+                public String map(Object o) {
                     return ((LslFunction) o).getName();
                 }
             }, getLslMetaData().getFunctions());
-            String[] predefConsts = (String[]) Util.arrayMap(new Util.ArrayMapFunc() {
-                public Class elementType() {
+            String[] predefConsts = Util.arrayMap(new Util.ArrayMapFunc<String>() {
+                public Class<String> elementType() {
                     return String.class;
                 }
 
-                public Object map(Object o) {
+                public String map(Object o) {
                     return ((LslConstant) o).getName();
                 }
             }, getLslMetaData().getConstants());
@@ -516,15 +517,15 @@ public class LslPlusPlugin extends AbstractUIPlugin {
     }
     public static synchronized String[] getStatefulFunctions() {
         if (LslPlusPlugin.statefulFunctions == null) {
-            List funcs = Util.filtMap(new ArrayMapFunc() {
-                public Class elementType() { return String.class; }
-                public Object map(Object o) {
+            List<String> funcs = Util.filtMap(new ArrayMapFunc<String>() {
+                public Class<String> elementType() { return String.class; }
+                public String map(Object o) {
                     LslFunction f = (LslFunction) o;
                     return f.isStateless() ? null : f.getName();
                 }
             }, getLLFunctions());
             
-            LslPlusPlugin.statefulFunctions = (String[]) funcs.toArray(new String[funcs.size()]);
+            LslPlusPlugin.statefulFunctions = funcs.toArray(new String[funcs.size()]);
         }
         
         return LslPlusPlugin.statefulFunctions;

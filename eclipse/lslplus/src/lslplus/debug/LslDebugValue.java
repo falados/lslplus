@@ -50,7 +50,8 @@ public class LslDebugValue implements IValue {
         return target.getModelIdentifier();
     }
 
-    public Object getAdapter(Class adapter) {
+    @SuppressWarnings("unchecked")
+	public Object getAdapter(Class adapter) {
         return null;
     }
 

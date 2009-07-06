@@ -39,15 +39,15 @@ public class LslCodeScanner extends RuleBasedScanner implements ColorProviderLis
     public static final int STRING_STYLE_INDEX = 7;
     public static final int TYPE_STYLE_INDEX = 8;
     
-    public static final String DEFAULT_STYLE = "default";
-    public static final String HANDLER_STYLE = "handler";
-    public static final String KEYWORD_STYLE = "keyword";
-    public static final String MULTILINE_COMMENT_STYLE = "multi_line_comment";
-    public static final String SINGLE_LINE_COMMENT_STYLE = "single_line_comment";
-    public static final String PREDEF_CONST_STYLE = "predef_cont";
-    public static final String PREDEF_FUNC_STYLE = "predef_func";
-    public static final String STRING_STYLE = "string";
-    public static final String TYPE_STYLE = "type";
+    public static final String DEFAULT_STYLE = "default"; //$NON-NLS-1$
+    public static final String HANDLER_STYLE = "handler"; //$NON-NLS-1$
+    public static final String KEYWORD_STYLE = "keyword"; //$NON-NLS-1$
+    public static final String MULTILINE_COMMENT_STYLE = "multi_line_comment"; //$NON-NLS-1$
+    public static final String SINGLE_LINE_COMMENT_STYLE = "single_line_comment"; //$NON-NLS-1$
+    public static final String PREDEF_CONST_STYLE = "predef_cont"; //$NON-NLS-1$
+    public static final String PREDEF_FUNC_STYLE = "predef_func"; //$NON-NLS-1$
+    public static final String STRING_STYLE = "string"; //$NON-NLS-1$
+    public static final String TYPE_STYLE = "type"; //$NON-NLS-1$
     
     public static final String[] STYLE_KINDS = 
     { DEFAULT_STYLE, HANDLER_STYLE, KEYWORD_STYLE, MULTILINE_COMMENT_STYLE, 
@@ -56,23 +56,23 @@ public class LslCodeScanner extends RuleBasedScanner implements ColorProviderLis
     };
     
     public static final String[] KIND_NAMES = {
-        "Default",
-        "Handler",
-        "Keyword",
-        "Multi-line comment",
-        "Single line comment",
-        "Predefined constant",
-        "Predefined function",
-        "String",
-        "Type"        
+        "Default", //$NON-NLS-1$ TODO
+        "Handler", //$NON-NLS-1$ TODO
+        "Keyword", //$NON-NLS-1$ TODO
+        "Multi-line comment", //$NON-NLS-1$ TODO
+        "Single line comment", //$NON-NLS-1$ TODO
+        "Predefined constant", //$NON-NLS-1$ TODO
+        "Predefined function", //$NON-NLS-1$ TODO
+        "String", //$NON-NLS-1$ TODO
+        "Type" //$NON-NLS-1$ TODO
     };
-    public static final String BOLD_STYLE = "bold";
-    public static final String ITALIC_STYLE = "italic";
-    public static final String UL_STYLE = "underline";
+    public static final String BOLD_STYLE = "bold"; //$NON-NLS-1$
+    public static final String ITALIC_STYLE = "italic"; //$NON-NLS-1$
+    public static final String UL_STYLE = "underline"; //$NON-NLS-1$
     
     public static final String[] STYLES = { BOLD_STYLE, ITALIC_STYLE, UL_STYLE };
     
-    private static final HashMap STYLE_TO_CONST = new HashMap();
+    private static final HashMap<String,Integer> STYLE_TO_CONST = new HashMap<String,Integer>();
     
     private static String[] lslPlusKeywords = {
             "$module", "jump", "default", "do", "else", "for", "if", "$import", "state", "return", "while" }; //$NON-NLS-11$ //$NON-NLS-10$ //$NON-NLS-9$ //$NON-NLS-8$ //$NON-NLS-7$ //$NON-NLS-6$ //$NON-NLS-5$ //$NON-NLS-4$ //$NON-NLS-3$ //$NON-NLS-2$ //$NON-NLS-1$
@@ -90,7 +90,7 @@ public class LslCodeScanner extends RuleBasedScanner implements ColorProviderLis
     private String[] predefFuncNames;
     private String[] predefConstNames;
 
-    private HashSet listeners = new HashSet();
+    private HashSet<ScannerChangeListener> listeners = new HashSet<ScannerChangeListener>();
 
     private IPreferenceStore store;
 
@@ -138,7 +138,7 @@ public class LslCodeScanner extends RuleBasedScanner implements ColorProviderLis
     private int computeBits(String s0) {
         int x = 0;
         for (int i = 0; i < STYLES.length; i++) {
-            x |= computeBit(store.getBoolean(mkId(s0,STYLES[i])), ((Integer)STYLE_TO_CONST.get(STYLES[i])).intValue());
+            x |= computeBit(store.getBoolean(mkId(s0,STYLES[i])), STYLE_TO_CONST.get(STYLES[i]).intValue());
         }
         return x;
     }
@@ -162,7 +162,7 @@ public class LslCodeScanner extends RuleBasedScanner implements ColorProviderLis
                 .getColor(LslColorProvider.PREDEF_FUNC_COLOR), null, computeBits(PREDEF_FUNC_STYLE)));
         IToken predefConst = new Token(new TextAttribute(provider
                 .getColor(LslColorProvider.PREDEF_CONST_COLOR), null, computeBits(PREDEF_CONST_STYLE)));
-        List rules = new ArrayList();
+        List<IRule> rules = new ArrayList<IRule>();
 
         // Add rule for single line comments.
         rules.add(new EndOfLineRule("//", comment)); //$NON-NLS-1$
@@ -201,10 +201,10 @@ public class LslCodeScanner extends RuleBasedScanner implements ColorProviderLis
     private void onChange() {
         initRules(provider, handlerNames, predefFuncNames, predefConstNames);
 
-        Iterator i = listeners.iterator();
+        Iterator<ScannerChangeListener> i = listeners.iterator();
         
         while (i.hasNext()) {
-            ((ScannerChangeListener)i.next()).scannerChanged();
+            i.next().scannerChanged();
         }
     }
     

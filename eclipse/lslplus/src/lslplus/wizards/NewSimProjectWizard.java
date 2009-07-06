@@ -31,7 +31,7 @@ public class NewSimProjectWizard extends Wizard implements INewWizard {
 
 		protected InputStream getInitialContents() {
 			return new ByteArrayInputStream(
-					SimProject.toXml(new SimProject.WorldNode("world")).getBytes());
+					SimProject.toXml(new SimProject.WorldNode("world")).getBytes()); //$NON-NLS-1$
 		}
 
 		protected IStatus validateFileName(String fileName) {

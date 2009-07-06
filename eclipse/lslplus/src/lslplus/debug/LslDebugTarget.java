@@ -128,7 +128,7 @@ public class LslDebugTarget implements IDebugTarget, IProcessListener {
     private DebugException notSupported() throws DebugException {
         return new DebugException(
                 new Status(IStatus.ERROR,LslPlusPlugin.PLUGIN_ID,
-                        DebugException.NOT_SUPPORTED,"",null));
+                        DebugException.NOT_SUPPORTED,"",null)); //$NON-NLS-1$
     }
 
     public boolean isDisconnected() {
@@ -151,7 +151,8 @@ public class LslDebugTarget implements IDebugTarget, IProcessListener {
         return launch;
     }
 
-    public Object getAdapter(Class adapter) {
+    @SuppressWarnings("unchecked")
+	public Object getAdapter(Class adapter) {
 
         if (ILaunch.class.equals(adapter)) {
             return getLaunch();

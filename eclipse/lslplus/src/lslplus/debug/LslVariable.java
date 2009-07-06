@@ -52,18 +52,19 @@ public class LslVariable implements IVariable {
         return target.getModelIdentifier();
     }
 
-    public Object getAdapter(Class adapter) {
+    @SuppressWarnings("unchecked")
+	public Object getAdapter(Class adapter) {
         return null;
     }
 
     public void setValue(String expression) throws DebugException {
         throw new DebugException(new Status(IStatus.ERROR, LslPlusPlugin.PLUGIN_ID, 
-                DebugException.NOT_SUPPORTED, "",null));
+                DebugException.NOT_SUPPORTED, "",null)); //$NON-NLS-1$
     }
 
     public void setValue(IValue value) throws DebugException {
         throw new DebugException(new Status(IStatus.ERROR, LslPlusPlugin.PLUGIN_ID, 
-                DebugException.NOT_SUPPORTED, "",null));
+                DebugException.NOT_SUPPORTED, "",null)); //$NON-NLS-1$
     }
 
     public boolean supportsValueModification() {
@@ -72,12 +73,12 @@ public class LslVariable implements IVariable {
 
     public boolean verifyValue(String expression) throws DebugException {
         throw new DebugException(new Status(IStatus.ERROR, LslPlusPlugin.PLUGIN_ID, 
-                DebugException.NOT_SUPPORTED, "",null));
+                DebugException.NOT_SUPPORTED, "",null)); //$NON-NLS-1$
     }
 
     public boolean verifyValue(IValue value) throws DebugException {
         throw new DebugException(new Status(IStatus.ERROR, LslPlusPlugin.PLUGIN_ID, 
-                DebugException.NOT_SUPPORTED, "",null));
+                DebugException.NOT_SUPPORTED, "",null)); //$NON-NLS-1$
     }
 
 }

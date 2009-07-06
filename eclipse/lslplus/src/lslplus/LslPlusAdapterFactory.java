@@ -13,6 +13,7 @@ import org.eclipse.ui.part.FileEditorInput;
  */
 public class LslPlusAdapterFactory implements IAdapterFactory {
 
+	@SuppressWarnings("unchecked")
 	public Object getAdapter(Object adaptableObject, Class adapterType) {
 		if (adaptableObject instanceof LslPlusElement &&
 		    adapterType == IResource.class) {
@@ -39,6 +40,7 @@ public class LslPlusAdapterFactory implements IAdapterFactory {
 		return null;
 	}
 
+	@SuppressWarnings("unchecked")
 	public Class[] getAdapterList() {
 		return new Class[] {
 				IResource.class,

@@ -243,7 +243,7 @@ public class LslPlusAutoIndentStrategy extends DefaultIndentLineAutoEditStrategy
             command.text = buf.toString();
 
         } catch (BadLocationException e) {
-            Util.log(e, e.getLocalizedMessage());
+            Util.error(e, e.getLocalizedMessage());
         }
     }
 
@@ -284,7 +284,7 @@ public class LslPlusAutoIndentStrategy extends DefaultIndentLineAutoEditStrategy
                 }
             }
         } catch (BadLocationException e) {
-            Util.log(e, e.getLocalizedMessage());
+            Util.error(e, e.getLocalizedMessage());
         }
     }
 }

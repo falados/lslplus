@@ -37,6 +37,8 @@ import org.eclipse.jface.text.contentassist.ContentAssistant;
 import org.eclipse.jface.text.contentassist.IContentAssistant;
 import org.eclipse.jface.text.presentation.IPresentationReconciler;
 import org.eclipse.jface.text.presentation.PresentationReconciler;
+import org.eclipse.jface.text.reconciler.IReconciler;
+import org.eclipse.jface.text.reconciler.MonoReconciler;
 import org.eclipse.jface.text.rules.BufferedRuleBasedScanner;
 import org.eclipse.jface.text.rules.DefaultDamagerRepairer;
 import org.eclipse.jface.text.rules.Token;
@@ -52,8 +54,9 @@ import org.eclipse.swt.widgets.Shell;
 public class LslSourceViewerConfiguration extends SourceViewerConfiguration 
 implements ScannerChangeListener {
 
-    private HashSet listeners = new HashSet();
+    private HashSet<SourceViewerConfigurationListener> listeners = new HashSet<SourceViewerConfigurationListener>();
     private LslCodeScanner scanner;
+    private LslPlusEditor editor;
     
     static class SingleTokenScanner extends BufferedRuleBasedScanner {
         public SingleTokenScanner(TextAttribute attribute) {
@@ -63,11 +66,12 @@ implements ScannerChangeListener {
 
     /**
      * Default constructor.
+     * @param editor the editor
      */
-    public LslSourceViewerConfiguration() {
+    public LslSourceViewerConfiguration(LslPlusEditor editor) {
         this.scanner = LslPlusPlugin.getDefault().getLslCodeScanner();
         scanner.addListener(this);
-        
+        this.editor = editor;
     }
     
     public void addListener(SourceViewerConfigurationListener listener) {
@@ -180,16 +184,17 @@ implements ScannerChangeListener {
         return reconciler;
     }
 
-    /*
-     * (non-Javadoc) Method declared on SourceViewerConfiguration
-     */
+    @Override
+    public IReconciler getReconciler(ISourceViewer sourceViewer) {
+    	LslPlusReconcilingStrategy strat = new LslPlusReconcilingStrategy(this.editor);
+    	MonoReconciler reconciler = new MonoReconciler(strat, false);
+    	return reconciler;
+    }
+
     public int getTabWidth(ISourceViewer sourceViewer) {
         return 4;
     }
 
-    /*
-     * (non-Javadoc) Method declared on SourceViewerConfiguration
-     */
     public ITextHover getTextHover(ISourceViewer sourceViewer, String contentType) {
         return new LslTextHover();
     }
@@ -200,10 +205,12 @@ implements ScannerChangeListener {
     }
 
     public void scannerChanged() {
-        Iterator i = listeners.iterator();
+        Iterator<SourceViewerConfigurationListener> i = listeners.iterator();
         
         while (i.hasNext()) {
-            ((SourceViewerConfigurationListener)i.next()).configurationChanged();
+            i.next().configurationChanged();
         }
     }
+    
+    
 }

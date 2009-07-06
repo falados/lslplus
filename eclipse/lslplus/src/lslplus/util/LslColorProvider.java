@@ -2,7 +2,6 @@ package lslplus.util;
 
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.Map;
 
 import org.eclipse.jface.preference.IPreferenceStore;
@@ -39,8 +38,8 @@ public class LslColorProvider implements IPropertyChangeListener {
     private static final RGB STRING              = new RGB(0, 128, 128);
     private static final RGB TYPE                = new RGB(0, 0, 128);
 
-    protected Map colorTable = new HashMap(10);
-    private HashSet listeners = new HashSet();
+    protected Map<RGB, Color> colorTable = new HashMap<RGB,Color>(10);
+    private HashSet<ColorProviderListener> listeners = new HashSet<ColorProviderListener>();
     private IPreferenceStore store;
 
     public LslColorProvider(IPreferenceStore store) {
@@ -61,9 +60,7 @@ public class LslColorProvider implements IPropertyChangeListener {
      * Release all of the color resources held onto by the receiver.
      */
     public void dispose() {
-        Iterator e = colorTable.values().iterator();
-        while (e.hasNext())
-            ((Color) e.next()).dispose();
+    	for (Color c : colorTable.values()) c.dispose();
     }
 
     /**
@@ -74,7 +71,7 @@ public class LslColorProvider implements IPropertyChangeListener {
      * @return the color stored in the color table for the given RGB value
      */
     public Color getColor(RGB rgb) {
-        Color color = (Color) colorTable.get(rgb);
+        Color color = colorTable.get(rgb);
         if (color == null) {
             color = new Color(Display.getCurrent(), rgb);
             colorTable.put(rgb, color);
@@ -85,7 +82,7 @@ public class LslColorProvider implements IPropertyChangeListener {
     public Color getColor(String colorId) {
         RGB rgb = PreferenceConverter.getColor(store, colorId);
         if (rgb == null) rgb = DEFAULT;
-        Color color = (Color) colorTable.get(rgb);
+        Color color = colorTable.get(rgb);
         if (color == null)  {
             color = new Color(Display.getCurrent(), rgb);
             colorTable.put(rgb, color);
@@ -102,9 +99,6 @@ public class LslColorProvider implements IPropertyChangeListener {
     }
     
     public void propertyChange(PropertyChangeEvent event) {
-        Iterator i = listeners.iterator();
-        while (i.hasNext()) {
-            ((ColorProviderListener)i.next()).onColorChange();
-        }
+        for (ColorProviderListener p : listeners) p.onColorChange();
     }
 }

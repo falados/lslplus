@@ -17,7 +17,7 @@ public class LslStackFrame implements IStackFrame{
     private String file;
     private IThread thread;
     private IVariable[] variables;
-    private boolean stepping;
+    //private boolean stepping;
     private int line;
     public LslStackFrame(
             String name, 
@@ -84,7 +84,8 @@ public class LslStackFrame implements IStackFrame{
         return getDebugTarget().getModelIdentifier();
     }
 
-    public Object getAdapter(Class adapter) {
+    @SuppressWarnings("unchecked")
+	public Object getAdapter(Class adapter) {
         //Util.log("lslStackFrame - asked to adapt to: " + adapter);
         return null;
     }

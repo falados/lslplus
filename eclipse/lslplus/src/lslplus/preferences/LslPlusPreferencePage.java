@@ -46,9 +46,9 @@ public class LslPlusPreferencePage extends FieldEditorPreferencePage implements
             for (int i = 0; i < p.length; i++) {
                 try {
                     LslProjectNature nature = (LslProjectNature) p[i].getNature(LslProjectNature.ID);
-                    if (nature != null) nature.scheduleBuild();
+                    if (nature != null) nature.scheduleBuild(true,null,null);
                 } catch (CoreException e) {
-                    Util.log(e, "problem determining project nature"); //$NON-NLS-1$
+                    Util.error(e, "problem determining project nature"); //$NON-NLS-1$
                 }
             }
             return true;

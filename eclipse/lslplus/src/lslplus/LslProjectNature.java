@@ -4,11 +4,32 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
+import lslplus.cserver.CompilationServer;
+import lslplus.cserver.CompilationServer.Result;
+import lslplus.generated.CompilationCommand_Init;
+import lslplus.generated.CompilationCommand_RemoveScript;
+import lslplus.generated.CompilationCommand_UpdateScript;
+import lslplus.generated.CompilationResponse;
+import lslplus.generated.CompilationResponse_FullSourceValidation;
+import lslplus.generated.CompilationStatus;
+import lslplus.generated.CompilationStatus_CompilationStatus;
+import lslplus.generated.EPSummary;
+import lslplus.generated.EPSummary_EPSummary;
+import lslplus.generated.Either_Left;
+import lslplus.generated.Either_Right;
+import lslplus.generated.ErrInfo;
+import lslplus.generated.ErrInfo_ErrInfo;
+import lslplus.generated.GlobalSummary;
+import lslplus.generated.LSLType;
+import lslplus.generated.Maybe_Just;
+import lslplus.generated.TextLocation;
+import lslplus.generated.TextLocation_TextLocation;
+import lslplus.generated.Tuple2;
+import lslplus.generated.Tuple3;
 import lslplus.language_metadata.LslParam;
 import lslplus.util.Util;
 
@@ -30,9 +51,6 @@ import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
 
-import com.thoughtworks.xstream.XStream;
-import com.thoughtworks.xstream.io.xml.DomDriver;
-
 /**
  * Represents LSL Plus projects.  LSL modules, scripts and tests are intended
  * to be created within the context of an LSL Plus project, and and LSL Plus
@@ -44,15 +62,31 @@ import com.thoughtworks.xstream.io.xml.DomDriver;
 public class LslProjectNature implements IProjectNature, IResourceChangeListener {
 	public static final String OPTIMIZE = "optimize"; //$NON-NLS-1$
 
-    private class DeltaVisitor implements IResourceDeltaVisitor {
-		private boolean lslContentChange = false;
-		private LinkedList newDerivedResources = new LinkedList();
-		public List getNewDerivedResources() {
+    private static class BetterDeltaVisitor implements IResourceDeltaVisitor {
+		private boolean recompileAll = false;
+		private LinkedList<IResource> newDerivedResources = new LinkedList<IResource>();
+		private LinkedList<LslPlusElement> addsAndUpdates = new LinkedList<LslPlusElement>();
+		private LinkedList<LslPlusElement> removals = new LinkedList<LslPlusElement>();
+		private IProject project;
+		
+		public BetterDeltaVisitor(IProject p) {
+			project = p;
+		}
+		
+		public List<LslPlusElement> getAddsAndUpdates() {
+			return addsAndUpdates;
+		}
+		
+		public List<LslPlusElement> getRemovals() {
+			return removals;
+		}
+		
+		public List<IResource> getNewDerivedResources() {
 			return newDerivedResources;
 		}
 		
-		public boolean hasLslContentChange() {
-			return lslContentChange;
+		public boolean isRecompileAll() {
+			return recompileAll;
 		}
 		
 		public boolean visit(IResourceDelta delta) throws CoreException {
@@ -63,17 +97,29 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 				}
 
 				LslPlusElement element = (LslPlusElement) resource.getAdapter(LslPlusElement.class);
+				
 				if (element != null) {
-					if (delta.getKind() == IResourceDelta.ADDED ||
-					    delta.getKind() == IResourceDelta.REMOVED) {
-						lslContentChange = true;
-					} else if (delta.getKind() == IResourceDelta.CHANGED &&
-							   ((delta.getFlags() & IResourceDelta.REPLACED) != 0 ||
-							    (delta.getFlags() & IResourceDelta.CONTENT) != 0)) {
-						lslContentChange = true;
+					if (element.isModule()) {
+						recompileAll = recompileAll || 
+							(delta.getKind() == IResourceDelta.ADDED ||
+						     delta.getKind() == IResourceDelta.REMOVED ||
+						     (delta.getKind() == IResourceDelta.CHANGED &&
+						      ((delta.getFlags() & IResourceDelta.REPLACED) != 0 ||
+						       (delta.getFlags() & IResourceDelta.CONTENT) != 0)));
+					}  else {
+						if (delta.getKind() == IResourceDelta.ADDED ||
+							(delta.getKind() == IResourceDelta.CHANGED &&
+									((delta.getFlags() & IResourceDelta.REPLACED) != 0 ||
+										    (delta.getFlags() & IResourceDelta.CONTENT) != 0))) {
+							addsAndUpdates.add(element);
+						} else if (delta.getKind() == IResourceDelta.REMOVED) {
+							removals.add(element);
+						}
+						
 					}
 				} else {
-					LslDerivedScript script = (LslDerivedScript) resource.getAdapter(LslDerivedScript.class);
+					LslDerivedScript script = 
+						(LslDerivedScript) resource.getAdapter(LslDerivedScript.class);
 					if (script != null && delta.getKind() == IResourceDelta.ADDED) {
 						newDerivedResources.add(resource);
 					}
@@ -144,19 +190,19 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 		private static final String SCRIPTS_END = "</scripts>"; //$NON-NLS-1$
 		private static final String SOURCE_LIST_BEGIN = "<source_files>"; //$NON-NLS-1$
 		private static final String SOURCE_LIST_END = "</source_files>"; //$NON-NLS-1$
-		private HashMap moduleMap = new HashMap();
-		private HashMap moduleNameToPath = new HashMap();
-		private HashMap scriptMap = new HashMap();
-		private HashMap scriptNameToPath = new HashMap();
+		private HashMap<String,String> moduleMap = new HashMap<String,String>();
+		private HashMap<String,String> moduleNameToPath = new HashMap<String,String>();
+		private HashMap<String,String> scriptMap = new HashMap<String,String>();
+		private HashMap<String,String> scriptNameToPath = new HashMap<String,String>();
 		private boolean optimize;
 		
 		public SourceListBuilder(boolean addOptimizeOption) {
 		    optimize = addOptimizeOption;
 		}
 		
-		private void buildItemList(StringBuilder buf, Map m) {
-			for (Iterator i = m.entrySet().iterator(); i.hasNext();) {
-				Map.Entry e = (Map.Entry) i.next();
+		private void buildItemList(StringBuilder buf, Map<String,String> m) {
+			//for (Iterator i = m.entrySet().iterator(); i.hasNext();) {
+            for (Map.Entry<String, String> e : m.entrySet()) {
 				buf.append(ITEM_BEGIN);
 				buf.append(IDENTIFIER_BEGIN);
 				buf.append(e.getKey());
@@ -169,11 +215,11 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 		}
 		
 		public String getModulePath(String name) {
-			return (String) moduleNameToPath.get(name);
+			return moduleNameToPath.get(name);
 		}
 
 		public String getScriptPath(String name) {
-			return (String) scriptNameToPath.get(name);
+			return scriptNameToPath.get(name);
 		}
 		
 		public boolean visit(IResource resource) throws CoreException {
@@ -211,18 +257,21 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 	}
 	
 	public static class Summary {
-		private Item[] modules; 
-		private Item[] scripts;
-		public Item[] getModules() {
+//		private Item[] modules; 
+//		private Item[] scripts;
+		private LinkedList<CompilationStatus> modules;
+		private LinkedList<CompilationStatus> scripts;
+		
+		public LinkedList<CompilationStatus> getModules() {
 			return modules;
 		}
-		public Item[] getScripts() {
+		public LinkedList<CompilationStatus> getScripts() {
 			return scripts;
 		}
-		public void setModules(Item[] modules) {
+		public void setModules(LinkedList<CompilationStatus> modules) {
 			this.modules = modules;
 		}
-		public void setScripts(Item[] scripts) {
+		public void setScripts(LinkedList<CompilationStatus> scripts) {
 			this.scripts = scripts;
 		}
 	}
@@ -233,71 +282,122 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 
 	private static final String LSLPLUS_PROBLEM = "lslplus.problem"; //$NON-NLS-1$
 
-	private Map entryPoints;
-	private Map globalVariables;
+	private Map<String,LinkedList<EPSummary>> entryPoints;
+	private Map<String,LinkedList<GlobalSummary>> globalVariables;
 	private IProject project;
 	
 	private Summary summary;
 
+	private CompilationServer cserver;
 	public LslProjectNature() {
 		if (LslPlusPlugin.DEBUG) Util.log("creating project nature"); //$NON-NLS-1$
 		ResourcesPlugin.getWorkspace().addResourceChangeListener(this);
+		cserver = new CompilationServer();
 	}
 	
-	private synchronized void checkForErrors() {
+	public CompilationServer getCompilationServer() {
+	    return cserver;
+	}
+	
+	private synchronized void checkForErrors(boolean recompileAll, List<LslPlusElement> scriptChanges,
+			List<LslPlusElement> scriptRemovals) {
 		
 		try {
-		    boolean optimize = LslPlusPlugin.getDefault().getPreferenceStore().getBoolean(OPTIMIZE);
-			final SourceListBuilder builder = new SourceListBuilder(optimize);
-			project.accept(builder);
-			String descriptor = builder.xmlDescriptor();
-			if (LslPlusPlugin.DEBUG) Util.log("descriptor: " + descriptor); //$NON-NLS-1$
-			String result = LslPlusPlugin.runTask("Compiler", descriptor); //$NON-NLS-1$
-			if (LslPlusPlugin.DEBUG) Util.log("result: " + result); //$NON-NLS-1$
-			if (result == null) return;
-			XStream xstream = new XStream(new DomDriver());
-
-			xstream.alias("summary", Summary.class); //$NON-NLS-1$
-			xstream.alias("item", Item.class); //$NON-NLS-1$
-			xstream.alias("entryPoint", EntryPointDefinition.class); //$NON-NLS-1$
-			xstream.alias("param", LslParam.class); //$NON-NLS-1$
-			xstream.alias("global", NameTypePair.class); //$NON-NLS-1$
-			xstream.alias("itemError", ItemError.class); //$NON-NLS-1$
-			summary = (Summary) xstream.fromXML(result);
-			final HashMap map = new HashMap();
-			synchronized (this) {
-				entryPoints = new HashMap();
-				globalVariables = new HashMap();
-			    for (int i = 0; i < summary.getModules().length; i++) {
-			    	Item item = summary.getModules()[i];
-			    	map.put(builder.getModulePath(item.name), item.status);
-			    	if (item.status.ok) {
-			    		entryPoints.put(item.name, item.entryPoints);
-			    		globalVariables.put(item.name, item.getGlobals());
-			    	}
-			    }
-			    
-			    for (int i = 0; i < summary.getScripts().length; i++) {
-			    	Item item = summary.getScripts()[i];
-			    	map.put(builder.getScriptPath(summary.getScripts()[i].name), summary.getScripts()[i].status);
-			    	if (item.status.ok) {
-			    		entryPoints.put(item.name, item.entryPoints);
-			    		globalVariables.put(item.name, item.getGlobals());
-			    	}
-			    }
-			}
-
-			project.accept(new IResourceVisitor() {
-				public boolean visit(IResource resource) throws CoreException {
-					hasError(resource, map);
-					return true;
+			if (scriptRemovals != null) {
+				for (LslPlusElement e : scriptRemovals) {
+					String name = resourceToLslPlusName(e.getResource());
+					String path = e.getResource().getLocation().toOSString();
+					CompilationCommand_RemoveScript cmd = new CompilationCommand_RemoveScript();
+					cmd.el1 = new Tuple2<String, String>();
+					cmd.el1.el1 = name;
+					cmd.el1.el2 = path;
+					Result r = cserver.execute(cmd);
+					r.get(); // don't care about response...
 				}
-			});
+			}
+			
+			CompilationResponse response = null;
+			
+			if (recompileAll || (scriptChanges != null && scriptChanges.size() != 0)) {
+				boolean optimize = 
+					LslPlusPlugin.getDefault().getPreferenceStore().getBoolean(OPTIMIZE);
+				final lslplus.cserver.SourceListBuilder builder = 
+					new lslplus.cserver.SourceListBuilder(optimize);
+				project.accept(builder);
+				if (recompileAll) {
+					Tuple3<Boolean, LinkedList<Tuple2<String, String>>, 
+						LinkedList<Tuple2<String, String>>> cinfo = builder
+							.compilationInfo();
+					CompilationCommand_Init cc = new CompilationCommand_Init();
+					cc.el1 = cinfo;
 
+					Result r = cserver.execute(cc);
+
+					response = r.get();
+				} else {
+					for (LslPlusElement e : scriptChanges) {
+						CompilationCommand_UpdateScript cmd = new CompilationCommand_UpdateScript();
+						cmd.el1 = new Tuple2<String, String>();
+						cmd.el1.el1 = resourceToLslPlusName(e.getResource());
+						cmd.el1.el2 = e.getResource().getLocation().toOSString();
+						Result r = cserver.execute(cmd);
+						response = r.get(); // wait for response... only care about last one!
+					}
+				}
+				
+				if (!(response instanceof CompilationResponse_FullSourceValidation)) {
+					Util.error("unexpected response from compilation server"); //$NON-NLS-1$
+					return;
+				}
+				CompilationResponse_FullSourceValidation validation = 
+					(CompilationResponse_FullSourceValidation) response;
+				summary = new Summary();
+				summary.setModules(validation.el1.el1);
+				summary.setScripts(validation.el1.el2);
+				final HashMap<String, LinkedList<ErrInfo>> map = new HashMap<String, LinkedList<ErrInfo>>();
+				synchronized (this) {
+					entryPoints = new HashMap<String, LinkedList<EPSummary>>();
+					globalVariables = new HashMap<String, LinkedList<GlobalSummary>>();
+					for (CompilationStatus status0 : summary.getModules()) {
+						CompilationStatus_CompilationStatus status = (CompilationStatus_CompilationStatus) status0;
+
+						map.put(builder.getModulePath(status.csName),
+										(status.csInfo instanceof Either_Right) ? new LinkedList<ErrInfo>()
+												: ((Either_Left<LinkedList<ErrInfo>, Tuple2<LinkedList<GlobalSummary>, LinkedList<EPSummary>>>) status.csInfo).el1);
+						if (status.csInfo instanceof Either_Right) {
+							Either_Right<LinkedList<ErrInfo>, Tuple2<LinkedList<GlobalSummary>, LinkedList<EPSummary>>> info = (Either_Right<LinkedList<ErrInfo>, Tuple2<LinkedList<GlobalSummary>, LinkedList<EPSummary>>>) status.csInfo;
+
+							entryPoints.put(status.csName, info.el1.el2);
+							globalVariables.put(status.csName, info.el1.el1);
+						}
+					}
+
+					for (CompilationStatus status0 : summary.getScripts()) {
+						CompilationStatus_CompilationStatus status = (CompilationStatus_CompilationStatus) status0;
+
+						map.put(builder.getScriptPath(status.csName),
+										(status.csInfo instanceof Either_Right) ? new LinkedList<ErrInfo>()
+												: ((Either_Left<LinkedList<ErrInfo>, Tuple2<LinkedList<GlobalSummary>, LinkedList<EPSummary>>>) status.csInfo).el1);
+						if (status.csInfo instanceof Either_Right) {
+							Either_Right<LinkedList<ErrInfo>, Tuple2<LinkedList<GlobalSummary>, LinkedList<EPSummary>>> info = (Either_Right<LinkedList<ErrInfo>, Tuple2<LinkedList<GlobalSummary>, LinkedList<EPSummary>>>) status.csInfo;
+
+							entryPoints.put(status.csName, info.el1.el2);
+							globalVariables.put(status.csName, info.el1.el1);
+						}
+					}
+				}
+				project.accept(new IResourceVisitor() {
+					public boolean visit(IResource resource)
+							throws CoreException {
+						hasError(resource, map);
+						return true;
+					}
+				});
+			}
 		} catch (CoreException e) {
-			Util.log(e, e.getLocalizedMessage());
+			Util.error(e, e.getLocalizedMessage());
 		} catch (Exception e) {
-			Util.log(e, e.getLocalizedMessage());
+			Util.error(e, e.getLocalizedMessage());
 		}
 		
 		LslPlusPlugin.getDefault().errorStatusChanged();
@@ -323,74 +423,85 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 	
 	public synchronized String[] getEntryPointNames(String fileName) {
 		if (fileName == null) return null;
-		EntryPointDefinition[] eps = (EntryPointDefinition[]) entryPoints.get(fileName);
+		LinkedList<EPSummary> eps = entryPoints.get(fileName);
+		//EntryPointDefinition[] eps = (EntryPointDefinition[]) entryPoints.get(fileName);
 		if (eps == null) return new String[0];
-		String[] paths = new String[eps.length];
-		for (int i = 0; i < eps.length; i++) paths[i] = eps[i].name;
+		String[] paths = new String[eps.size()];
+		int i = 0;
+		for (EPSummary s : eps) paths[i++] = ((EPSummary_EPSummary)s).epName;
 		Arrays.sort(paths);
 		return paths;
 	}
 	
 	
-	public LslParam[] getParams(String fileName, final String entryPointName) {
-		EntryPointDefinition[] eps = (EntryPointDefinition[]) entryPoints.get(fileName);
+	public LinkedList<Tuple2<String,LSLType>> getParams(String fileName, final String entryPointName) {
+		LinkedList<EPSummary> eps = entryPoints.get(fileName);
 		if (eps == null) return null;
 		
-		EntryPointDefinition ep = (EntryPointDefinition) Util.find(new Util.Predicate() {
-			public boolean test(Object o) { return ((EntryPointDefinition)o).name.equals(entryPointName); }
-		}, eps);
+		EPSummary_EPSummary ep = null;
+		for (EPSummary s0 : eps) {
+			EPSummary_EPSummary s = (EPSummary_EPSummary) s0;
+			
+			if (s.epName.equals(entryPointName)) {
+				ep = s;
+				break;
+			}
+		}
 		if (ep == null) return null;
-		return ep.params;
+		return ep.epParams;
 	}
 	
-	public String getReturnType(String fileName, final String entryPointName) {
-		EntryPointDefinition[] eps = (EntryPointDefinition[]) entryPoints.get(fileName);
+	public LSLType getReturnType(String fileName, final String entryPointName) {
+		LinkedList<EPSummary> eps = entryPoints.get(fileName);
 		if (eps == null) return null;
-		EntryPointDefinition ep = (EntryPointDefinition) Util.find(new Util.Predicate() {
-			public boolean test(Object o) { return ((EntryPointDefinition)o).name.equals(entryPointName); }
-		}, eps);
-	    if (ep == null) return null;
-	    return ep.returnType;
+		
+		EPSummary_EPSummary ep = null;
+		for (EPSummary s0 : eps) {
+			EPSummary_EPSummary s = (EPSummary_EPSummary) s0;
+			
+			if (s.epName.equals(entryPointName)) {
+				ep = s;
+				break;
+			}
+		}
+		if (ep == null) return null;
+	    return ep.epType;
 	}
 	
 	public synchronized String[] getLslFiles() {
 		if (entryPoints == null) return new String[0];
-		String[] files = (String[]) entryPoints.keySet().toArray(new String[entryPoints.size()]);
+		String[] files = entryPoints.keySet().toArray(new String[entryPoints.size()]);
 		Arrays.sort(files);
 		return files;
 	}
 	
 	public String[] getLslScripts() {
 	    if (entryPoints == null) return new String[0];
-	    ArrayList l = new ArrayList();
+	    ArrayList<String> l = new ArrayList<String>();
 	    
 	    synchronized (this) {
-	        for (Iterator  i = entryPoints.keySet().iterator(); i.hasNext();) {
-	            String name = (String) i.next();
-	            
+	    	for (String name : entryPoints.keySet()) {
 	            if (name.endsWith(".lslp")) { //$NON-NLS-1$
 	                l.add(name);
 	            }
-	        }
+	    	}
 	    }
 	    
-	    String[] scripts = (String[]) l.toArray(new String[l.size()]);
+	    String[] scripts = l.toArray(new String[l.size()]);
 	    Arrays.sort(scripts);
 	    return scripts;
 	}
 	
-    public List getLslModules() {
-        ArrayList l = new ArrayList();
+    public List<String> getLslModules() {
+        ArrayList<String> l = new ArrayList<String>();
         if (entryPoints == null) return l;
         
         synchronized (this) {
-            for (Iterator  i = entryPoints.keySet().iterator(); i.hasNext();) {
-                String name = (String) i.next();
-                
-                if (name.endsWith(".lslm")) { //$NON-NLS-1$
-                    l.add(name);
-                }
-            }
+	    	for (String name : entryPoints.keySet()) {
+	            if (name.endsWith(".lslp")) { //$NON-NLS-1$
+	                l.add(name);
+	            }
+	    	}
         }
         
         Collections.sort(l);
@@ -406,7 +517,7 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 		return summary;
 	}
 	
-	private void hasError(IResource resource, Map summary) {
+	private void hasError(IResource resource, Map<String,LinkedList<ErrInfo>> summary) {
 		if (resource instanceof IFile) {
 			IFile f = (IFile) resource;
 			if (f.exists()) {
@@ -415,23 +526,25 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 					resource.deleteMarkers(LSLPLUS_PROBLEM, true, IResource.DEPTH_ONE);
 					String key = resource.getProjectRelativePath().toString();
 					
-					ItemStatus status = (ItemStatus) summary.get(key);
-					if (status != null && !status.ok) {
-					    for (int j = 0; j < status.errs.length; j++) {
-                            ItemError err = status.errs[j];
+					LinkedList<ErrInfo> status = summary.get(key);
+					if (status != null && status.size() > 0) {
+						for (ErrInfo ei0 : status) {
+							ErrInfo_ErrInfo err = (ErrInfo_ErrInfo) ei0;
                             IMarker i = resource.createMarker(LSLPLUS_PROBLEM);
-                            i.setAttribute(IMarker.MESSAGE, err.msg);
+                            i.setAttribute(IMarker.MESSAGE, err.el2);
                             i.setAttribute(IMarker.SEVERITY,
                                     IMarker.SEVERITY_ERROR);
-                            if (err.errLoc != null) {
-                                int lineOffset0 = err.errLoc.lineStart - 1;
-                                int lineOffset1 = err.errLoc.lineEnd - 1;
+                            if (err.el1 instanceof Maybe_Just) {
+                            	TextLocation_TextLocation errLoc = (TextLocation_TextLocation)
+                            		((Maybe_Just<TextLocation>)err.el1).el1;
+                                int lineOffset0 = errLoc.textLine0 - 1;
+                                int lineOffset1 = errLoc.textLine1 - 1;
                                 i.setAttribute(IMarker.LINE_NUMBER,
-                                        err.errLoc.lineStart);
+                                        errLoc.textLine0);
                                 int[] offsets = Util.findOffsetsFor(new int[] {
                                         lineOffset0, lineOffset1 }, new int[] {
-                                        err.errLoc.columnStart - 1,
-                                        err.errLoc.columnEnd - 1 }, f);
+                                        errLoc.textColumn0 - 1,
+                                        errLoc.textColumn1 - 1 }, f);
                                 if (offsets != null) {
                                     if (offsets[0] == offsets[1])
                                         offsets[1]++;
@@ -444,43 +557,39 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
                             }
                         }
 					    
-                        Util.log("Marked " + key);
+                        Util.log("Marked " + key); //$NON-NLS-1$
 					}
 				} catch (CoreException e) {
-					Util.log(e, "error reading file"); //$NON-NLS-1$
+					Util.error(e, "error reading file"); //$NON-NLS-1$
 				}
 			}
 		}
 	}
 	
 	public void resourceChanged(IResourceChangeEvent event) {
-	    Util.log("resource changed!");
+	    Util.log("resource changed!"); //$NON-NLS-1$
 		final IResourceDelta delta = event.getDelta();
 
-		DeltaVisitor dv = new DeltaVisitor();
-		
+		//DeltaVisitor dv = new DeltaVisitor();
+		BetterDeltaVisitor dv = new BetterDeltaVisitor(this.project);
 		boolean checkErrors = false;
 		try {
 		    delta.accept(dv);
-		    checkErrors = dv.hasLslContentChange();
+		    checkErrors = dv.isRecompileAll();
 		} catch (CoreException e) {
 			checkErrors = true;
-			Util.log(e, e.getLocalizedMessage());
+			Util.error(e, e.getLocalizedMessage());
 		}
 		
-		if (checkErrors) {
-		    scheduleBuild();
-		}
+        scheduleBuild(checkErrors, dv.getAddsAndUpdates(), dv.getRemovals());
 		
-		final List newDerivedResources = dv.getNewDerivedResources();
+		final List<IResource> newDerivedResources = dv.getNewDerivedResources();
 		if (newDerivedResources != null && newDerivedResources.size() > 0) {
 			WorkspaceJob job = new WorkspaceJob("MarkDerived") { //$NON-NLS-1$
 
 				public IStatus runInWorkspace(IProgressMonitor monitor)
 						throws CoreException {
-					for (Iterator i = newDerivedResources.iterator();
-					     i.hasNext(); ) {
-						IResource r = (IResource) i.next();
+				    for (IResource r : newDerivedResources) {
 						r.setDerived(true);
 						if (r instanceof IFile) {
 						    ((IFile)r).setCharset("UTF-8", monitor); //$NON-NLS-1$
@@ -496,12 +605,13 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 		}
 	}
 
-    public void scheduleBuild() {
-        Util.log("check errors!");
+    public void scheduleBuild(final boolean recompileAll, final List<LslPlusElement> scriptChanges,
+    		final List<LslPlusElement> scriptRemovals) {
+        Util.log("check errors!"); //$NON-NLS-1$
         WorkspaceJob job = new WorkspaceJob("EvaluateErrors") { //$NON-NLS-1$
 
         	public IStatus runInWorkspace(IProgressMonitor monitor) {
-        		checkForErrors();
+        		checkForErrors(recompileAll, scriptChanges, scriptRemovals);
         		return new Status(IStatus.OK,LSLPLUS, Messages.ProjectNature_OK);
         	}
         	
@@ -512,7 +622,7 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 	
 	public void setProject(IProject project) {
 		this.project = project;
-		checkForErrors();
+		checkForErrors(true, null, null);
 	}
 
 	/**
@@ -526,8 +636,9 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
         return builder.xmlDescriptor();
 	}
 
-    public synchronized NameTypePair[] getGlobalVariables(String fileName) {
-        return (NameTypePair[]) globalVariables.get(fileName);
+    public synchronized LinkedList<GlobalSummary> getGlobalVariables(String fileName) {
+    	globalVariables.get(fileName);
+        return globalVariables.get(fileName);
     }
     
     public static String resourceToLslPlusName(IResource r) {

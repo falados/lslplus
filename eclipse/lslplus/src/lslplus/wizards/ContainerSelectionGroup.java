@@ -324,7 +324,7 @@ public class ContainerSelectionGroup extends Composite {
 		selectedContainer = container;
 
 		// expand to and select the specified container
-		List itemsToExpand = new ArrayList();
+		List<IContainer> itemsToExpand = new ArrayList<IContainer>();
 		IContainer parent = container.getParent();
 		while (parent != null) {
 			itemsToExpand.add(0, parent);

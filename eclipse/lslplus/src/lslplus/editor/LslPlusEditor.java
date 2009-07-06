@@ -1,9 +1,16 @@
 package lslplus.editor;
 
-import java.util.ResourceBundle;
+import java.util.Iterator;
+import java.util.List;
 
 import lslplus.LslPlusPlugin;
 import lslplus.debug.LslLineBreakpoint;
+import lslplus.generated.ErrInfo;
+import lslplus.generated.ErrInfo_ErrInfo;
+import lslplus.generated.Maybe_Just;
+import lslplus.generated.TextLocation;
+import lslplus.generated.TextLocation_TextLocation;
+import lslplus.outline.LslPlusOutlinePage;
 import lslplus.util.Util;
 
 import org.eclipse.core.resources.IFile;
@@ -16,12 +23,10 @@ import org.eclipse.debug.core.IBreakpointManager;
 import org.eclipse.debug.core.model.IBreakpoint;
 import org.eclipse.jface.action.IAction;
 import org.eclipse.jface.action.IMenuManager;
-import org.eclipse.jface.text.BadLocationException;
-import org.eclipse.jface.text.IDocument;
-import org.eclipse.jface.text.ITextSelection;
 import org.eclipse.jface.text.ITextViewerExtension5;
 import org.eclipse.jface.text.Position;
 import org.eclipse.jface.text.Region;
+import org.eclipse.jface.text.source.Annotation;
 import org.eclipse.jface.text.source.IAnnotationModel;
 import org.eclipse.jface.text.source.ISourceViewer;
 import org.eclipse.jface.text.source.IVerticalRuler;
@@ -29,64 +34,24 @@ import org.eclipse.jface.text.source.projection.ProjectionAnnotation;
 import org.eclipse.jface.text.source.projection.ProjectionAnnotationModel;
 import org.eclipse.jface.text.source.projection.ProjectionSupport;
 import org.eclipse.jface.text.source.projection.ProjectionViewer;
-import org.eclipse.jface.viewers.ISelection;
 import org.eclipse.swt.events.MouseEvent;
 import org.eclipse.swt.events.MouseListener;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.ui.editors.text.TextEditor;
-import org.eclipse.ui.texteditor.ITextEditor;
 import org.eclipse.ui.texteditor.ITextEditorActionDefinitionIds;
-import org.eclipse.ui.texteditor.TextEditorAction;
 import org.eclipse.ui.texteditor.TextOperationAction;
+import org.eclipse.ui.views.contentoutline.IContentOutlinePage;
 
 /**
  * LSL (plus) text editor.
  */
 public class LslPlusEditor extends TextEditor implements SourceViewerConfigurationListener {
     public static final String ID = "lslplus.editor.LslPlusEditor"; //$NON-NLS-1$
-    // borrowed from the Java editor example... should setup folding
-    // regions for states, functions and handlers (instead).
-    private class DefineFoldingRegionAction extends TextEditorAction {
-
-        public DefineFoldingRegionAction(ResourceBundle bundle, String prefix, ITextEditor editor) {
-            super(bundle, prefix, editor);
-        }
-
-        private IAnnotationModel getAnnotationModel(ITextEditor editor) {
-            return (IAnnotationModel) editor.getAdapter(ProjectionAnnotationModel.class);
-        }
-
-        public void run() {
-            ITextEditor editor = getTextEditor();
-            ISelection selection = editor.getSelectionProvider().getSelection();
-            if (selection instanceof ITextSelection) {
-                ITextSelection textSelection = (ITextSelection) selection;
-                if (!textSelection.isEmpty()) {
-                    IAnnotationModel model = getAnnotationModel(editor);
-                    if (model != null) {
-
-                        int start = textSelection.getStartLine();
-                        int end = textSelection.getEndLine();
-
-                        try {
-                            IDocument document = editor.getDocumentProvider().getDocument(
-                                    editor.getEditorInput());
-                            int offset = document.getLineOffset(start);
-                            int endOffset = document.getLineOffset(end + 1);
-                            Position position = new Position(offset, endOffset - offset);
-                            model.addAnnotation(new ProjectionAnnotation(), position);
-                        } catch (BadLocationException x) {
-                            // ignore
-                        }
-                    }
-                }
-            }
-        }
-    }
 
     /** The projection support */
     private ProjectionSupport fProjectionSupport;
-
+    
+    private LslPlusOutlinePage outlinePage;
     /**
      * Create an instance of the editor.
      */
@@ -112,10 +77,6 @@ public class LslPlusEditor extends TextEditor implements SourceViewerConfigurati
         a.setActionDefinitionId(ITextEditorActionDefinitionIds.CONTENT_ASSIST_CONTEXT_INFORMATION);
         setAction("ContentAssistTip", a); //$NON-NLS-1$
 
-        a = new DefineFoldingRegionAction(Messages.getResourceBundle(),
-                "DefineFoldingRegion.", this); //$NON-NLS-1$
-        setAction("DefineFoldingRegion", a); //$NON-NLS-1$
-        
     }
 
     /**
@@ -139,9 +100,9 @@ public class LslPlusEditor extends TextEditor implements SourceViewerConfigurati
     private void setCharSet() {
         IFile f = (IFile) getEditorInput().getAdapter(IFile.class);
         try {
-            f.setCharset("UTF-8", null);
+            f.setCharset("UTF-8", null); //$NON-NLS-1$
         } catch (CoreException e) {
-            Util.log(e, "can't set charset");
+            Util.error(e, "can't set charset"); //$NON-NLS-1$
         }
     }
     protected void editorContextMenuAboutToShow(IMenuManager menu) {
@@ -156,7 +117,14 @@ public class LslPlusEditor extends TextEditor implements SourceViewerConfigurati
      * @param required the required type
      * @return an adapter for the required type or <code>null</code>
      */
-    public Object getAdapter(Class required) {
+    @SuppressWarnings("unchecked")
+	public Object getAdapter(Class required) {
+        if (IContentOutlinePage.class.equals(required)) {
+            if (outlinePage == null) {
+                outlinePage = new LslPlusOutlinePage(this);
+            }
+            return outlinePage;
+        }
 
         if (fProjectionSupport != null) {
             Object adapter = fProjectionSupport.getAdapter(getSourceViewer(), required);
@@ -170,8 +138,10 @@ public class LslPlusEditor extends TextEditor implements SourceViewerConfigurati
     
     protected void initializeEditor() {
         super.initializeEditor();
-        LslSourceViewerConfiguration config = new LslSourceViewerConfiguration();
+        
+        LslSourceViewerConfiguration config = new LslSourceViewerConfiguration(this);
         setSourceViewerConfiguration(config);
+        outlinePage = new LslPlusOutlinePage(this);
         config.addListener(this);
     }
 
@@ -226,11 +196,11 @@ public class LslPlusEditor extends TextEditor implements SourceViewerConfigurati
                             breakpointManager().removeBreakpoint(bp, true);
                         }
                     } catch (CoreException e1) {
-                        Util.log(e1,e1.getLocalizedMessage());
+                        Util.error(e1,e1.getLocalizedMessage());
                     }
                         
                 } else {
-                    if (LslPlusPlugin.DEBUG) Util.log("resource is null, can't create breakpoint");
+                    if (LslPlusPlugin.DEBUG) Util.log("resource is null, can't create breakpoint"); //$NON-NLS-1$
                 }
             }
 
@@ -269,6 +239,49 @@ public class LslPlusEditor extends TextEditor implements SourceViewerConfigurati
         // });
     }
 
+    public void clearProjections() {
+        ProjectionAnnotationModel pm = getProjectionModel();
+        pm.removeAllAnnotations();
+    }
+    public void addProjection(int start, int length) {
+        ProjectionAnnotationModel pm = getProjectionModel();
+        
+        pm.addAnnotation(new ProjectionAnnotation(), new Position(start, length));
+    }
+
+    private ProjectionAnnotationModel getProjectionModel() {
+        return ((ProjectionViewer)getSourceViewer()).getProjectionAnnotationModel();
+    }
+    
+    public void annotateErrs(List<ErrInfo> errs) {
+         IAnnotationModel am = getSourceViewer().getAnnotationModel(); 
+            
+
+        Iterator<?> ai = am.getAnnotationIterator();
+        while (ai.hasNext()) {
+            Annotation ann = (Annotation) ai.next();
+            if (ann.getType().equals("org.eclipse.ui.workbench.texteditor.error")) //$NON-NLS-1$
+                am.removeAnnotation(ann);
+        }
+        
+        for (ErrInfo err : errs) {
+            ErrInfo_ErrInfo e = (ErrInfo_ErrInfo) err;
+            if (e.el1 instanceof Maybe_Just) {
+                Maybe_Just<TextLocation> mt = (Maybe_Just<TextLocation>) e.el1;
+                TextLocation_TextLocation t = (TextLocation_TextLocation) mt.el1;
+                int offs[] = Util.findOffsetsFor(
+                        new int[] { t.textLine0 - 1, t.textLine1 - 1}, 
+                        new int[] { t.textColumn0 - 1, t.textColumn1 - 1}, 
+                        getDocumentProvider().getDocument(getEditorInput()).get());
+                if (offs[0] == offs[1]) offs[1]++;
+                Position pos = new Position(offs[0], offs[1] - offs[0]);
+                Annotation ann = new Annotation(
+                        "org.eclipse.ui.workbench.texteditor.error", true, e.el2); //$NON-NLS-1$
+                am.addAnnotation(ann, pos);
+            }
+        }
+    }
+    
     protected void adjustHighlightRange(int offset, int length) {
         ISourceViewer viewer = getSourceViewer();
         if (viewer instanceof ITextViewerExtension5) {
@@ -280,4 +293,17 @@ public class LslPlusEditor extends TextEditor implements SourceViewerConfigurati
     public void configurationChanged() {
         this.getSourceViewer().invalidateTextPresentation();
     }
+    
+    public void updateOutline() {
+        asyncExec(new Runnable() {
+            public void run() {
+                outlinePage.update();
+            }
+        });
+    }
+    
+    private void asyncExec(Runnable r) {
+        LslPlusPlugin.getDefault().getWorkbench().getDisplay().asyncExec(r);
+    }
+
 }

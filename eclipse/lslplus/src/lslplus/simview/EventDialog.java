@@ -14,6 +14,7 @@ import lslplus.sim.SimStatuses.SimScript;
 
 import org.eclipse.jface.dialogs.Dialog;
 import org.eclipse.jface.dialogs.IDialogConstants;
+import org.eclipse.jface.window.Window;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.ModifyEvent;
 import org.eclipse.swt.events.ModifyListener;
@@ -73,10 +74,10 @@ public class EventDialog extends Dialog {
     }
     
     protected Control createDialogArea(Composite parent) {
-        getShell().setText("Event: " + desc.getName());
+        getShell().setText("Event: " + desc.getName()); //$NON-NLS-1$ TODO
         Composite  composite = (Composite) super.createDialogArea(parent);
         Label descriptionLabel = new Label(composite, SWT.LEAD|SWT.HORIZONTAL|SWT.WRAP);
-        descriptionLabel.setText(desc.getDescription()); //$NON-NLS-1$
+        descriptionLabel.setText(desc.getDescription());
         
         SimParamDefinition[] parameters = desc.getParams();
         
@@ -102,7 +103,7 @@ public class EventDialog extends Dialog {
             nameLabel.setToolTipText(parameters[i].getControlID());
             
             String controlID = parameters[i].getControlID();
-            if (controlID.startsWith("expression-")) {
+            if (controlID.startsWith("expression-")) { //$NON-NLS-1$
                 final Text text = new Text(comp, SWT.SINGLE|SWT.LEFT);
                 final int argIndex = i;
                 text.addModifyListener(new ModifyListener() {
@@ -112,29 +113,29 @@ public class EventDialog extends Dialog {
                         updateButtons();
                     }
                 });
-                String type = controlID.substring("expression-".length());
+                String type = controlID.substring("expression-".length()); //$NON-NLS-1$
                 Label hintLabel = new Label(comp,SWT.LEAD|SWT.HORIZONTAL);
-                hintLabel.setText("(enter LSL " + type + " expression)");
-            } else if ("avatar".equals(controlID)) {
+                hintLabel.setText("(enter LSL " + type + " expression)"); // //$NON-NLS-1$ //$NON-NLS-2$ TODO
+            } else if ("avatar".equals(controlID)) { //$NON-NLS-1$
                 createKeyCombo(i, comp, simManager().getSimState().getAvatars());
                 Label hintLabel = new Label(comp,SWT.LEAD|SWT.HORIZONTAL);
-                hintLabel.setText("");
-            } else if ("prim".equals(controlID)) {
+                hintLabel.setText(""); //$NON-NLS-1$
+            } else if ("prim".equals(controlID)) { //$NON-NLS-1$
                 createKeyCombo(i, comp, simManager().getSimState().getPrims());
                 Label hintLabel = new Label(comp,SWT.LEAD|SWT.HORIZONTAL);
-                hintLabel.setText("");
-            } else if ("script".equals(controlID)) {
+                hintLabel.setText(""); //$NON-NLS-1$
+            } else if ("script".equals(controlID)) { //$NON-NLS-1$
                 skip = true;
                 final int argIndex = i;
                 final Combo combo = new Combo(comp, SWT.READ_ONLY|SWT.DROP_DOWN);
                 final SimScript[] scripts = simManager().getSimState().getScripts();
                 String[] dropDownRepresentation = new String[scripts.length];
                 SimPrim[] prims = simManager().getSimState().getPrims();
-                HashMap pk2name = new HashMap();
+                HashMap<String,String> pk2name = new HashMap<String,String>();
                 for (int pi = 0; pi < prims.length; pi++) pk2name.put(prims[pi].getKey(), prims[pi].getName());
                 for (int si = 0; si < scripts.length; si++) {
-                    dropDownRepresentation[si] = scripts[i].getPrimKey() + " (" +
-                        pk2name.get(scripts[i].getPrimKey()).toString() + ") / " + scripts[i].getScriptName();
+                    dropDownRepresentation[si] = scripts[i].getPrimKey() + " (" +  //$NON-NLS-1$ TODO
+                        pk2name.get(scripts[i].getPrimKey()).toString() + ") / " + scripts[i].getScriptName(); //$NON-NLS-1$ TODO
                 }
                 combo.setItems(dropDownRepresentation);
                 combo.deselectAll();
@@ -158,7 +159,7 @@ public class EventDialog extends Dialog {
                     }
                 });
                 Label hintLabel = new Label(comp,SWT.LEAD|SWT.HORIZONTAL);
-                hintLabel.setText("");
+                hintLabel.setText(""); //$NON-NLS-1$
             }
         }
         
@@ -198,7 +199,7 @@ public class EventDialog extends Dialog {
     }
 
     public SimEvent getEvent() {
-        if (this.getReturnCode() != Dialog.OK) return null;
+        if (this.getReturnCode() != Window.OK) return null;
         SimEventArg[] simEventArgs = new SimEventArg[args.length];
         for (int i = 0; i < simEventArgs.length; i++) {
             simEventArgs[i] = new SimEventArg(desc.getParams()[i].getName(), args[i]);

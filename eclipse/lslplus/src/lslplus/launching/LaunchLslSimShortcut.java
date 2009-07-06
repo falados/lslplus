@@ -44,7 +44,7 @@ public class LaunchLslSimShortcut implements ILaunchShortcut {
                     ILaunchConfiguration config = findConfig(r);
                     DebugUITools.launch(config, mode);
                 } catch (CoreException e) {
-                    Util.log(e, e.getLocalizedMessage());
+                    Util.error(e, e.getLocalizedMessage());
                 }
             }
         }

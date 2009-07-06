@@ -56,7 +56,7 @@ public class LslPlusProjectWizard extends Wizard implements INewWizard {
 			p.setDescription(description, monitor);
 			workbench.showPerspective(LslPlusPerspectiveFactory.PERSPECTIVE_ID, window);
 		} catch (CoreException e) {
-			Util.log(e, e.getLocalizedMessage());
+			Util.error(e, e.getLocalizedMessage());
 		} finally {
 			monitor.done();
 		}
