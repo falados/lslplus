@@ -287,13 +287,25 @@ floatWierdness = [$here|
             llOwnerSay((string)(f*.2));
         }
     }|]
+    
+moreFloatWierdness = [$here|
+    default {
+        state_entry() {
+            float f = .0;
+            vector v = <.0,.0,0.>;
+            
+      //      llOwnerSay((string)v);
+        }
+    }|]
+    
 allTests = TestLabel "All Tests" $ TestList [
     tests,
     importTests,
     labelTest,
     validScriptStr "return implicit conversion test" retconv,
     validScriptStr "casts to list" casts,
-    validScriptStr "float wierdness" floatWierdness ]
+    validScriptStr "float wierdness" floatWierdness,
+    validScriptStr "more float wierdness" moreFloatWierdness ]
 
     
 altModule = [$here|$module ()
