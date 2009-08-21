@@ -116,6 +116,7 @@ graphInfo funcs = scc
           
 nullCtx :: a -> Ctx a              
 nullCtx = Ctx Nothing 
+nullCtxStmt = nullCtx NullStmt
 
 sminsert k v (m:ms) = M.insert k v m : ms
 
@@ -365,28 +366,28 @@ inlineStmts endLabel (Compound ss:stmts) = do
 inlineStmts endLabel (While expr stmt:stmts) =  do
     (renames,rewrites) <- getRewriteInfo
     stmts' <- inlineStmts endLabel stmts
-    ss <- inlineStmts endLabel [stmt]
-    return (While (rewriteCtxExpr renames rewrites expr) (Compound (map nullCtx ss)) : stmts')
+    ss <- inlineStmts endLabel [ctxItem stmt]
+    return (While (rewriteCtxExpr renames rewrites expr) (nullCtx (Compound (map nullCtx ss))) : stmts')
 inlineStmts endLabel (DoWhile stmt expr:stmts) = do
     stmts' <- inlineStmts endLabel stmts
-    ss <- inlineStmts endLabel [stmt]
+    ss <- inlineStmts endLabel [ctxItem stmt]
     (renames,rewrites) <- getRewriteInfo
-    return (DoWhile (Compound (map nullCtx ss)) (rewriteCtxExpr renames rewrites expr) : stmts')
+    return (DoWhile (nullCtx (Compound (map nullCtx ss))) (rewriteCtxExpr renames rewrites expr) : stmts')
 inlineStmts endLabel (For es0 e es1 stmt:stmts) = do
         (renames,rewrites) <- getRewriteInfo
         let rewriteExprs = map (rewriteCtxExpr renames rewrites)
         stmts' <- inlineStmts endLabel stmts
-        ss <- inlineStmts endLabel [stmt]
+        ss <- inlineStmts endLabel [ctxItem stmt]
         let body = case ss of
                 s:[] -> s
                 _ -> Compound (map nullCtx ss)
-        return (For (rewriteExprs es0) (fmap (rewriteCtxExpr renames rewrites) e) (rewriteExprs es1) body: stmts')
+        return (For (rewriteExprs es0) (fmap (rewriteCtxExpr renames rewrites) e) (rewriteExprs es1) (nullCtx body): stmts')
 inlineStmts endLabel (If e s0 s1:stmts) = do
         (renames,rewrites) <- getRewriteInfo
         stmts' <- inlineStmts endLabel stmts
-        s0s <- inlineStmts endLabel [s0]
-        s1s <- inlineStmts endLabel [s1]
-        return (If (rewriteCtxExpr renames rewrites e) (newS s0s) (newS s1s) : stmts')
+        s0s <- inlineStmts endLabel [ctxItem s0]
+        s1s <- inlineStmts endLabel [ctxItem s1]
+        return (If (rewriteCtxExpr renames rewrites e) (nullCtx (newS s0s)) (nullCtx (newS s1s)) : stmts')
     where newS ss = 
               case ss of
                   [s] -> s
@@ -455,14 +456,14 @@ performInliningForStmt (Ctx _ (While expr s)) = do
     refreshOState
     bgnLoop <- mkName "bgnLoop"
     (expr',stmts) <- inlineExpr' expr
-    ss <- performInliningForStmt (nullCtx s)
+    ss <- performInliningForStmt s
     return $ case (stmts,ss) of
-        ([],[s']) -> [nullCtx $ While expr' (ctxItem s')]
-        ([],_) -> [nullCtx $ While expr' (Compound ss)]
+        ([],[s']) -> [nullCtx $ While expr' s']
+        ([],_) -> [nullCtx $ While expr' $ nullCtx (Compound ss)]
         _ -> ((nullCtx $ Label bgnLoop) : (stmts ++ case ss of
-            [] -> [nullCtx $ If expr' (Jump bgnLoop) NullStmt]
-            _ -> [nullCtx $ If expr' (Compound (ss ++ [nullCtx $ Jump bgnLoop])) NullStmt]))
-performInliningForStmt s@(Ctx _ NullStmt) = refreshOState >> return [nullCtx NullStmt]
+            [] -> [nullCtx $ If expr' (nullCtx (Jump bgnLoop)) (nullCtxStmt)]
+            _ -> [nullCtx $ If expr' (nullCtx (Compound (ss ++ [nullCtx $ Jump bgnLoop]))) (nullCtxStmt)]))
+performInliningForStmt s@(Ctx _ NullStmt) = refreshOState >> return [nullCtxStmt]
 performInliningForStmt s@(Ctx _ (Decl (Var v t) Nothing)) = do
     refreshOState
     v' <- renameToNewInInliner v
@@ -486,11 +487,11 @@ performInliningForStmt (Ctx _ s@(StateChange _)) = refreshOState >> return [null
 performInliningForStmt (Ctx _ (DoWhile s expr)) = do
     refreshOState
     bgnLoop <- mkName "bgnLoop"
-    ss <- performInliningForStmt (nullCtx s)
+    ss <- performInliningForStmt s
     (expr',stmts) <- inlineExpr' expr
     let s' = case ss ++ stmts of
-                 [s''] -> ctxItem s''
-                 ss' -> Compound ss'
+                 [s''] -> s''
+                 ss' -> nullCtx $ Compound ss'
     return [nullCtx $ DoWhile s' expr']
 performInliningForStmt (Ctx _ (For ies1 mte ses2 s)) = do
     refreshOState
@@ -501,29 +502,29 @@ performInliningForStmt (Ctx _ (For ies1 mte ses2 s)) = do
               Just te -> do (te',tss) <- inlineExpr' te
                             return (Just te',tss)
     (ses2', sss2s) <- inlineExprs ses2
-    ss <- performInliningForStmt (nullCtx s)
+    ss <- performInliningForStmt s
     let iss1 = concat iss1s
     let sss2 = concat sss2s
     case (iss1,tss,sss2,ss) of
-        ([],[],[],[s']) -> return [(nullCtx $ For ies1' mte' ses2' (ctxItem s'))]
-        ([],[],[],_) -> return [(nullCtx $ For ies1' mte' ses2' (Compound ss))]
+        ([],[],[],[s']) -> return [(nullCtx $ For ies1' mte' ses2' s')]
+        ([],[],[],_) -> return [(nullCtx $ For ies1' mte' ses2' $ nullCtx (Compound ss))]
         _ -> return (iss1 ++ (map (nullCtx . Do) ies1') ++ [nullCtx $ Label bgnLoop] ++ rest)
             where rest = case mte' of
                      Nothing -> ss ++ sss2 ++ (map (nullCtx . Do) ses2') ++ [nullCtx $ Jump bgnLoop]
                      Just te' -> tss ++ 
-                        [nullCtx $ If te' (Compound (ss ++ sss2 ++ (map (nullCtx . Do) ses2') ++ [nullCtx $ Jump bgnLoop])) NullStmt]
+                        [nullCtx $ If te' (nullCtx (Compound (ss ++ sss2 ++ (map (nullCtx . Do) ses2') ++ [nullCtx $ Jump bgnLoop]))) (nullCtxStmt)]
 performInliningForStmt (Ctx _ (If e s0 s1)) = do
     refreshOState
     (e',ess) <- inlineExpr' e
-    s0s <- performInliningForStmt (nullCtx s0)
-    s1s <- performInliningForStmt (nullCtx s1)
+    s0s <- performInliningForStmt s0
+    s1s <- performInliningForStmt s1
     let branch1 = case s0s of
             [s] -> ctxItem s
             _ -> Compound s0s
     let branch2 = case s1s of
             [s] -> ctxItem s
             _ -> Compound s1s
-    return (ess ++ [nullCtx $ If e' branch1 branch2])
+    return (ess ++ [nullCtx $ If e' (nullCtx branch1) (nullCtx branch2)])
     
 inlineExprs :: [Ctx Expr] -> OState ([Ctx Expr], [[Ctx Statement]])
 inlineExprs exprs = do
@@ -644,7 +645,7 @@ withoutFinalJumpTo label ss =
            (Ctx _ (Jump l)) | l == label -> initial
                             | otherwise -> ss
            (Ctx c (Compound ss')) -> initial ++ [(Ctx c (Compound (withoutFinalJumpTo label ss')))]
-           (Ctx c (If expr s0 s1)) -> initial ++ [Ctx c (If expr (rmvj s0) (rmvj s1))]
+           (Ctx c (If expr s0 s1)) -> initial ++ [Ctx c (If expr (nullCtx (rmvj $ ctxItem s0)) (nullCtx (rmvj $ ctxItem s1)))]
            (Ctx c s) -> ss
     where final = last ss
           initial = init ss
@@ -913,7 +914,7 @@ simplifyE (Gt (Ctx _ (IntLit i)) (Ctx _ (IntLit j)))  = return (IntLit (bb2int (
 simplifyE (Ge (Ctx _ (IntLit i)) (Ctx _ (IntLit j)))  = return (IntLit (bb2int (>=) i j))
 simplifyE (Le (Ctx _ (IntLit i)) (Ctx _ (IntLit j)))  = return (IntLit (bb2int (<=) i j))
 simplifyE (Equal (Ctx _ (IntLit i)) (Ctx _ (IntLit j)))  = return (IntLit (bb2int (==) i j))
-simplifyE (NotEqual (Ctx _ (IntLit i)) (Ctx _ (IntLit j)))  = return (IntLit (bb2int (==) i j))
+simplifyE (NotEqual (Ctx _ (IntLit i)) (Ctx _ (IntLit j)))  = return (IntLit (bb2int (/=) i j))
 simplifyE (BAnd (Ctx _ (IntLit i)) (Ctx _ (IntLit j)))  = return (IntLit (i .&. j))
 simplifyE (BOr (Ctx _ (IntLit i)) (Ctx _ (IntLit j)))  = return (IntLit (i .|. j))
 simplifyE (Xor (Ctx _ (IntLit i)) (Ctx _ (IntLit j)))  = return (IntLit (i `xor` j))
@@ -1024,10 +1025,10 @@ checkVal expr v@(RVal x y z w) | invalidLLFloat x || invalidLLFloat y || invalid
 checkVal _ v = valToExpr v
 
 -- could simplify for other types, but this should be sufficient for the main use case
-simplifyS (If (Ctx _ (IntLit 0)) _ stmt) = return stmt
-simplifyS (If (Ctx _ (IntLit _)) stmt _) = return stmt
-simplifyS (If (Ctx _ (FloatLit 0)) _ stmt) = return stmt
-simplifyS (If (Ctx _ (FloatLit _)) stmt _) = return  stmt
+simplifyS (If (Ctx _ (IntLit 0)) _ stmt) = return $ ctxItem stmt
+simplifyS (If (Ctx _ (IntLit _)) stmt _) = return $ ctxItem stmt
+simplifyS (If (Ctx _ (FloatLit 0)) _ stmt) = return $ ctxItem stmt
+simplifyS (If (Ctx _ (FloatLit _)) stmt _) = return $ ctxItem stmt
 simplifyS (Do (Ctx _ (Get _))) = return NullStmt
 simplifyS s = return s
 

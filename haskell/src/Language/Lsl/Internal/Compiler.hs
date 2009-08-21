@@ -144,14 +144,16 @@ processCompileList (Document _ _ root _) =
 renderScriptsToFiles :: Bool -> [(String,Validity CompiledLSLScript)] -> [(String,String)] -> IO ()
 renderScriptsToFiles opt compiledScripts pathTable = 
     let scriptsToRender = 
-         [(path,script) | (Just path,Right script) <- map (\ (name,vs) -> (lookup name pathTable,vs)) compiledScripts]
+         [(name, path, script) | (name, Just path,Right script) <- 
+             map (\ (name,vs) -> (name, lookup name pathTable,vs)) compiledScripts]
         scriptsToRemove =
          [path | (Just path,Left _) <- map (\ (name,vs) -> (lookup name pathTable,vs)) compiledScripts]
     in do
         clockTime <- getClockTime
         calTime <- toCalendarTime clockTime
         let stamp = calendarTimeToString calTime
-        mapM_ (\ (path,script) -> renderScriptToFile opt stamp path script) scriptsToRender
+        mapM_ (\ (name,path,script) -> 
+            renderScriptToFile opt (name ++ " " ++ stamp) path script) scriptsToRender
         mapM_ (removeOutputScript) scriptsToRemove
 
 renderScriptToFile opt stamp path script =

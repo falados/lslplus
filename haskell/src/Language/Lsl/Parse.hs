@@ -27,8 +27,9 @@ import Data.Data
 import Data.Char(digitToInt)
 import Data.List(intersperse)
 import Language.Lsl.Internal.Pragmas(Pragma(..))
-import Language.Lsl.Syntax(Expr(..),Statement(..),Func(..),FuncDec(..),Handler(Handler),State(..),Ctx(..),TextLocation(..),SourceContext(..),LSLType(..),
-                  Component(..),Var(..),LModule(..),LSLScript(..),GlobDef(..),goodHandlers)
+import Language.Lsl.Syntax(Expr(..),Statement(..),Func(..),FuncDec(..),Handler(Handler),State(..),Ctx(..),
+                  TextLocation(..),SourceContext(..),LSLType(..),
+                  Component(..),Var(..),LModule(..),LSLScript(..),GlobDef(..),goodHandlers,nullCtx)
 import Text.ParserCombinators.Parsec hiding (State)
 import qualified Text.ParserCombinators.ParsecExtras.Token as P
 import Text.ParserCombinators.ParsecExtras.Language( javaStyle, emptyDef )
@@ -214,8 +215,7 @@ naturalOrFloat = do v <- natOrFloat <?> "number"
                     return v
 
 natOrFloat =  (decimalFraction 0.0 >>= return . Right)
-           <|> do char '0'
-                  option  (Left 0) prefZeroNum
+           <|> try (char '0' >> option  (Left 0) prefZeroNum)
            <|> decimalOrFloat
 
 prefZeroNum = (hex >>= return . Left)
@@ -518,12 +518,12 @@ nullStatement = (semi >> return NullStmt)
 
 whileStatement = do reserved "while"
                     e <- parens expr
-                    stmt <- statement
+                    stmt <- ctxify statement
                     return $ While e stmt
 ifElseStatement = do reserved "if"
                      e <- parens expr
-                     stmt1 <- statement
-                     stmt2 <- (option NullStmt (reserved "else" >> statement))
+                     stmt1 <- ctxify statement
+                     stmt2 <- (option (nullCtx NullStmt) (reserved "else" >> ctxify statement))
                      return $ If e stmt1 stmt2
                      
 stateStatement = do reserved "state"
@@ -541,11 +541,11 @@ forStatement = do reserved "for"
                   mexpr3 <- commaSep expr
                   char ')'
                   whiteSpace
-                  stmt <- statement
+                  stmt <- ctxify statement
                   return $ For mexpr1 mexpr2 mexpr3 stmt
 
 doWhileStatement = do reserved "do"
-                      stmt <- statement
+                      stmt <- ctxify statement
                       reserved "while"
                       e <- parens expr
                       semi

@@ -179,10 +179,10 @@ data Expr = IntLit Int
 
 -- | An LSL statement.
 data Statement = Compound [CtxStmt]
-               | While CtxExpr Statement
-               | DoWhile Statement CtxExpr
-               | For ([CtxExpr]) (Maybe CtxExpr) ([CtxExpr]) Statement
-               | If CtxExpr Statement Statement
+               | While CtxExpr CtxStmt
+               | DoWhile CtxStmt CtxExpr
+               | For ([CtxExpr]) (Maybe CtxExpr) ([CtxExpr]) CtxStmt
+               | If CtxExpr CtxStmt CtxStmt
                | Decl Var (Maybe CtxExpr)
                | NullStmt
                | Return (Maybe CtxExpr)
@@ -707,22 +707,22 @@ compileStatement  (Ctx ctx (Decl var@(Var name t) expr)) = do
     get'vsBranchReturns
 compileStatement  (Ctx ctx (While expr statement)) = do
     t <- compileCtxExpr expr
-    vsmInBranch $ compileStatement (nullCtx statement)
+    vsmInBranch $ compileStatement statement
     get'vsBranchReturns
 compileStatement (Ctx ctx(DoWhile statement expr)) =
     do t <- compileCtxExpr expr
-       vsmInBranch $ compileStatement (nullCtx statement)
+       vsmInBranch $ compileStatement statement
        get'vsBranchReturns
 compileStatement (Ctx ctx (For mexpr1 mexpr2 mexpr3 statement)) =
     do  compileExpressions mexpr1
         compileExpressions mexpr3
         t <- compileMExpression mexpr2
-        vsmInBranch $ compileStatement (nullCtx statement)
+        vsmInBranch $ compileStatement statement
         get'vsBranchReturns
 compileStatement (Ctx ctx (If expr thenStmt elseStmt)) =
     do t <- compileCtxExpr expr
-       ret1 <- vsmInBranch $ compileStatement (nullCtx thenStmt)
-       ret2 <- vsmInBranch $ compileStatement (nullCtx elseStmt)
+       ret1 <- vsmInBranch $ compileStatement thenStmt
+       ret2 <- vsmInBranch $ compileStatement elseStmt
        returns <- get'vsBranchReturns
        put'vsBranchReturns (returns || (ret1 && ret2))
        get'vsBranchReturns
@@ -1261,15 +1261,6 @@ libFromAugLib augLib =
        f (name,Right (lm,_)) = (name, Right lm)
    in map f augLib
    
-tstLib = [
-    ("alpha", LModule [GI (nullCtx "beta") [] []] []),
-    ("beta", LModule  [GI (nullCtx "gamma") [] []] []),
-    ("gamma", LModule [GI (nullCtx "alpha") [] []] []),
-    ("omega", LModule [GI (nullCtx "lambda") [] []] []),
-    ("lambda", LModule [GI (nullCtx "kappa") [] [], GI (nullCtx "sigma") [] []] []),
-    ("kappa", LModule [] []),
-    ("sigma", LModule [] [])]
-
 -- | Transform a script into a module, generating function names for each handler, using the 
 -- pattern <state-name>_state_<handler-name>.
 -- The script following script:
@@ -1309,6 +1300,10 @@ rewriteName renames (Ctx ctx name) =
     case lookup name renames of
         Nothing -> Ctx ctx name
         Just name' -> Ctx ctx name'
+        
+rewriteCtxStatement n bindings (Ctx c s) = 
+    let (n',bindings',s') = rewriteStatement n bindings s in (n',bindings', Ctx c s')
+    
 rewriteStatements _ _ [] = []
 rewriteStatements n bindings (Ctx c s:ss) =
     let (n',bindings',s') = rewriteStatement n bindings s in
@@ -1316,19 +1311,19 @@ rewriteStatements n bindings (Ctx c s:ss) =
 
 rewriteStatement n bindings (Compound stmts) = (n, bindings, Compound $ rewriteStatements n bindings stmts)
 rewriteStatement n bindings (While expr stmt) = 
-    let (_,_,stmt') = rewriteStatement n bindings stmt in
+    let (_,_,stmt') = rewriteCtxStatement n bindings stmt in
     (n, bindings, While (rewriteCtxExpr bindings expr) stmt')
 rewriteStatement n bindings (DoWhile stmt expr) =
-    let (_,_,stmt') = rewriteStatement n bindings stmt in
+    let (_,_,stmt') = rewriteCtxStatement n bindings stmt in
     (n, bindings, DoWhile stmt' (rewriteCtxExpr bindings expr))
 rewriteStatement n bindings (For mexpr1 mexpr2 mexpr3 stmt) =
-    let (_,_,stmt') = rewriteStatement n bindings stmt
+    let (_,_,stmt') = rewriteCtxStatement n bindings stmt
         rewriteMExpr = rewriteMExpression bindings 
         rewriteEs = rewriteCtxExprs bindings in
     (n, bindings, For (rewriteEs mexpr1) (rewriteMExpr mexpr2) (rewriteEs mexpr3) stmt')
 rewriteStatement n bindings (If expr stmt1 stmt2) = 
-    let (_,_,stmt1') = rewriteStatement n bindings stmt1
-        (_,_,stmt2') = rewriteStatement n bindings stmt2 in
+    let (_,_,stmt1') = rewriteCtxStatement n bindings stmt1
+        (_,_,stmt2') = rewriteCtxStatement n bindings stmt2 in
         (n, bindings, If (rewriteCtxExpr bindings expr) stmt1' stmt2')
 rewriteStatement n bindings (Decl (Var name t) val) =
    let (n',bindings', newname) =

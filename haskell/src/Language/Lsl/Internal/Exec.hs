@@ -351,8 +351,8 @@ data EvalElement = EvBlock [Ctx Statement] | EvCtxStatement (Ctx Statement)
                  | EvShiftL | EvShiftR | EvCast LSLType | EvGet (String,Component) | EvSet (String,Component)
                  | EvCons | EvMkVec | EvMkRot | EvPop
                  | EvReturn | EvDiscard | EvBind String LSLType
-                 | EvCond Statement Statement | EvCall String (Maybe SourceContext) [Var] [Ctx Statement] Bool
-                 | EvPredef String | EvLoop Expr [Ctx Expr] Statement | EvMark
+                 | EvCond (Ctx Statement) (Ctx Statement) | EvCall String (Maybe SourceContext) [Var] [Ctx Statement] Bool
+                 | EvPredef String | EvLoop Expr [Ctx Expr] (Ctx Statement) | EvMark
     deriving (Show,Data,Typeable)
 
 queryState q = evalT (\s -> (q s, s))
@@ -757,7 +757,7 @@ eval' =
                EvStatement (If expr stmt1 stmt2) -> pushElements [EvCond stmt1 stmt2,EvExpr $ ctxItem expr]
                EvStatement (While expr stmt) -> modMark (+1) >> pushElements [EvMark,EvLoop (ctxItem expr) [] stmt,EvExpr $ ctxItem expr]
                EvStatement (DoWhile stmt expr) -> modMark (+1) >>
-                   pushElements [EvMark,EvLoop (ctxItem expr) [] stmt, EvExpr (ctxItem expr),EvStatement stmt]
+                   pushElements [EvMark,EvLoop (ctxItem expr) [] stmt, EvExpr (ctxItem expr),EvCtxStatement stmt]
                EvStatement (For mexpr1 mexpr2 mexpr3 stmt) ->
                    do let expr =  case mexpr2 of
                                       Nothing -> (IntLit 1)
@@ -792,11 +792,11 @@ eval' =
                               pushElement element               -- last, re-evaluate loop
                               pushElement (EvExpr expr)         -- next-to-last, re-evaluate expr)
                               pushElements [EvDiscard, EvExpr (ListExpr mexpr)]  -- evaluate end-of-loop expressions
-                              pushElement (EvStatement stmt)    -- first, evaluate statement)
+                              pushElement (EvCtxStatement stmt)    -- first, evaluate statement)
                       continue
                EvCond stmt1 stmt2 ->
                    do val <- popVal
-                      pushElement (EvStatement (if trueCondition val then stmt1 else stmt2))
+                      pushElement (EvCtxStatement (if trueCondition val then stmt1 else stmt2))
                       continue
                EvExpr (IntLit i) -> pushVal (IVal i) >> continue
                EvExpr (FloatLit f) -> pushVal (FVal (realToFrac f)) >> continue

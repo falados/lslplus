@@ -95,31 +95,31 @@ renderStatement' n (Compound stmts) =
 renderStatement' n (While expr stmt) = 
     renderString "while (" . renderCtxExpr expr . renderChar ')' . 
     case stmt of
-        NullStmt -> renderString ";\n"
-        _ -> renderStatement True n stmt
+        (Ctx _ NullStmt) -> renderString ";\n"
+        _ -> renderCtxStatement True n stmt
 renderStatement' n (DoWhile stmt expr) = 
     renderString "do " . 
     (case stmt of
-         NullStmt -> renderString ";\n"
-         _ -> renderStatement True n stmt) . doHang False n . renderString "while (" . renderCtxExpr expr . renderString ");\n"
+         (Ctx _ NullStmt) -> renderString ";\n"
+         _ -> renderCtxStatement True n stmt) . doHang False n . renderString "while (" . renderCtxExpr expr . renderString ");\n"
 renderStatement' n (For mexpr1 mexpr2 mexpr3 stmt) =
     renderString "for (" . renderCtxExprs "" mexpr1 . renderString "; " . renderOptionalExpression mexpr2 .
     renderString "; " . renderCtxExprs "" mexpr3 . renderString ")" . 
     case stmt of
-        NullStmt -> renderString ";\n"
-        _ -> renderStatement True n stmt
+        (Ctx _ NullStmt) -> renderString ";\n"
+        _ -> renderCtxStatement True n stmt
 renderStatement' n (If expr stmt1 stmt2) =
     renderString "if (" . renderCtxExpr expr . renderChar ')' . 
         (case stmt1 of
-             NullStmt -> renderString ";\n"
-             If expr (Compound _) _ -> renderStatement True n stmt1
-             If expr _ NullStmt -> case stmt2 of
-                 NullStmt -> renderStatement True n stmt1
-                 _ -> renderStatement True n (Compound [Ctx Nothing stmt1])
-             _ -> renderStatement True n stmt1) .
+             (Ctx _ NullStmt) -> renderString ";\n"
+             (Ctx _ (If expr (Ctx _ (Compound _)) _)) -> renderCtxStatement True n stmt1
+             (Ctx _ (If expr _ (Ctx _ NullStmt))) -> case stmt2 of
+                 (Ctx _ NullStmt) -> renderCtxStatement True n stmt1
+                 _ -> renderStatement True n (Compound [stmt1])
+             _ -> renderCtxStatement True n stmt1) .
         case stmt2 of 
-            NullStmt -> blank
-            _ -> renderIndent n . renderString "else " . (renderStatement True n stmt2)
+            (Ctx _ NullStmt) -> blank
+            _ -> renderIndent n . renderString "else " . (renderCtxStatement True n stmt2)
 renderStatement' n (Decl var val) = 
     renderVar var . 
         case val of 
