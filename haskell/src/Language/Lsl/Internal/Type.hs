@@ -15,6 +15,7 @@ module Language.Lsl.Internal.Type(
     lslValString,
     lslTypeString,
     lslShowVal,
+    lslBool,
     toSVal,
     isIVal,
     isFVal,
@@ -23,6 +24,9 @@ module Language.Lsl.Internal.Type(
     isLVal,
     isVVal,
     isRVal,
+    onI,
+    onF,
+    onS,
     lslValueElement,
     defaultValue,
     vecMulScalar,
@@ -98,6 +102,13 @@ typeOfLSLValue v =
         (LVal _) -> LLList
         (KVal _) -> LLKey
         VoidVal -> LLVoid
+
+onI f _ (IVal v) = f v
+onI _ nf _ = nf
+onF f _ (FVal v) = f v
+onF _ nf _ = nf
+onS f _ (SVal s) = f s
+onS _ nf _ = nf
 
 typeOfLSLComponent v All = typeOfLSLValue v
 typeOfLSLComponent (VVal _ _ _) _ = LLFloat
@@ -269,3 +280,5 @@ convertValues argTypes args = zipWith convertArg argTypes args
           convertArg LLKey (SVal s) = KVal s
           convertArg LLString (KVal k) = SVal k
           convertArg _ v = v
+
+lslBool b = if b then 1 else 0

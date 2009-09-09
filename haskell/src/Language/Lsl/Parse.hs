@@ -665,11 +665,19 @@ moduleParser = do whiteSpace
                   eof
                   return $ LModule globs freevars
 
--- error recovering parser?
+-- error recovering parser
+-- this section implements a parser with limited error recovery, based on the parsers
+-- defined above.  Parsec doesn't have much built-in support for error recovery, so
+-- it seems you have to build error recovery 'around' the parsec parsers.
+
+-- | the parse result represents the rest of the input (unparsed), where you left off
+--   parsing, and, the parsed value.
 data PResult a = PResult {
     resultInput :: !String,
     resultPosition :: !SourcePos,
     resultItem :: !a }
+
+type PartialParser st a = GenParser Char st (PResult a)
 
 -- stateInitial = do
 --     name <- ctxify stateName
@@ -677,6 +685,7 @@ data PResult a = PResult {
 --     hs <- many $ try handler
 --     return (State name hs)
 
+withRest :: CharParser st a -> SourcePos -> PartialParser st a
 withRest a p = do
     setPosition p
     v <- a

@@ -51,6 +51,7 @@ module Language.Lsl.WorldDef(Avatar(..),
                     emptyPrim,
                     primPhantomBit,
                     primPhysicsBit,
+                    sortByInvName,
                     worldFromFullWorldDef,
                     worldElement,
                     defaultRegions,
@@ -62,7 +63,7 @@ import Control.Monad.Error(MonadError(..),ErrorT(..))
 import Control.Monad.Writer(tell,lift,runWriterT)
 
 import qualified Control.Monad.State as SM(get,put,State)
-import Data.List(find)
+import Data.List(find,sortBy)
 import qualified Data.Map as M
 import qualified Data.IntMap as IM
 import Data.Maybe(isNothing)
@@ -273,6 +274,8 @@ scriptInventoryItem s k id = InventoryItem (InventoryItemIdentification (s,k)) (
 inventoryItemIdentifications = map inventoryItemIdentification
 findByInvName name = find ((== name) . (fst . inventoryItemNameKey . inventoryItemIdentification))
 findByInvKey key = find ((== key) . (snd . inventoryItemNameKey . inventoryItemIdentification))
+
+sortByInvName = sortBy (\ i i' -> compare (inventoryItemName i) (inventoryItemName i'))
 
 inventoryInfoPermValue 0 (i,_,_,_,_) = return i
 inventoryInfoPermValue 1 (_,i,_,_,_) = return i

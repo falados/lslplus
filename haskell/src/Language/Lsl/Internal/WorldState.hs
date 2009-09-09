@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -XFlexibleInstances #-}
+{-# LANGUAGE FlexibleInstances, NoMonomorphismRestriction #-}
 module Language.Lsl.Internal.WorldState(
     DeferredScriptEventTarget(..),
     Listener(..),
@@ -14,14 +14,23 @@ module Language.Lsl.Internal.WorldState(
     evalErrorT,
     findAsset,
     findTextureAsset,
+    findTexture,
     fromErrorT,
     getActualPrimScripts,
     getListeners,
     getNextListenerId,
     getNextPause,
     getObjects,
+    getObjectDynamics,
+    setObjectDynamics,
+    getObjectPosition,
+    getObjectRotation,
+    getObjectVelocity,
+    getObjectE,
+    getParcelByPosition,
+    getPos,
     getPredefFuncs,
-    getPrim,
+    getPrimE,
     getPrimAnimations,
     getPrimAttachment,
     getPrimBodyParts,
@@ -44,6 +53,7 @@ module Language.Lsl.Internal.WorldState(
     getPrimMaterial,
     getPrimObjects,
     getPrimOwner,
+    getPrimParcel,
     getPrimParent,
     getPrimPassCollisions,
     getPrimPermissions,
@@ -98,8 +108,20 @@ module Language.Lsl.Internal.WorldState(
     lookupScriptFromChan,
     newKey,
     primHasActiveHandler,
+    pushDeferredScriptEvent,
+    pushDeferredScriptEventToPrim,
+    pushDeferredScriptEventToObject,
+    pushChangedEventToObjectE,
+    pushAttachEventE,
+    pushDeferredScriptEventE,
+    pushDeferredScriptEventToPrimE,
+    putHTTPTimeoutEvent,
+    putHTTPResponseEventE,
+    putParcel,
     putManyWQ,
     putWQ,
+    putWorldEvent,
+    putWorldEventE,
     queryWorld,
     runAndLogIfErr,
     runErrFace,
@@ -156,9 +178,40 @@ module Language.Lsl.Internal.WorldState(
     takeWQ,
     ticksToDuration,
     updatePrimFace,
-    wrand) where
+    wrand,
+    newKeyE,
+    getListenersE,
+    setListenersE,
+    getObjectsE,
+    setObjectsE,
+    setObjectE,
+    setPrimAttachmentE,
+    getPrimsE,
+    setPrimsE,  
+    setPrimE,
+    setPrimFacesE,
+    setPrimInventoryE,
+    setPrimParentE,
+    setPrimRotationE,
+    setTexture,
+    setWorldAvatarE,
+    getWorldAvatarsE,
+    setWorldAvatarsE,
+    setWorldCollisionsE,
+    setWorldEventHandlerE,
+    getWorldScriptsE,
+    setWorldScriptsE,
+    getWQueueE,
+    setWQueueE,
+    getTickE,
+    getScriptE,
+    setScriptE,
+    delScriptE,
+    logAMessageE,
+    sortByInvName
+    ) where
 
-import Control.Monad(MonadPlus(..))
+import Control.Monad(MonadPlus(..),liftM)
 import Control.Monad.State(StateT(..))-- hiding (State)
 import Control.Monad.Error(lift,ErrorT(..),MonadError(..))
 import Data.List(elemIndex)
@@ -175,13 +228,14 @@ import Language.Lsl.Internal.Exec(hasActiveHandler)
 import Language.Lsl.Internal.Key(mkKey)
 import Language.Lsl.Internal.Log(LogMessage(..),LogLevel(..))
 import Language.Lsl.Syntax(Validity,LModule(..),CompiledLSLScript(..))
-import Language.Lsl.Internal.Type(LSLValue(..),LSLType(..))
-import Language.Lsl.Internal.Util(mlookup,lookupByIndex)
+import Language.Lsl.Internal.Type(LSLValue(..),LSLType(..),vec2VVal)
+import Language.Lsl.Internal.Util(mlookup,lookupByIndex,lift1,lift2,lift3,lift4)
 import Language.Lsl.WorldDef(Prim(..),PrimFace(..),InventoryItem(..),InventoryItemIdentification(..),
-                    LSLObject(..),Script(..),Avatar(..),Region(..),
+                    LSLObject(..),Script(..),Avatar(..),Region(..),ObjectDynamics(..),Parcel(..),
                     WebHandling(..),isInvNotecardItem,isInvLandmarkItem,isInvClothingItem,
                     isInvBodyPartItem,isInvGestureItem,isInvSoundItem,isInvAnimationItem,
-                    isInvTextureItem,isInvScriptItem,isInvObjectItem)
+                    isInvTextureItem,isInvScriptItem,isInvObjectItem,sortByInvName,findByInvName,
+                    textureKey)
 
 import System.Random(StdGen(..),Random(..))
 
@@ -310,12 +364,12 @@ getWorldAvatar k = lift getWorldAvatars >>= (\ m -> case M.lookup k m of
     
 getRegion index = (lift getWorldRegions >>= mlookup index)
 
-getPrim k = (lift getPrims >>= (\ m -> case M.lookup k m of
+getPrimE k = (lift getPrims >>= (\ m -> case M.lookup k m of
     Nothing -> throwError ("no such prim: " ++ k)
     Just prim -> return prim))
     
 --getPrimVal k f = (lift getPrims >>= M.lookup k >>= return . f)
-getPrimVal k f = getPrim k >>= return . f
+getPrimVal k f = getPrimE k >>= return . f
 getPrimName k = getPrimVal k primName
 getPrimPosition k = getPrimVal k primPosition
 getPrimParent k = getPrimVal k primParent
@@ -374,10 +428,18 @@ getPrimLinkNum pk = do
                 Nothing -> throwError "internal error, can't find prim in link list of parent object"
                 Just i -> return (i + 1)
 -- TODO: temp until introduce region into Prim definition
-getPrimRegion _ = (lift (return (0 :: Int, 0 :: Int)))
-getObjectRegion _ = (lift (return (0 :: Int,0 :: Int)))
+--getPrimRegion _ = (lift (return (0 :: Int, 0 :: Int)))
+getPrimRegion _ = return (0 :: Int, 0 :: Int)
+getObjectRegion _ = getPrimRegion
+--getObjectRegion _ = (lift (return (0 :: Int,0 :: Int)))
 objectRegion :: a -> (Int,Int)
 objectRegion _ = (0,0)
+
+getPos pkey = runErrPrim pkey
+                  (VVal 0.0 0.0 0.0)
+                  (liftM vec2VVal (getRootPrim pkey >>= getObjectPosition))
+
+getRegionIndex pkey = return (0,0)
 
 runErrFace k i defaultVal = runAndLogIfErr 
     ("face " ++ (show i) ++ " or prim " ++ k ++ " not found") defaultVal
@@ -551,6 +613,32 @@ putWQ tick we wes = before ++ ((tick,we):after)
 putManyWQ [] wq = wq
 putManyWQ ((tick,we):wes) wq = putWQ tick we (putManyWQ wes wq)
 
+putWorldEvent delay we = 
+    do weq <- getWQueue
+       t <- getTick
+       setWQueue $ putWQ (t + max (durationToTicks delay) 1) we weq
+
+putWorldEventE = lift2 putWorldEvent
+
+pushDeferredScriptEvent event pk sn delay = 
+    putWorldEvent delay (DeferredScriptEvent event (DeferredScriptEventScriptTarget (pk,sn)))
+pushDeferredScriptEventToPrim event pk delay =
+    putWorldEvent delay (DeferredScriptEvent event (DeferredScriptEventPrimTarget pk))
+pushDeferredScriptEventToObject event oid delay =
+    putWorldEvent delay (DeferredScriptEvent event (DeferredScriptEventObjectTarget oid))
+
+pushChangedEventToObjectE oid val = lift $ pushDeferredScriptEventToObject (Event "changed" [IVal val] M.empty) oid 0
+pushAttachEventE pk k = pushDeferredScriptEventToPrimE (Event "attach" [KVal k] M.empty) pk 0
+  
+pushDeferredScriptEventE = lift4 pushDeferredScriptEvent
+pushDeferredScriptEventToPrimE = lift3 pushDeferredScriptEventToPrim
+
+putHTTPTimeoutEvent pk sn key = 
+    pushDeferredScriptEvent (Event "http_response" [KVal key, IVal 499, LVal [], SVal ""] M.empty) pk sn 
+putHTTPResponseEventE pk sn key status metadata body =
+    pushDeferredScriptEventE (Event "http_response" [KVal key, IVal status, LVal metadata, body] M.empty) pk sn
+
+
 data SimEvent = SimEvent { simEventName :: String, simEventArgs :: [SimEventArg], simEventDelay :: Int }
     deriving (Show)
 data SimEventArg = SimEventArg { simEventArgName :: String, simEventArgValue :: String }
@@ -649,3 +737,94 @@ wrand = do g <- getRandGen
            let (v,g') = random g
            setRandGen g'
            return v
+
+setObject oid obj = getObjects >>= setObjects . M.insert oid obj
+
+-- some lifted operations.
+-- for want of a better naming convention, the lifted operations
+-- are suffixed with an 'E' (because they'll be used in an 
+-- ErrorT monad).  The actual type is more general, so if I 
+-- were exporting these, I'd have to do better.  Originally I 
+-- marked them with a ', (i.e. newKey vs. newKey') but that
+-- seems even more unfriendly...
+newKeyE = lift newKey
+getListenersE = lift getListeners
+setListenersE = lift1 setListeners
+getObjectsE = lift getObjects
+setObjectsE = lift1 setObjects
+setObjectE = lift2 setObject
+setPrimAttachmentE = lift2 setPrimAttachment
+getPrimsE = lift getPrims
+setPrimsE = lift1 setPrims
+setPrimE = lift2 setPrim
+setPrimFacesE = lift2 setPrimFaces
+setPrimInventoryE = lift2 setPrimInventory
+setPrimParentE = lift2 setPrimParent
+setPrimRotationE = lift2 setPrimRotation
+setWorldAvatarE = lift2 setWorldAvatar
+
+getWorldAvatarsE = lift getWorldAvatars
+setWorldAvatarsE = lift1 setWorldAvatars
+setWorldCollisionsE = lift1 setWorldCollisions
+setWorldEventHandlerE = lift1 setWorldEventHandler
+getWorldScriptsE = lift getWorldScripts
+setWorldScriptsE = lift1 setWorldScripts
+getWQueueE = lift getWQueue
+setWQueueE = lift1 setWQueue
+getTickE = lift getTick
+
+getObjectE name = getObjectsE >>= mlookup name
+
+getObjectDynamics = liftM objectDynamics . getObjectE
+setObjectDynamics k d = getObjectE k >>= \ o -> setObjectE k o { objectDynamics = d }
+getObjectPosition = liftM objectPosition . getObjectDynamics
+getObjectRotation = liftM objectRotation . getObjectDynamics
+getObjectVelocity = liftM objectVelocity . getObjectDynamics
+
+getScriptE = curry ((getWorldScriptsE >>=) . mlookup)
+setScriptE pk sn s = liftM (M.insert (pk,sn) s) getWorldScriptsE >>= setWorldScriptsE
+delScriptE pk sn = getWorldScriptsE >>= setWorldScriptsE . M.delete (pk,sn)
+logAMessageE = lift3 logAMessage
+
+getParcelByPosition regionIndex (x,y,_) = 
+    getRegion regionIndex >>= findParcel 0 . regionParcels
+    where findParcel _ [] = throwError "parcel not found" -- mzero
+          findParcel i (p:ps) =
+              let (south,north,west,east) = parcelBoundaries p
+                  (xc,yc) = (floor x, floor y) in
+                  if xc < east && xc >= west && yc < north && yc >= south
+                      then return (i,p) else findParcel (i + 1) ps
+
+getPrimParcel pk = do
+    regionIndex <- getPrimRegion pk
+    pos <- getObjectPosition =<< getRootPrim pk
+    (index,parcel) <- getParcelByPosition regionIndex pos
+    return (regionIndex,index,parcel)
+    
+putParcel regionIndex index parcel = do
+    region <- getRegion regionIndex
+    let (before,after) = splitAt index (regionParcels region)
+    let parcels' = if null after then parcel : before else before ++ (parcel : tail after)
+    lift $ setRegion regionIndex $ region { regionParcels = parcels' }
+
+findTexture pk id =
+    do  textures <- getPrimTextures pk
+        case findByInvName id textures of
+            Just item -> return $ snd $ inventoryItemNameKey $ inventoryItemIdentification item
+            Nothing -> do
+                result <- return $ findTextureAsset id
+                case result of
+                    Nothing -> throwError ("cannot find texture " ++ id)
+                    Just item -> return $ snd $ inventoryItemNameKey $ inventoryItemIdentification item
+                    
+setTexture tk face pkey =
+    if face == -1
+        then do faces <- getPrimFaces pkey
+                let faces' = map (\ face -> 
+                        let info = faceTextureInfo face in 
+                            face { faceTextureInfo = info { textureKey = tk } }) faces
+                setPrimFacesE pkey faces'
+        else do faces <- getPrimFaces pkey
+                f <- lookupByIndex face faces
+                let tInfo = faceTextureInfo f
+                updatePrimFace pkey face (\ f -> f { faceTextureInfo = tInfo { textureKey = tk } })

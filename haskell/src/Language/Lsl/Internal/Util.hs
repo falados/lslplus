@@ -26,11 +26,22 @@ module Language.Lsl.Internal.Util (
     fst3,
     snd3,
     thd3,
-    module Language.Lsl.Internal.Math
+    module Language.Lsl.Internal.Math,
+    lift1,
+    lift2,
+    lift3,
+    lift4,
+    (<||>),
+    (<??>),
+    flip3,
+    rotL,
+    rotR,
+    optional
     ) where
 
 import Control.Monad(liftM,when)
 import Control.Monad.Error(MonadError(..),Error(..))
+import Control.Monad.Trans(lift)
 import Data.Char
 import Data.List(find,elemIndex,isPrefixOf,tails)
 import qualified Data.ByteString.Lazy.Char8 as B
@@ -43,6 +54,24 @@ import Language.Lsl.Internal.Math
 
 import IO(hFlush,stdout)
 import Network.URI(escapeURIString,isUnescapedInURI,unEscapeString)
+
+-- some random operators
+(<||>) a b = a `catchError` const b
+(<??>) a s = a `catchError` const (throwError s)
+
+infixl 0 <||>
+infixl 0 <??>
+
+optional a = liftM Just a <||> return Nothing
+rotR f x y z = f y z x
+rotL f x y z = f z x y
+flip3 f x y z = f z y x
+
+-- some extra lift!
+lift1 f = lift . f
+lift2 f x = lift . f x
+lift3 f x y = lift . f x y
+lift4 f x y z = lift . f x y z
 
 -- lifting lookups for Map (if key is instance of Show) and IntMap
 
