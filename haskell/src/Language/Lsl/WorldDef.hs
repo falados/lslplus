@@ -448,7 +448,8 @@ data Script = Script { scriptImage :: !(ScriptImage Float),
                        scriptCollisionFilter :: !(String,String,Bool),
                        scriptTargetIndex :: !Int,
                        scriptPositionTargets :: !(IM.IntMap ((Float,Float,Float), Float)),
-                       scriptRotationTargets :: !(IM.IntMap ((Float,Float,Float,Float), Float)) } deriving (Show)
+                       scriptRotationTargets :: !(IM.IntMap ((Float,Float,Float,Float), Float)),
+                       scriptControls :: ![String] } deriving (Show)
 
 mkScript img = Script { scriptImage = img,
                         scriptActive = True,
@@ -461,7 +462,8 @@ mkScript img = Script { scriptImage = img,
                         scriptCollisionFilter = ("",nullKey,True),
                         scriptTargetIndex = 0,
                         scriptPositionTargets = IM.empty,
-                        scriptRotationTargets = IM.empty }
+                        scriptRotationTargets = IM.empty,
+                        scriptControls = [] }
                         
 worldFromFullWorldDef worldBuilder fwd lib scripts =
     do let primMap = mkPrimMap (fullWorldDefPrims fwd)

@@ -7,7 +7,11 @@ data AvatarOutputEvent =
     | AvatarSay { avatarChatChannel :: Int, avatarChatMessage :: String }
     | AvatarShout { avatarChatChannel :: Int, avatarChatMessage :: String }
     | AvatarPay { avatarPayPrimKey :: String, avatarPayAmount :: Int }
-    | AvatarControl { avatarNewControlBits :: Int } deriving (Read,Show)
+    | AvatarControl { avatarNewControlBits :: Int } 
+    | AvatarFaceTouch { avatarTouchPrimKey :: String, 
+                        avatarTouchDuration :: Float,
+                        avatarTouchFace :: Int, 
+                        avatarTouchST :: (Float,Float) } deriving (Read,Show)
 
 data AvatarInputEvent =
       AvatarOwnerSay { avatarOwnerSayPrimKey :: String, avatarOwnerSayMsg :: String }

@@ -25,10 +25,11 @@ module Language.Lsl.Internal.SimLL(
     unimplementedFuncs
     ) where
 
+import Control.Applicative hiding (optional)
 import Control.Monad(
-    MonadPlus(..),foldM,liftM,liftM2,unless,when)
+    MonadPlus(..),foldM,forM_,liftM,liftM2,unless,when,ap)
 import Control.Monad.State(StateT(..),lift)
-import Control.Monad.Error(MonadError(..))
+import Control.Monad.Error(MonadError(..),ErrorT,Error)
 import Data.List(find,foldl',isSuffixOf)
 import Data.Bits((.&.),(.|.),bit,clearBit,complement,setBit,shiftL,testBit)
 import Data.Int()
@@ -57,7 +58,7 @@ import Language.Lsl.Internal.Type(LSLValue(..),LSLType(..),defaultValue,
 import Language.Lsl.Internal.Util(add3d,diff3d,fac,findM,fromInt,
     generatePermutation,ilookup,lookupByIndex,mag3d,mlookup,norm3d,
     quaternionMultiply,rot3d,rotationBetween,scale3d,tuplify,lift2,lift3,lift4,
-    (<||>),(<??>),rotL,optional)
+    (<||>),(<??>),rotL,optional,whenJust)
 import Language.Lsl.WorldDef(Attachment(..),Avatar(..),
     AvatarControlListener(..),Email(..),Flexibility(..),InventoryInfo(..),
     InventoryItem(..),InventoryItemData(..),InventoryItemIdentification(..),
@@ -74,6 +75,16 @@ import System.Time(ClockTime(..),CalendarTime(..),TimeDiff(..),addToClockTime,
     toUTCTime)
 import Text.Printf(PrintfType(..),printf)
 
+-- an orphan instance...
+instance (Monad m, Error e) => Applicative (ErrorT e m) where
+   pure  = return
+   (<*>) = ap
+
+-- just for fun
+(<<=) = (=<<)
+
+infixl 1 <<=
+
 -- some logging functions
 slog :: Monad m => ScriptInfo Float -> String -> WorldM m ()
 slog = logAMessage LogInfo . infoToLogSource
@@ -84,8 +95,7 @@ slogE = lift2 slog
 -- execute a predefined ('ll') function
 doPredef :: Monad m => String -> ScriptInfo Float -> [LSLValue Float] -> WorldM m (EvalResult,LSLValue Float)
 doPredef name info@(ScriptInfo oid pid sid pkey event) args =
-    do predefs <- getPredefFuncs
-       maybe doDefault runIt (tryPredefs name predefs)
+   (maybe doDefault runIt . tryPredefs name) =<< getPredefFuncs
     where runIt (t,f) = runErrFunc info name (defaultValue t) args f
           doDefault = do
                (_,rettype,argtypes) <- findM (\ (x,y,z) -> x == name) funcSigs
@@ -112,11 +122,11 @@ prohibited a = maybe (return ()) (const $ throwError "prohibited") =<< a
 
 primErr k _ = throwError ("problem - can't find prim " ++ k)
 
-withAvatar ak found notFound = do
-    av <- optional $ getWorldAvatar ak
-    maybe notFound found av
- 
-pushDataserverEvent pk sn key val = pushDeferredScriptEvent (Event "dataserver" [KVal key, SVal val] M.empty) pk sn 0
+withAvatar ak notFound found =
+    maybe notFound found =<< (optional $ getWorldAvatar ak)
+    
+pushDataserverEvent pk sn key val = 
+    pushDeferredScriptEvent (Event "dataserver" [KVal key, SVal val] M.empty) pk sn 0
 pushDataserverEventE = lift4 pushDataserverEvent
    
 --- Web related functions ----------------------------------------------------
@@ -179,8 +189,7 @@ llRequestAgentData info@(ScriptInfo _ _ sn pk _) [KVal ak, IVal d] =
        continueK key
 
 llRequestSimulatorData info@(ScriptInfo _ _ sn pk _) [SVal simName, IVal d] =
-    do key <- newKeyE
-       regions <- lift getWorldRegions
+    do regions <- lift getWorldRegions
        let findRegion = findM ((==simName) . regionName . snd) (M.toList regions)
        let simErr = throwError ("unknown simulator " ++ simName)
        val <- case d of
@@ -190,6 +199,7 @@ llRequestSimulatorData info@(ScriptInfo _ _ sn pk _) [SVal simName, IVal d] =
                                               return $ lslValString $ vec2VVal (256 * fromIntegral x, 256 * fromIntegral y, 0))
                                           <||> simErr
                     | otherwise -> throwError ("invalid data requested: " ++ show d)
+       key <- newKeyE
        pushDataserverEventE pk sn key val
        continueK key
 --- INVENTORY related functions ----------------------------------------------
@@ -208,7 +218,7 @@ getPrimInventoryInfo pk invType =
           | i == llcInventoryTexture ->   sortit getPrimTextures
           | otherwise -> 
               throwError ("invalid inventory type: " ++ lslValString invType)
-    where sortit f = liftM sortByInvName (f pk)
+    where sortit f = sortByInvName <$> (f pk)
                             
 llGetInventoryNumber info@(ScriptInfo _ _ _ pk _) [invType@(IVal _)] =
     getPrimInventoryInfo pk invType >>= continueI . length
@@ -238,7 +248,7 @@ llGetInventoryKey info@(ScriptInfo _ _ _ pk _) [SVal name] =
                     else return nullKey
        
 llGetInventoryName info@(ScriptInfo _ _ _ pk _) [invType@(IVal _), IVal index] =
-    liftM (map inventoryItemName) (getPrimInventoryInfo pk invType) >>= 
+    (map inventoryItemName) <$> (getPrimInventoryInfo pk invType) >>= 
         continueS . fromMaybe "" . lookupByIndex index
     
 llGetInventoryType info@(ScriptInfo _ _ _ pk _) [SVal name] =
@@ -320,7 +330,7 @@ llGiveInventory info@(ScriptInfo _ _ _ pk _) [KVal k, SVal inv] =
                       return (InventoryItem (InventoryItemIdentification (inventoryItemName item, k)) info dat)
 
 llSetRemoteScriptAccessPin info@(ScriptInfo _ _ _ pk _) [IVal pin] =
-    lift $ setPrimRemoteScriptAccessPin pk pin >> continueV
+    lift2 setPrimRemoteScriptAccessPin pk pin >> continueV
 llRemoteLoadScript info@(ScriptInfo _ _ _ pk _) [KVal _,SVal _, IVal _, IVal _] =
     sayErr pk  "Deprecated.  Please use llRemoteLoadScriptPin instead." >> continueV
        
@@ -353,7 +363,7 @@ llResetScript info@(ScriptInfo _ _ sn pk _) [] =
        
 llResetOtherScript info@(ScriptInfo _ _ sn pk _) [SVal sn'] =
     do  when (sn == sn') $ throwError "trying to reset the current script - must use llResetScript for this"
-        liftM scriptActive (getScriptE pk sn) >>= flip unless (throwError "can't reset a stopped script")
+        scriptActive <$> (getScriptE pk sn) >>= flip unless (throwError "can't reset a stopped script")
         resetScript pk sn'
         continueV
     
@@ -427,7 +437,7 @@ llSitTarget (ScriptInfo _ _ _ pk _) [v@(VVal _ _ _),r@(RVal _ _ _ _)] =
 llAvatarOnSitTarget info@(ScriptInfo _ _ _ pk _) [] =
     do  sitTarget <- getPrimSitTarget pk
         when (isNothing sitTarget) (throwError "no sit target")
-        liftM (fromMaybe nullKey) (getPrimSittingAvatar pk) >>= continueK
+        (fromMaybe nullKey) <$> (getPrimSittingAvatar pk) >>= continueK
 
 llUnSit info@(ScriptInfo _ _ _ pk _) [KVal k] = 
     do  val <- getPrimSittingAvatar pk
@@ -463,8 +473,7 @@ llSleep _ [FVal f] = yieldV . (+ durationToTicks f) =<< getTickE
 llInstantMessage info@(ScriptInfo _ _ _ pk _) [KVal ak, SVal message] =
     do tick <- getTickE
        name <- getPrimName pk
-       av <- getWorldAvatar ak <||> throwError ("no such user: " ++ ak)
-       let avname = avatarName av
+       avname <- avatarName <$> getWorldAvatar ak
        logAMessageE LogInfo "sim" ("IM to " ++ avname ++ " from " ++ name ++ ": " ++ message)
        yieldV $ tick + durationToTicks 2
        
@@ -480,7 +489,7 @@ llRegionSay info params@[IVal chan, SVal message] =
 chat range info@(ScriptInfo oid pid sid pkey event) [IVal chan, SVal message] =
     do slog info $ concat ["chan = ", show chan, ", message = ", message]
        putChat range pkey chan message
-       return (EvalIncomplete,VoidVal)
+       continueV
 chatE = lift3 chat
 
 putChat range k chan message = do
@@ -501,10 +510,9 @@ putChatE = lift4 putChat
 sayErr k msg = putChatE sayRange k cDebugChannel msg
 
 registerListener listener =
-   do listeners <- getListeners
-      id <- getNextListenerId
+   do id <- getNextListenerId
       setNextListenerId (id + 1)
-      setListeners $ IM.insert id (listener,True) listeners
+      setListeners . IM.insert id (listener,True) =<< getListeners
       return id
 unregisterListener pk sname id = 
     do listeners <- getListenersE
@@ -542,7 +550,7 @@ llTeleportAgentHome info@(ScriptInfo _ _ _ pk _) [KVal ak] =
 llEjectFromLand info@(ScriptInfo oid _ _ pk _) [KVal user] =
     do  owner <- getPrimOwner pk
         regionIndex <- getPrimRegion pk
-        (_,parcel) <- getObjectPosition oid >>= getParcelByPosition regionIndex
+        (_,parcel) <- getParcelByPosition regionIndex =<< getObjectPosition oid
         if parcelOwner parcel == owner 
             then slogE info ("llEjectFromLand: user " ++ user ++ " ejected (in theory)")
             else slogE info "llEjectFromLand: not permitted to eject from this parcel"
@@ -669,7 +677,7 @@ llDetachFromAvatar info@(ScriptInfo oid _ sid pk _) [] =
         continueV
     
 llGetAttached info@(ScriptInfo oid _ _ _ _) [] = 
-    liftM (maybe 0 attachmentPoint) (getPrimAttachment oid) >>= continueI
+    (maybe 0 attachmentPoint) <$> (getPrimAttachment oid) >>= continueI
 
 llGiveMoney info@(ScriptInfo _ _ sn pk _) [KVal ak, IVal amount] =
     do  script <- getScriptE pk sn
@@ -712,7 +720,7 @@ llClearCameraParams info@(ScriptInfo _ _ sid pk _) [] =
                 setWorldAvatarsE (M.insert k (av { avatarCameraControlParams = defaultCamera }) avatars)
         continueV
     
-getAvParamsE f k = liftM f (getWorldAvatarsE >>= mlookup k)
+getAvParamsE f k = f <$> (getWorldAvatarsE >>= mlookup k)
 
 llGetCameraPos info@(ScriptInfo _ _ sid pk _) [] =
     do  avKey <- getPermittedAvKey info "llGetCameraPos" cPermissionTrackCamera
@@ -788,18 +796,17 @@ llSameGroup info@(ScriptInfo _ _ _ pk _) [KVal k] =
         continueI (lslBool (group == myGroup))
     where avGroup = getAvParamsE avatarActiveGroup k
 
-llGetLinkKey (ScriptInfo oid _ _ _ _) [IVal link] =
-    do  LSLObject { primKeys = pkeys } <- getObjectE oid
-        pk <- lookupByIndex (link - 1) pkeys
-        continueK pk
+getLinkKey oid link = 
+    lookupByIndex (link - 1) =<< primKeys <$> getObjectE oid
+
+llGetLinkKey (ScriptInfo oid _ _ _ _) [IVal link] = 
+    continueK =<< getLinkKey oid link
 
 -- TODO: should check for av/prim in same region
 -- TODO: no concept of online/offline for av           
 llKey2Name info [KVal k] = --lift $
-    (do av <- getWorldAvatar k
-        continueS (avatarName av)) <||>
-    (do prim <- getPrimE k
-        continueS (primName prim)) <||> continueS ""
+    (continueS =<< avatarName <$> getWorldAvatar k) <||>
+    (continueS =<< primName <$> getPrimE k) <||> continueS ""
 
 llOwnerSay info [SVal s] =
     do slogE info ("Owner Say: " ++ s)
@@ -808,7 +815,7 @@ llOwnerSay info [SVal s] =
        continueV
        
 llGetGeometricCenter info@(ScriptInfo oid _ _ _ _) [] =
-    do  LSLObject { primKeys = links } <- getObjectE oid
+    do  links <- primKeys <$> getObjectE oid
         when (null links) $ throwError "error: empty linkset!"
         rootPos <- getObjectPosition oid
         foldM (\ v -> liftM (add3d v) . getGlobalPos) (0,0,0) links 
@@ -817,14 +824,14 @@ llGetGeometricCenter info@(ScriptInfo oid _ _ _ _) [] =
 llGetMass info@(ScriptInfo oid _ _ _ _) [] = objectMass oid >>= continueF    
 
 objectMass oid = do
-    LSLObject { primKeys = links } <- getObjectE oid
+    links <- primKeys <$> getObjectE oid
     foldM (\ v k -> getPrimE k >>= ( \ prim -> return $ v + primMassApprox prim)) 0.0 links
     
 llGetObjectMass info [KVal k] =
     ((getWorldAvatar k >> return 80.0) <||> objectMass k) >>= continueF
     
 llGetVel info@(ScriptInfo oid _ _ _ _) [] =
-    getObjectVelocity oid >>= continueVec
+    continueVec =<< getObjectVelocity oid
 
 llGetForce info@(ScriptInfo oid _ _ _ _) [] =
     getObjectDynamics oid >>= continueVec . fst . objectForce
@@ -852,10 +859,8 @@ llGetAccel info@(ScriptInfo oid _ _ _ _) [] = do
             where rotation = if snd $ objectForce dyn then objectRotation dyn else (0,0,0,1)
     let impulse = ((fst . fst . objectImpulse) dyn `rot3d` rotation, (snd . objectImpulse) dyn)
             where rotation = if (snd . fst . objectImpulse) dyn then objectRotation dyn else (0,0,0,1)
-    t <- getTickE
-    mass <- objectMass oid
-    pos <- getObjectPosition oid
-    continueVec $ calcAccel t 0 mass pos force impulse
+    continueVec =<< calcAccel <$> getTickE <*> pure 0 <*> objectMass oid <*> getObjectPosition oid <*>
+        pure force <*> pure impulse
         
 llSetTorque info@(ScriptInfo { scriptInfoObjectKey = oid }) [VVal x y z, IVal local] =
     do  d <- getObjectDynamics oid
@@ -890,10 +895,9 @@ getGlobalPos pk = do
         rel <- getPrimPosition pk
         rot <- getObjectRotation oid
         return (root `add3d` rot3d rel rot)
-        
-getGlobalRot pk = do
-    oid <- getRootPrim pk
-    liftM2 quaternionMultiply (getPrimRotation pk) (getObjectRotation oid)
+
+getGlobalRot pk =
+    quaternionMultiply <$> getPrimRotation pk <*> (getObjectRotation =<< getRootPrim pk)
     
 llRotLookAt info@(ScriptInfo oid _ _ _ _) [RVal x y z s, FVal strength, FVal tau] =
     rotLookAt oid (x,y,z,s) strength tau >> continueV
@@ -976,12 +980,13 @@ llGetAlpha (ScriptInfo _ _ _ pkey _) [IVal side] =
             else runFace pkey side $ do
                 faces <- getPrimFaces pkey
                 let n = length faces
-                return $ if n > 0 then sum (map faceAlpha faces) / fromInt (length faces)
+                return $ if n > 0 then sum (map faceAlpha faces) / fromInt n
                                   else 1.0
 
-llSetAlpha (ScriptInfo _ _ _ pkey _) [FVal alpha, IVal face] = lift $ setAlpha alpha face pkey
+llSetAlpha (ScriptInfo _ _ _ pkey _) [FVal alpha, IVal face] =
+    setAlpha alpha face pkey
 
-setAlpha alpha face pkey =
+setAlpha alpha face pkey = lift $
     if face == -1
         then runErrFace pkey face (EvalIncomplete,VoidVal) $ do 
                 faces <- getPrimFaces pkey
@@ -991,12 +996,12 @@ setAlpha alpha face pkey =
         else setPrimFaceAlpha pkey face alpha >> continueV
 
 llSetLinkAlpha (ScriptInfo oid pid _ _ _) [IVal link, FVal alpha, IVal face] = do
-    pks <- getTargetPrimKeysE oid link pid
-    lift $ mapM_ (setAlpha alpha face) pks
+    mapM_ (setAlpha alpha face) =<< getTargetPrimKeysE oid link pid
     continueV
 
 getTargetPrimKeysE oid link pid = lift $ do
-    LSLObject { primKeys = prims } <- runAndLogIfErr ("can't find object " ++ oid) (LSLObject [] defaultDynamics) $ getObjectE oid
+    prims <- primKeys <$> 
+        (runAndLogIfErr ("can't find object " ++ oid) (LSLObject [] defaultDynamics) $ getObjectE oid)
     let targetList = targetLinks (length prims) link pid
     mapM (flip lookupByIndex prims) targetList
     
@@ -1024,19 +1029,19 @@ setColor color face pkey =
         else lift $ setPrimFaceColor pkey face (vVal2Vec color) >> continueV
 
 llSetLinkColor (ScriptInfo oid pid _ _ _) [IVal link, color, IVal face] = do
-    pks <- getTargetPrimKeysE oid link pid
-    mapM_ (setColor color face) pks
+    mapM_ (setColor color face) =<< getTargetPrimKeysE oid link pid
     continueV
 
+runFaceTextureQuery pk face query =
+    runFace pk face (query <$> (getPrimFaceTextureInfo pk face'))
+    where face' = if face == -1 then 0 else face
+    
 llGetTextureOffset (ScriptInfo _ _ _ pkey _) [IVal face] =
-    let face' = if face == -1 then 0 else face in
-        runFace pkey face (liftM textureOffsets (getPrimFaceTextureInfo pkey face')) >>= continueVec
+    continueVec =<< runFaceTextureQuery pkey face textureOffsets
 llGetTextureScale (ScriptInfo _ _ _ pkey _) [IVal face] =
-    let face' = if face == -1 then 0 else face in
-        runFace pkey face (liftM textureRepeats (getPrimFaceTextureInfo pkey face')) >>= continueVec
+    continueVec =<< runFaceTextureQuery pkey face textureRepeats
 llGetTextureRot (ScriptInfo _ _ _ pkey _) [IVal face] =
-    let face' = if face == -1 then 0 else face in
-        runFace pkey face (liftM textureRotation (getPrimFaceTextureInfo pkey face')) >>= continueF
+    continueF =<< runFaceTextureQuery pkey face textureRotation
         
 llSetTexture info@(ScriptInfo _ _ _ pk _) [SVal texture,IVal face] = 
     do  tk <- findTexture pk texture
@@ -1055,9 +1060,8 @@ llGetTexture (ScriptInfo _ _ _ pkey _) [IVal face] =
                  Just item -> return $ inventoryItemName item) >>= continueS
                  
 llSetLinkTexture info@(ScriptInfo oid pid _ pk _) [IVal link, SVal texture,IVal face] = do
-    pks <- getTargetPrimKeysE oid link pid
     tk <- findTexture pk texture
-    mapM_ (setTexture tk face) pks
+    mapM_ (setTexture tk face) =<< getTargetPrimKeysE oid link pid
     continueV
     
 updateTextureInfo update pk faceIndex =
@@ -1076,11 +1080,14 @@ updateTextureInfo update pk faceIndex =
     ) >> continueV
 
 llScaleTexture info@(ScriptInfo _ _ _ pk _) [FVal h,FVal v,IVal faceIndex] = 
-    updateTextureInfo update pk faceIndex where update info = info { textureRepeats = (h,v,0) }
+    updateTextureInfo update pk faceIndex 
+    where update info = info { textureRepeats = (h,v,0) }
 llOffsetTexture (ScriptInfo _ _ _ pk _) [FVal h, FVal v, IVal faceIndex] =
-    updateTextureInfo update pk faceIndex where update info = info { textureOffsets = (h,v,0) }
+    updateTextureInfo update pk faceIndex 
+    where update info = info { textureOffsets = (h,v,0) }
 llRotateTexture (ScriptInfo _ _ _ pk _) [FVal rot, IVal faceIndex] =
-    updateTextureInfo update pk faceIndex where update info = info { textureRotation = rot }
+    updateTextureInfo update pk faceIndex 
+    where update info = info { textureRotation = rot }
         
 groupList _ [] = []
 groupList n l | n > 0 = take n l : groupList n (drop n l)
@@ -1147,18 +1154,17 @@ getObjectPermMask oid maskId = do
        return (if maskId `elem` [0..(n-1)] then masks !! maskId else 
                       if maskId == 3 then 0 else base)
           
-llGetScale (ScriptInfo _ _ _ pkey _) [] = getPrimScale pkey >>= continueVec
+llGetScale (ScriptInfo _ _ _ pkey _) [] = continueVec =<< getPrimScale pkey
     
 llSetScale (ScriptInfo _ _ _ pk _) [scale] =
-    if tooSmall then continueV else lift $ setPrimScale pk clippedVec >> continueV
+    if tooSmall then continueV else lift2 setPrimScale pk clippedVec >> continueV
     where (x,y,z) = vVal2Vec scale
           tooSmall = x < 0.01 || y < 0.01 || z < 0.01
           clippedVec = (min x 10.0, min y 10.0, min z 10.0) 
   
 llGetBoundingBox info [KVal k] =
     do  logAMessageE LogInfo "sim" "note: llGetBoundingBox does not return accurate results (yet)"
-        avatars <- getWorldAvatarsE
-        withAvatar k found notFound
+        withAvatar k notFound found
     where tup2l (x,y) = [x,y]
           found avatar = let pos = avatarPosition avatar in
                 continueL $ map (vec2VVal . add3d pos) [(-1.0,-1.0,-1.0),(1.0,1.0,1.0)]
@@ -1172,7 +1178,7 @@ getPrimBox pk = do
 
 llSetTimerEvent (ScriptInfo _ _ sn pk _) [FVal interval] =
     -- TODO: this may not accurately reflect buggy behavior in SL
-    do lift $ removePendingTimerEvent pk sn
+    do lift2 removePendingTimerEvent pk sn
        when (interval > 0) $ putWorldEventE interval (TimerEvent interval (pk,sn))
        continueV
     where removePendingTimerEvent pk sn = do
@@ -1198,7 +1204,7 @@ llGetPrimitiveParams (ScriptInfo _ _ _ pk _) [LVal l] = getPrimParameters pk l >
 llSetPrimitiveParams (ScriptInfo _ _ _ pk _) [LVal l] = setPrimParameters pk l >> continueV
 
 llSetLinkPrimitiveParams (ScriptInfo oid pid _ _ _) [IVal link,LVal l] =
-    do  LSLObject { primKeys = pks } <- getObjectE oid
+    do  pks <- primKeys <$> getObjectE oid
         let targetList = targetLinks (length pks) link pid
         pkList <- mapM (flip lookupByIndex pks) targetList
         mapM_ (flip setPrimParameters l) pkList
@@ -1239,7 +1245,8 @@ queryPrimFlexible k =
 queryPrimLight k =
     getPrimLight k >>= (\ light -> case light of
         Nothing -> return [IVal 0, VVal 0 0 0, FVal 0, FVal 0, FVal 0]
-        Just light' -> return $ map ($ light') [const (IVal 1), vec2VVal . lightColor, FVal . lightIntensity, FVal . lightRadius, FVal . lightFalloff])
+        Just light' -> return $ map ($ light')
+            [const (IVal 1), vec2VVal . lightColor, FVal . lightIntensity, FVal . lightRadius, FVal . lightFalloff])
     
 queryPrimMaterial = liftM ((:[]) . IVal) . getPrimMaterial
 queryPrimStatus bit =  liftM ((:[]) . IVal . (\ i -> lslBool (testBit i bit))) . getPrimStatus
@@ -1255,7 +1262,7 @@ queryPrimFullbright = queryFaceVals (\ face -> if faceFullbright face then [IVal
 
 queryFaceVals f (IVal side) k = 
     if side == -1
-        then liftM (concatMap f) (getPrimFaces k)
+        then (concatMap f) <$> (getPrimFaces k)
         else getPrimFaces k >>= fromErrorT [] . (liftM f . lookupByIndex side)
 
 -- TODO: get these out of here
@@ -1342,11 +1349,9 @@ updatePrimTypeOldSkool' prim (primCode@(IVal i):rest) | primCode == llcPrimTypeS
                                                       | otherwise = badParms "deprecated prim type"
 updatePrimTypeOldSkool' _ _ = badParms "deprecated prim type"
 
---updatePrimTempOnRez prim (IVal tempOnRez:rest) = return (prim { primTempOnRez = if tempOnRez /= 0 then True else False }, rest)
 updatePrimTempOnRez pk (IVal tempOnRez:rest) = lift (setPrimTempOnRez pk (tempOnRez /= 0)) >> return rest
 updatePrimTempOnRez _ _ = badParms "PRIM_TEMP_ON_REZ"
 
---updatePrimMaterial prim (IVal material:rest) = return (prim { primMaterial = material }, rest)
 updatePrimMaterial pk (IVal material:rest) = lift (setPrimMaterial pk material) >> return rest
 updatePrimMaterial _ _ = throwError "insufficient or incorrect parameters for PRIM_MATERIAL"
 
@@ -1373,7 +1378,7 @@ updatePrimRotation pk (rot@(RVal _ _ _ _):rest) =
        return rest
     where r = rVal2Rot rot
 updatePrimRotation _ _ = badParms "PRIM_ROTATION"
-updatePrimScale pk (scale@(VVal _ _ _):rest) = lift (setPrimScale pk (vVal2Vec scale)) >> return rest
+updatePrimScale pk (scale@(VVal _ _ _):rest) = lift2 setPrimScale pk (vVal2Vec scale) >> return rest
 updatePrimScale _ _ = badParms "PRIM_SIZE"
 
 updatePrimFlexible pk (IVal flex:IVal soft:FVal gravity:FVal friction:FVal wind:FVal tension:VVal fx fy fz:rest) =
@@ -1381,7 +1386,8 @@ updatePrimFlexible pk (IVal flex:IVal soft:FVal gravity:FVal friction:FVal wind:
 updatePrimFlexible _ _ = badParms "PRIM_FLEXIBLE"
 
 updatePrimLight pk (IVal light:VVal r g b:FVal intensity:FVal radius:FVal falloff:rest) =
-    lift (setPrimLight pk (if light == 0 then Nothing else Just (LightInfo (r,g,b) intensity radius falloff))) >> return rest
+    lift2 setPrimLight pk (if light == 0 then Nothing else Just (LightInfo (r,g,b) intensity radius falloff)) >> 
+    return rest
 updatePrimLight _ _ = badParms "PRIM_POINT_LIGHT"
 
 updatePrimBumpShiny pk params =
@@ -1478,9 +1484,7 @@ llGetObjectDetails _ [KVal k, LVal params] =
      -- TODO: this doesn't take into account multiple regions
      (getAvatarDetails k params <||> getPrimDetails k params) >>= continueL
      where getAvatarDetails k params = 
-               do  avs <- getWorldAvatarsE
-                   av <- mlookup k avs
-                   return $ map (avq av) params
+               (map . avq) <$> (getWorldAvatar k) <*> pure params
                where avq av i | i == llcObjectName = SVal $ avatarName av
                               | i == llcObjectDesc = SVal ""
                               | i == llcObjectPos = vec2VVal $ avatarPosition av
@@ -1508,7 +1512,7 @@ llGetObjectDetails _ [KVal k, LVal params] =
 
 --------------------------------------------------------------------------------------------------------------
 llAllowInventoryDrop info@(ScriptInfo _ _ _ k _) [IVal add] = do
-    liftM (\ p -> p { primAllowInventoryDrop = add /= 0 }) (getPrimE k) >>= setPrimE k
+    (\ p -> p { primAllowInventoryDrop = add /= 0 }) <$> (getPrimE k) >>= setPrimE k
     slogE info ("drop is now " ++ (if add == 0 then "not " else "") ++ "allowed")
     continueV
         
@@ -1530,13 +1534,11 @@ llSetParcelMusicURL info@(ScriptInfo _ _ _ pk _) [SVal url] =
         continueV
         
 llGetParcelFlags info@(ScriptInfo _ _ _ pk _) [VVal x y z] =
-    do  regionIndex <- getPrimRegion pk
-        (_,parcel) <- getParcelByPosition regionIndex (x,y,z)
-        continueI $ parcelFlags parcel
+    (continueI . parcelFlags . snd) =<< 
+        (getParcelByPosition <<= getPrimRegion pk <<= return (x,y,z))
    
 llGetParcelDetails info@(ScriptInfo _ _ _ pk _) [VVal x y z, LVal details] =
-     do  regionIndex <- getPrimRegion pk
-         (_,parcel) <- getParcelByPosition regionIndex (x,y,z)
+     do  parcel <- snd <$> (getParcelByPosition =<< getPrimRegion pk) (x,y,z)
          detailList <- mapM (getDetail parcel) details
          continueL [ d | Just d <- detailList]
      where getDetail parcel (IVal detail) 
@@ -1576,7 +1578,6 @@ removeFromLandACLList aclFromParcel aclIntoParcel info@(ScriptInfo _ _ _ pk _) a
         let acl = aclFromParcel parcel
         return $ aclIntoParcel parcel [ ac | ac@(k,_) <- acl, k /= ak ]
 
-        
 llResetLandBanList info@(ScriptInfo _ _ _ pk _) [] =
     do  whenParcelPermitted info pk (\ regionIndex parcelIndex parcel -> return $ parcel { parcelBanList = [] })
         continueV
@@ -1727,7 +1728,7 @@ llGetKey (ScriptInfo _ _ _ pk _) [] = continueK pk
 
 llGetOwnerKey info@(ScriptInfo _ _ _ pk _) [KVal k] = 
    (do  regionIndex <- getPrimRegion pk
-        mRegionIndex <- liftM Just (getPrimRegion k) <||> return Nothing
+        mRegionIndex <- Just <$> (getPrimRegion k) <||> return Nothing
         key <- case mRegionIndex of 
             Nothing -> 
                 slogE info "llGetOwnerKey: object key not found" >> return k
@@ -1740,42 +1741,39 @@ llGetOwnerKey info@(ScriptInfo _ _ _ pk _) [KVal k] =
     
 llGetLinkNumber (ScriptInfo oid pid _ pk _) [] =
      if pid /= 0 then continueI (pid + 1) else
-         do  LSLObject { primKeys = links } <- getObjectE oid
+         do  links <- primKeys <$> getObjectE oid
              continueI (if length links == 1 then 0 else 1)
         
-llGetUnixTime (ScriptInfo _ _ _ _ _) [] = lift (getUnixTime >>= continueI)
-
-toUTCTimeM = liftM toUTCTime
+llGetUnixTime (ScriptInfo _ _ _ _ _) [] = lift getUnixTime >>= continueI
 
 llGetTimestamp (ScriptInfo _ _ _ _ _) [] = lift $ do
-    cal <- toUTCTimeM getTimeOfDay
+    cal <- toUTCTime <$> getTimeOfDay
     continueS $ printf "%04d-%02d-%02dT%02d:%02d:%02.6f"
          (ctYear cal) (1 + fromEnum (ctMonth cal)) (ctDay cal) (ctHour cal) (ctMin cal) 
          (fromIntegral (ctSec cal) / (10.0^12 * fromIntegral (ctPicosec cal)) :: Float)
          
 llGetDate (ScriptInfo _ _ _ _ _) [] = lift (getUTCDate >>= continueS)
 llGetGMTclock (ScriptInfo _ _ _ _ _) [] = lift $ do
-    cal <- toUTCTimeM getTimeOfDay
+    cal <- toUTCTime <$> getTimeOfDay
     continueI $ (24 * ctHour cal) + (60 * ctMin cal) + ctSec cal
     
 llGetWallclock (ScriptInfo _ _ _ _ _) [] = lift $ do
-    cal <- toUTCTimeM (getLocalTimeOfDay (-8))
+    cal <- toUTCTime <$> (getLocalTimeOfDay (-8))
     continueI $ (24 * ctHour cal) + (60 * ctMin cal) + ctSec cal
         
-llGetTimeOfDay (ScriptInfo _ _ _ _ _) [] = do
-    t <- getTickE
-    continueF $ ticksToDuration (t `mod` durationToTicks 4.0)
+llGetTimeOfDay (ScriptInfo _ _ _ _ _) [] =
+    (continueF . ticksToDuration . flip mod (durationToTicks 4.0)) =<< getTickE
     
 getUnixTime :: (Monad (StateT (World a) a), Monad a) => StateT (World a) a Int
-getUnixTime = liftM fromIntegral (liftM2 (+) getWorldZeroTime (liftM (floor . ticksToDuration) getTick))
+getUnixTime = fromIntegral <$> (liftM2 (+) getWorldZeroTime (liftM (floor . ticksToDuration) getTick))
 getTimeOfDay :: (Monad (StateT (World a) a), Monad a) => StateT (World a) a ClockTime
-getTimeOfDay = liftM (flip TOD 0 . fromIntegral) getUnixTime
+getTimeOfDay = (flip TOD 0 . fromIntegral) <$> getUnixTime
 
-getLocalTimeOfDay offset =  liftM (addToClockTime (TimeDiff 0 0 0 offset 0 0 0)) getTimeOfDay
+getLocalTimeOfDay offset =  (addToClockTime (TimeDiff 0 0 0 offset 0 0 0)) <$> getTimeOfDay
     
 getUTCDate :: (Monad (StateT (World a) a), Monad a, PrintfType (Int -> Int -> Int -> b)) => StateT (World a) a b
 getUTCDate = do
-    cal <- liftM toUTCTime getTimeOfDay
+    cal <- toUTCTime <$> getTimeOfDay
     return $ printf "%04d-%02d-%02d" (ctYear cal) (1 + fromEnum (ctMonth cal)) (ctDay cal)    
 
 llGetRegionFPS _ _ = continueF 45.0
@@ -1783,8 +1781,8 @@ llGetRegionTimeDilation _ _ = continueF 1.0
 
 llGetTime (ScriptInfo _ _ sid pk _) [] = 
      do  t <- getTickE
-         script <- getScriptE pk sid
-         continueF $ ticksToDuration (t - scriptLastResetTick script)
+         reset <- scriptLastResetTick <$> getScriptE pk sid
+         continueF $ ticksToDuration (t - reset)
 
 getAndResetTick pk sid = do
     script <- getScriptE pk sid
@@ -1812,38 +1810,34 @@ llGetScriptName (ScriptInfo _ _ sid _ _) [] = continueS sid
 
 llGetNumberOfNotecardLines (ScriptInfo _ _ sn pk _) [SVal name] =
     do  notecards <- getPrimNotecards pk
-        key <- case find ((name==) . inventoryItemName) notecards of
-            Nothing -> putChatE sayRange pk 0 ("Couldn't find notecard " ++ name) >> return nullKey
+        case find ((name==) . inventoryItemName) notecards of
+            Nothing -> putChatE sayRange pk 0 ("Couldn't find notecard " ++ name) >> continueK nullKey
             Just notecard -> do
                 key <- newKeyE
                 pushDataserverEventE pk sn key (show $ length $ invNotecardLines $ inventoryItemData notecard)
-                return key
-        continueK key
+                continueK key
     
 llGetNotecardLine (ScriptInfo _ _ sn pk _) [SVal name, IVal lineNumber] =
     do  notecards <- getPrimNotecards pk
-        key <- case find ((name==) . inventoryItemName) notecards of
-            Nothing -> sayErr pk ("Couldn't find notecard " ++ name) >> return nullKey
+        case find ((name==) . inventoryItemName) notecards of
+            Nothing -> sayErr pk ("Couldn't find notecard " ++ name) >> continueK nullKey
             Just notecard -> do
                 key <- newKeyE
-                let line = case lookupByIndex lineNumber $ invNotecardLines $ inventoryItemData notecard of
-                        Nothing -> cEOF
-                        Just v -> take 255 v
-                pushDataserverEventE pk sn key line
-                return key
-        continueK key
+                pushDataserverEventE pk sn key $ maybe cEOF (take 255) $
+                    lookupByIndex lineNumber $ invNotecardLines $ inventoryItemData notecard
+                continueK key
  
 llRequestInventoryData info@(ScriptInfo _ _ sn pk _) [SVal name] =
-    do t <- getTickE
-       landmarks <- getPrimLandmarks pk
+    do landmarks <- getPrimLandmarks pk
        landmark <- maybe (throwError ("no landmark named " ++ name)) return (findByInvName name landmarks)
        let (_,v) = invLandmarkLocation $ inventoryItemData landmark
+       t <- getTickE
        key <- newKeyE
        pushDataserverEventE pk sn key (lslValString (vec2VVal v))
        yieldWith (t + durationToTicks 1) (KVal key)
     
 llGetLinkName (ScriptInfo oid _ _ _ _) [IVal linkNumber] =
-    do  LSLObject { primKeys = links } <- getObjectE oid
+    do  links <- primKeys <$> getObjectE oid
         name <- if null links
            then if linkNumber == 0
                then getPrimName oid
@@ -1865,35 +1859,32 @@ llSetStatus info@(ScriptInfo _ _ _ pk _) [IVal mask, IVal val] =
         let status' = if val == 0 
                           then status .&. complement mask
                           else status .|. mask
-        lift $ setPrimStatus pk status'
+        lift2 setPrimStatus pk status'
         continueV
     
 llPassTouches info@(ScriptInfo _ _ _ pk _) [IVal val] =
-   lift $ setPrimPassTouches pk (val /= 0) >> continueV
+   lift2 setPrimPassTouches pk (val /= 0) >> continueV
    
 llPassCollisions info@(ScriptInfo _ _ _ pk _) [IVal val] =
-   lift $ setPrimPassCollisions pk (val /= 0) >> continueV
+   lift2 setPrimPassCollisions pk (val /= 0) >> continueV
    
 llGetRegionCorner (ScriptInfo _ _ _ pk _) [] = 
     do (x,y) <- getPrimRegion pk
        continueVec (256 * fromIntegral x, 256 * fromIntegral y, 0)
 
 llGetRegionFlags info@(ScriptInfo _ _ _ pk _) [] =
-    liftM regionFlags (getPrimRegion pk >>= getRegion) >>= continueI
+    regionFlags <$> (getPrimRegion pk >>= getRegion) >>= continueI
     
 llGetSimulatorHostname (ScriptInfo _ _ _ pk _) [] =
     do (i,j) <- getPrimRegion pk
        continueS (show i ++ "x" ++ show j ++ ".example.com")
 
 llGetRegionName (ScriptInfo _ _ _ pk _) [] = 
-    do  regionIndex <- getPrimRegion pk
-        regions <- lift getWorldRegions
-        region <- mlookup regionIndex regions
-        continueS $ regionName region
+    continueS =<< (liftM regionName $
+        mlookup <<= getPrimRegion pk <<= lift getWorldRegions)
 
 llGetAgentSize info@(ScriptInfo _ _ _ pk _) [KVal ak] =
-    do  region <- getPrimRegion pk
-        withAvatar ak (found region) notFound
+    withAvatar ak notFound =<< found <$> getPrimRegion pk
     where notFound = slogE info ("llGetAgentSize: no such agent - " ++ ak) >> continueVec (0,0,0)
           found region av =  
               if avatarRegion av == region 
@@ -1901,14 +1892,20 @@ llGetAgentSize info@(ScriptInfo _ _ _ pk _) [KVal ak] =
                    else slogE info "llGetAgentSize: agent not in sim" >> continueVec (0,0,0)
                           
 llGetAgentInfo info@(ScriptInfo _ _ _ pk _) [KVal ak] =
-    do  region <- getPrimRegion pk
-        withAvatar ak (found region) notFound
+    withAvatar ak notFound =<< found <$> getPrimRegion pk
     where found region av = 
               if avatarRegion av == region 
                   then continueI $ avatarState av
                   else slogE info "llGetAgentInfo: agent not in sim" >> continueI 0
           notFound = slogE info ("llGetAgentInfo: no such agent - " ++ ak) >> continueI 0
-        
+
+llGetAgentLanguage info@(ScriptInfo _ _ _ pk _) [KVal ak] = do
+    withAvatar ak notFound =<< found <$> getPrimRegion pk
+    where found region av = continueS $
+              if avatarRegion av == region then "hu" else ""
+          notFound = slogE info ("llGetAgentLanguage: no such agent - " ++ ak)
+              >> continueI 0
+              
 -- llDetected* functions ------------------------------------------------------
 -- TODO: only setup for 1 detected thing at a time...
 -- This is a problem especially for sensor testing
@@ -1917,6 +1914,9 @@ klook i = mlookup ("key_" ++ show i) . eventInfo
 klookm i = maybe (throwError "nothing detected") (klook i)
 ilook i = mlookup ("integer_" ++ show i) . eventInfo
 ilookm i = maybe (throwError "nothing detected") (ilook i)
+
+look s i = mlookup (s ++ "_" ++ show i) . eventInfo
+lookm s i = maybe (throwError "nothing detected") (look s i)
 
 llDetectedKey (ScriptInfo _ _ _ pk mevent) [IVal i] =
     continueWith =<< (klookm i mevent <||> return (KVal nullKey))
@@ -1929,37 +1929,68 @@ llDetectedGrab (ScriptInfo _ _ _ _ mevent) [IVal i] =
 
 llDetectedPos (ScriptInfo _ _ _ _ mevent) [IVal i] =
     do  KVal key <- klookm i mevent
-        withAvatar key (continueVec . avatarPosition) 
-            (getRootPrim key >>= getObjectPosition >>= continueVec)
-    
+        withAvatar key (getRootPrim key >>= getObjectPosition >>= continueVec)
+                (continueVec . avatarPosition) 
 llDetectedRot (ScriptInfo _ _ _ _ mevent) [IVal i] =
     do  KVal key <- klookm i mevent
-        withAvatar key (continueRot . avatarRotation) 
-            (getRootPrim key >>= getObjectRotation >>= continueRot)
-    
+        withAvatar key (getRootPrim key >>= getObjectRotation >>= continueRot)
+            (continueRot . avatarRotation) 
 llDetectedName (ScriptInfo _ _ _ _ mevent) [IVal i] =
     do  KVal key <- klookm i mevent
-        continueS =<< withAvatar key (return . avatarName) (getPrimName key)
+        continueS =<< withAvatar key (getPrimName key) (return . avatarName)
    
 llDetectedOwner (ScriptInfo _ _ _ _ mevent) [IVal i] =
     do  KVal key <- klookm i mevent
-        continueK =<< withAvatar key (return . const key) (getPrimOwner key)
+        continueK =<< withAvatar key (getPrimOwner key) (return . const key)
 
 llDetectedGroup info@(ScriptInfo _ _ _ _ mevent) [IVal i] =
     do  KVal key <- klookm i mevent
         avatars <- getWorldAvatarsE
         prims <- getPrimsE
-        continueK =<< (liftM (fromMaybe nullKey . avatarActiveGroup) (mlookup key avatars) <||>
-             liftM (fromMaybe nullKey . primGroup) (mlookup key prims) <||> 
+        continueK =<< ((fromMaybe nullKey . avatarActiveGroup) <$> (mlookup key avatars) <||>
+             (fromMaybe nullKey . primGroup) <$> (mlookup key prims) <||> 
              throwError "error: key not an avatar or an object!")
     
 llDetectedVel _ [IVal i] = continueVec (0,0,0) -- TODO: physics!!!
 
 llDetectedType (ScriptInfo _ _ _ _ mevent) [IVal i] =
     do  KVal key <- klookm i mevent
-        continueI =<< withAvatar key (return . const cAgent) 
-            (determineActivePassiveScripted key)
+        continueI =<< withAvatar key (determineActivePassiveScripted key)
+            (return . const cAgent) 
     
+llDetectedTouchFace (ScriptInfo _ _ _ _ mevent) [IVal i] =
+   continueWith =<< lookm "face" i mevent
+       
+llDetectedTouchST (ScriptInfo _ _ _ _ mevent) [IVal i] =
+    continueWith =<< lookm "st" i mevent
+
+-- hack! TODO (maybe)! compute a real UV
+-- I think the following is true iff the texture rotation is
+-- zero, the texture repeats are (1.0,1.0) and the offsets
+-- are (0.0,0.0).  I'm sure the calculation is something 
+-- like (cos(rot) * s * rx * ox , sin(rot) * t * ry * oy)
+-- but would need to test...
+llDetectedTouchUV = llDetectedTouchST
+
+llDetectedTouchPos (ScriptInfo oid _ _ _ mevent) [IVal i] =
+    do IVal link <- ilookm i mevent 
+       IVal face <- lookm "face" i mevent <||> return (IVal (-1))
+       -- hack: need to, based on the face and the position, orientation
+       -- and various prim parameters, calculate the touch position.
+       -- but that's hard.  So we'll just return the position of the link.
+       continueVec =<< if face < 0 then return (0,0,0) 
+                                   else getGlobalPos =<< getLinkKey oid link
+
+-- TODO: make this correct!
+llDetectedTouchNormal (ScriptInfo _ _ _ _ mevent) [IVal i] =
+    do lookm "face" i mevent -- make sure the index is valid
+       continueVec (0,0,1) -- return an arbitrary vector
+           
+-- TODO: make this correct!
+llDetectedTouchBinormal (ScriptInfo _ _ _ _ mevent) [IVal i] =
+    do lookm "face" i mevent -- make sure the index is valid
+       continueVec (0,1,0) -- return an arbitrary vector
+           
 determineActivePassiveScripted key = do
     status <- getPrimStatus key
     case status of
@@ -1972,8 +2003,7 @@ determineActivePassiveScripted key = do
 -- animation functions
 
 llGetAnimationList info@(ScriptInfo _ _ _ pk _) [KVal ak] =
-    do  rp <- getPrimRegion pk
-        withAvatar ak (found rp) notFound
+    withAvatar ak notFound =<< found <$> getPrimRegion pk
     where found rp av | avatarRegion av /= rp = 
                           slogE info "llGetAnimationList: avatar not in sim" >> continueL []
                       | otherwise = do
@@ -1982,8 +2012,7 @@ llGetAnimationList info@(ScriptInfo _ _ _ pk _) [KVal ak] =
           notFound = slogE info ("llGetAnimationList: no such avatar: " ++ ak) >> continueL []
     
 llGetAnimation info@(ScriptInfo _ _ _ pk _) [KVal ak] =
-    do  rp <- getPrimRegion pk
-        withAvatar ak (found rp) notFound
+    withAvatar ak notFound =<< found <$> getPrimRegion pk
     where found rp av | avatarRegion av /= rp = 
             slogE info "llGetAnimationList: avatar no in sim" >> continueS ""
                       | otherwise = continueS "Standing" -- TODO: real animation state
@@ -2105,6 +2134,18 @@ llTakeControls info@(ScriptInfo {scriptInfoPrimKey = pk, scriptInfoScriptName = 
                           (M.lookup ak $ scriptPermissions script)
                  where acl = AvatarControlListener { avatarControlListenerMask = controls, avatarControlListenerScript = (pk,sn) }
         continueV
+
+llReleaseControls (ScriptInfo _ _ sn pk _) [] =
+    do script <- getScriptE pk sn
+       forM_ (scriptControls script) $ \ ak -> do
+           av <- getWorldAvatar ak
+           whenJust (avatarControlListener av) $ \ acl ->
+               when (avatarControlListenerScript acl == (pk,sn)) $
+                   setWorldAvatarE ak (av { avatarControlListener = Nothing })
+       setScriptE pk sn script 
+           { scriptPermissions = M.map resetPerm (scriptPermissions script) }
+       continueV
+    where resetPerm i = complement cPermissionTakeControls .&. i
 --------------------------------------------------------------------------------
 
 llVolumeDetect info@(ScriptInfo { scriptInfoObjectKey = oid }) [IVal i] =
@@ -2152,7 +2193,7 @@ llGroundNormal info [VVal _ _ _] = continueVec (0,0,1) -- straight up!
 llGroundSlope info [VVal _ _ _] = continueVec (0,1,0)
 --------------------------------------------------------------------------------
 llGetSunDirection info [] = do
-    az <- liftM ((*(pi/7200)) . ticksToDuration) getTickE
+    az <- ((*(pi/7200)) . ticksToDuration) <$> getTickE
     let el = 80 * pi 
     continueVec (sin az * cos el, sin el, cos az * cos el)
     
@@ -2213,6 +2254,12 @@ defaultPredefs = M.fromList $ map (\(x,y) -> (x, defaultPredef x y)) [
         ("llCollisionSprite",llCollisionSprite),
         ("llCreateLink",llCreateLink),
         ("llDetachFromAvatar", llDetachFromAvatar),
+        ("llDetectedTouchBinormal",llDetectedTouchBinormal),
+        ("llDetectedTouchFace",llDetectedTouchFace),
+        ("llDetectedTouchNormal",llDetectedTouchNormal),
+        ("llDetectedTouchPos",llDetectedTouchPos),
+        ("llDetectedTouchST",llDetectedTouchST),
+        ("llDetectedTouchUV",llDetectedTouchUV),
         ("llDetectedGrab",llDetectedGrab),
         ("llDetectedGroup",llDetectedGroup),
         ("llDetectedKey", llDetectedKey),
@@ -2230,6 +2277,7 @@ defaultPredefs = M.fromList $ map (\(x,y) -> (x, defaultPredef x y)) [
         ("llFrand",llFrand),
         ("llGetAccel",llGetAccel),
         ("llGetAgentInfo",llGetAgentInfo),
+        ("llGetAgentLanguage",llGetAgentLanguage),
         ("llGetAgentSize",llGetAgentSize),
         ("llGetAlpha",llGetAlpha),
         ("llGetAndResetTime", llGetAndResetTime),
@@ -2344,6 +2392,7 @@ defaultPredefs = M.fromList $ map (\(x,y) -> (x, defaultPredef x y)) [
         ("llRefreshPrimURL", llRefreshPrimURL),
         ("llRegionSay", llRegionSay),
         ("llReleaseCamera", llReleaseCamera),
+        ("llReleaseControls", llReleaseControls),
         ("llRemoteDataReply", llRemoteDataReply),
         ("llRemoteDataSetRegion", llRemoteDataSetRegion),
         ("llRemoteLoadScript", llRemoteLoadScript),

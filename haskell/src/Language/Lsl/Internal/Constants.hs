@@ -143,6 +143,13 @@ llcZeroRotation = RVal 0 0 0 1
 mkIConst :: RealFloat a => Int -> (Int,LSLValue a)
 mkIConst i = (i,IVal i)
 
+cPrimHoleDefault = 0 :: Int
+cPrimHoleSquare = 32 :: Int
+cPrimHoleCircle = 16 :: Int
+cPrimHoleTriangle = 48 :: Int
+validPrimHoleType = flip elem $ map IVal [cPrimHoleDefault,cPrimHoleSquare,
+    cPrimHoleCircle,cPrimHoleTriangle]
+
 allConstants :: RealFloat a => [Constant a]
 allConstants = [
     Constant "ACTIVE" llcActive,
@@ -401,10 +408,10 @@ allConstants = [
     Constant "PRIM_FLEXIBLE" llcPrimFlexible,
     Constant "PRIM_FULLBRIGHT" llcPrimFullbright,
     Constant "PRIM_GLOW" (IVal 25),
-    Constant "PRIM_HOLE_CIRCLE" (IVal 0x10),
-    Constant "PRIM_HOLE_DEFAULT" (IVal 0x0),
-    Constant "PRIM_HOLE_SQUARE" (IVal 0x20),
-    Constant "PRIM_HOLE_TRIANGLE" (IVal 0x30),
+    Constant "PRIM_HOLE_CIRCLE" (IVal cPrimHoleCircle),
+    Constant "PRIM_HOLE_DEFAULT" (IVal cPrimHoleDefault),
+    Constant "PRIM_HOLE_SQUARE" (IVal cPrimHoleSquare),
+    Constant "PRIM_HOLE_TRIANGLE" (IVal cPrimHoleTriangle),
     Constant "PRIM_MATERIAL" llcPrimMaterial,
     Constant "PRIM_MATERIAL_FLESH" (IVal 4),
     Constant "PRIM_MATERIAL_GLASS" (IVal 2),
@@ -518,6 +525,7 @@ allConstants = [
     Constant "TEXTURE_DEFAULT" (KVal "8b5fec65-8d8d-9dc5-cda8-8fdf2716e361"),
     Constant "TEXTURE_PLYWOOD" (KVal "89556747-24cb-43ed-920b-47caed15465f"),
     Constant "TEXTURE_TRANSPARENT" (KVal "59facb66-4a72-40a2-815c-7d9b42c56f60"),
+    Constant "TOUCH_INVALID_VECTOR" (VVal 0 0 0),
     Constant "TRUE" (IVal 1),
     Constant "TWO_PI" (FVal 6.28318548),
     Constant "TYPE_FLOAT" (IVal 2),

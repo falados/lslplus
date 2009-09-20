@@ -1,4 +1,9 @@
-{-# LANGUAGE FlexibleInstances, NoMonomorphismRestriction #-}
+{-# LANGUAGE FlexibleInstances,
+             NoMonomorphismRestriction,
+             GeneralizedNewtypeDeriving,
+             MultiParamTypeClasses,
+             TypeSynonymInstances
+  #-}
 module Language.Lsl.Internal.WorldState(
     DeferredScriptEventTarget(..),
     Listener(..),
@@ -212,7 +217,7 @@ module Language.Lsl.Internal.WorldState(
     ) where
 
 import Control.Monad(MonadPlus(..),liftM)
-import Control.Monad.State(StateT(..))-- hiding (State)
+import Control.Monad.State(MonadState(..),StateT(..))
 import Control.Monad.Error(lift,ErrorT(..),MonadError(..))
 import Data.List(elemIndex)
 import Data.Map(Map)
@@ -280,15 +285,28 @@ data World m = World {
 
 -- a state monad for the World
 type WorldM m = StateT (World m) m
-    
+   
+newtype WorldE m a = WorldE { unWorldE :: ErrorT String ((StateT (World m) m)) a }
+    deriving (Monad)
+
+instance Monad m => MonadState (World m) (WorldE m) where
+   get = WorldE { unWorldE = get }
+   put v = WorldE { unWorldE = put v }
+   
+instance Monad m => MonadError String (WorldE m) where
+    throwError e = WorldE { unWorldE = throwError e }
+    catchError v f = WorldE { unWorldE = catchError (unWorldE v) (unWorldE . f) }
+   
 worldM f = StateT (\ s -> return (f s))
 
 -- extracting/updating the world state -----------------------------------------------------                   
-queryWorld q = worldM (\w -> (q w, w))
-updateWorld u = worldM (\w -> ((), u w))
+queryWorld q = q `liftM` get --worldM (\w -> (q w, w))
+updateWorld u = put =<< liftM u get -- worldM (\w -> ((), u w))
 
-getSliceSize :: Monad m => WorldM m Int
+--getSliceSize :: Monad m => WorldM m Int
 getSliceSize = queryWorld sliceSize
+getSliceSize' = sliceSize `liftM` get
+
 getListeners :: Monad m => WorldM m (IM.IntMap (Listener,Bool))
 getListeners = queryWorld wlisteners
 getMaxTick :: Monad m => WorldM m Int
@@ -592,7 +610,12 @@ data DeferredScriptEventTarget = DeferredScriptEventScriptTarget (String,String)
     deriving (Show)
     
 
-data Touch = Touch { touchAvatarKey :: String , touchPrimKey :: String, touchStartTick :: Int, touchEndTick :: Int  }
+data Touch = Touch { touchAvatarKey :: String , 
+                     touchPrimKey :: String, 
+                     touchFace :: Int, 
+                     touchST :: (Float,Float), 
+                     touchStartTick :: Int, 
+                     touchEndTick :: Int  }
     deriving (Show)
     
 isSensorEvent (SensorEvent {}) = True
@@ -674,6 +697,7 @@ runAndLogIfErr msg def val = do
         Left s -> logAMessage LogWarn "sim" (msg ++ " (" ++ s ++ ")") >> return def
         Right v -> return v
 
+--prependLog m = s
 logAMessage logLevel source s =
     do log <- getMsgLog
        tick <- getTick

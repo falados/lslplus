@@ -14,6 +14,10 @@ avEventGenAST = [$lslm|$module
         string mkTouch(string primKey, float duration) {
             return "AvatarTouch {avatarTouchPrimKey = \"" + primKey + "\", avatarTouchDuration = " + (string) duration + "}";
         }
+        string mkFaceTouch(string primKey, float duration, integer face, float s, float t) {
+            return "AvatarFaceTouch {avatarTouchPrimKey = \"" + primKey + "\", avatarTouchDuration = " + (string) duration + 
+                ", avatarTouchFace = " + (string)face + ", avatarTouchST = (" + (string) s + "," + (string) t + ")}";
+        }
         string mkWhisper(integer chan, string message) {
             return "AvatarWhisper { avatarChatChannel = " + (string)chan + ", avatarChatMessage = \"" + message + "\"}";
         }

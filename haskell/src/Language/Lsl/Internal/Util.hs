@@ -36,7 +36,8 @@ module Language.Lsl.Internal.Util (
     flip3,
     rotL,
     rotR,
-    optional
+    optional,
+    whenJust
     ) where
 
 import Control.Monad(liftM,when)
@@ -94,6 +95,11 @@ readM s = case reads s of
 ctx s (Left s') = fail (s ++ ": " ++ s' )
 ctx _ (Right v) = return v
 
+
+whenJust :: (Monad m) => (Maybe a) -> (a -> m ()) -> m ()
+whenJust Nothing _ = return ()
+whenJust (Just v) action = action v
+                           
 -- monadified lookup
 lookupM :: (Monad m, Eq a, Show a) => a -> [(a,b)] -> m b
 lookupM x l =

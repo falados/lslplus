@@ -1022,6 +1022,25 @@ scriptedTouchTrigger = [$lsl|
 
 scriptedTouchTriggerTest =mkTest "Scripted Touch Trigger Test" $ ((chatRun [scriptedTouchTrigger] ["touched"]) { tLib = library })
 
+scriptedFaceTouchTrigger = [$lsl|
+    default {
+        state_entry() {
+            llOwnerSay("touch me more specifically");
+        }
+        
+        touch_start(integer num_detected) {
+            integer face = llDetectedTouchFace(0);
+            llSay(0,"touched " + (string)face);
+            vector st = llDetectedTouchST(0);
+            if (st.x > 0.599 && st.x < 0.6001) llSay(0,"x ok");
+            if (st.y > 0.399 && st.y < 0.4001) llSay(0,"y ok");
+        }
+    }|]
+
+scriptedFaceTouchTriggerTest =mkTest "Scripted Face Touch Trigger Test" $ 
+   ((chatRun [scriptedFaceTouchTrigger] ["touched 0", "x ok", "y ok"]) { tLib = library })
+
+
 controlScript = [$lsl|
     default {
         state_entry() {
@@ -1233,6 +1252,7 @@ tests = TestList [
         rotTest5,
         landCollisionTest,
         scriptedTouchTriggerTest,
+        scriptedFaceTouchTriggerTest,
         controlTest,
         wildRegressTest1,
         negIndexTest,
@@ -1256,6 +1276,7 @@ avEventHandlerModule = [$lslm|
     list onOwnerSay(string k, string msg) {
         if (msg == "touch me") return [mkTouch($string:pk1, 1.0)];
         else if (msg == "took controls") return [mkControl(0xffff)];
+        else if (msg == "touch me more specifically") return [mkFaceTouch($string:pk1, 1.0, 0, 0.6, 0.4)];
         else return [];
     }
     

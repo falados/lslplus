@@ -485,7 +485,9 @@ processAvatarOutputEvent k (AvatarTouch {avatarTouchPrimKey = pk, avatarTouchDur
         setWorldTouches (M.alter (alt now) pk touches)
     where alt start Nothing = Just [newTouch start]
           alt start (Just ts) = Just (newTouch start:ts)
-          newTouch start = Touch {touchAvatarKey = k, touchPrimKey = pk, touchStartTick = start, touchEndTick = start + durationToTicks secs}
+          newTouch start = Touch {touchAvatarKey = k, touchPrimKey = pk,
+              touchFace = 0, touchST = (0.5, 0.5), touchStartTick = start, 
+              touchEndTick = start + durationToTicks secs}
 processAvatarOutputEvent k (AvatarWhisper {avatarChatChannel = chan, avatarChatMessage = msg}) = avChat 10 msg k chan
 processAvatarOutputEvent k (AvatarSay {avatarChatChannel = chan, avatarChatMessage = msg}) = avChat 20 msg k chan
 processAvatarOutputEvent k (AvatarShout {avatarChatChannel = chan, avatarChatMessage = msg}) = avChat 100 msg k chan
@@ -498,7 +500,15 @@ processAvatarOutputEvent k (AvatarControl { avatarNewControlBits = newBits }) = 
     flip (maybe (return ())) (avatarControlListener av) $ 
         \ (AvatarControlListener {avatarControlListenerMask = mask, avatarControlListenerScript = (pk,sn)}) ->
             pushEventE (Event "control" [KVal k, IVal newBits, IVal (newBits `xor` prev)] M.empty) pk sn
---processAvatarOutputEvent _ _ = error "not yet implemented(1)"
+processAvatarOutputEvent k (AvatarFaceTouch pk secs face st) = do
+    touches <- getWorldTouches
+    now <- getTick
+    setWorldTouches (M.alter (alt now) pk touches)
+    where alt start Nothing = Just [newTouch start]
+          alt start (Just ts) = Just (newTouch start:ts)
+          newTouch start = Touch {touchAvatarKey = k, touchPrimKey = pk,
+              touchFace = face, touchST = st, touchStartTick = start, 
+              touchEndTick = start + durationToTicks secs}
 
 avChat range msg key chan = runAndLogIfErr "problem processing chat" () $ do
     logAMessageE LogInfo ("av:" ++ key) ("chat! chan: " ++ show chan ++ ", range: " ++ show range ++ ", message: " ++ show msg)
@@ -655,10 +665,12 @@ handleTouches = do
 sendTouch ttype k tl =
      pushEventToPrim (Event ttype [IVal $ length tl] payload) k
      where payload = foldl' ins M.empty (zip [0..] tl)
-           ins m (i,(Touch { touchAvatarKey = ak },link)) = 
+           ins m (i,(Touch { touchAvatarKey = ak, touchFace = face, touchST = (s,t) },link)) = 
                M.insert ("vector_" ++ show i) (VVal 0 0 0) .
                M.insert ("key_" ++ show i) (KVal ak) .
-               M.insert ("integer_" ++ show i) (IVal link) $ m
+               M.insert ("integer_" ++ show i) (IVal link) .
+               M.insert ("face_" ++ show i) (IVal face) .
+               M.insert ("st_" ++ show i) (VVal s t 0) $ m
                
 collectTouches touchType acc [] = return acc
 collectTouches touchType acc (t@(Touch { touchPrimKey = pk }):ts) = do
