@@ -4,6 +4,7 @@
              MultiParamTypeClasses,
              TypeSynonymInstances
   #-}
+{-# OPTIONS_GHC -fwarn-unused-binds -fwarn-unused-imports #-}
 module Language.Lsl.Internal.WorldState(
     DeferredScriptEventTarget(..),
     Listener(..),
@@ -13,14 +14,14 @@ module Language.Lsl.Internal.WorldState(
     Touch(..),
     WorldEventType(..),
     World(..),
-    WorldM,
+    WorldE,
     XMLRequestSourceType(..),
     durationToTicks,
-    evalErrorT,
+    evalWorldE,
     findAsset,
     findTextureAsset,
     findTexture,
-    fromErrorT,
+    fromWorldE,
     getActualPrimScripts,
     getListeners,
     getNextListenerId,
@@ -31,11 +32,11 @@ module Language.Lsl.Internal.WorldState(
     getObjectPosition,
     getObjectRotation,
     getObjectVelocity,
-    getObjectE,
+    getObject,
     getParcelByPosition,
     getPos,
     getPredefFuncs,
-    getPrimE,
+    getPrim,
     getPrimAnimations,
     getPrimAttachment,
     getPrimBodyParts,
@@ -116,18 +117,14 @@ module Language.Lsl.Internal.WorldState(
     pushDeferredScriptEvent,
     pushDeferredScriptEventToPrim,
     pushDeferredScriptEventToObject,
-    pushChangedEventToObjectE,
-    pushAttachEventE,
-    pushDeferredScriptEventE,
-    pushDeferredScriptEventToPrimE,
+    pushChangedEventToObject,
+    pushAttachEvent,
     putHTTPTimeoutEvent,
-    putHTTPResponseEventE,
+    putHTTPResponseEvent,
     putParcel,
     putManyWQ,
     putWQ,
     putWorldEvent,
-    putWorldEventE,
-    queryWorld,
     runAndLogIfErr,
     runErrFace,
     runErrPrim,
@@ -163,6 +160,7 @@ module Language.Lsl.Internal.WorldState(
     setPrimVehicleFlags,
     setPrims,
     setRegion,
+    setTexture,
     setTick,
     setWQueue,
     setWorldAvatar,
@@ -184,41 +182,16 @@ module Language.Lsl.Internal.WorldState(
     ticksToDuration,
     updatePrimFace,
     wrand,
-    newKeyE,
-    getListenersE,
-    setListenersE,
-    getObjectsE,
-    setObjectsE,
-    setObjectE,
-    setPrimAttachmentE,
-    getPrimsE,
-    setPrimsE,  
-    setPrimE,
-    setPrimFacesE,
-    setPrimInventoryE,
-    setPrimParentE,
-    setPrimRotationE,
-    setTexture,
-    setWorldAvatarE,
-    getWorldAvatarsE,
-    setWorldAvatarsE,
-    setWorldCollisionsE,
-    setWorldEventHandlerE,
-    getWorldScriptsE,
-    setWorldScriptsE,
-    getWQueueE,
-    setWQueueE,
-    getTickE,
-    getScriptE,
-    setScriptE,
-    delScriptE,
-    logAMessageE,
+    getScript,
+    setScript,
+    delScript,
     sortByInvName
     ) where
 
-import Control.Monad(MonadPlus(..),liftM)
+import Control.Applicative
+import Control.Monad(MonadPlus(..),liftM,ap)
 import Control.Monad.State(MonadState(..),StateT(..))
-import Control.Monad.Error(lift,ErrorT(..),MonadError(..))
+import Control.Monad.Error(ErrorT(..),MonadError(..))
 import Data.List(elemIndex)
 import Data.Map(Map)
 import Data.Maybe(fromMaybe)
@@ -234,7 +207,7 @@ import Language.Lsl.Internal.Key(mkKey)
 import Language.Lsl.Internal.Log(LogMessage(..),LogLevel(..))
 import Language.Lsl.Syntax(Validity,LModule(..),CompiledLSLScript(..))
 import Language.Lsl.Internal.Type(LSLValue(..),LSLType(..),vec2VVal)
-import Language.Lsl.Internal.Util(mlookup,lookupByIndex,lift1,lift2,lift3,lift4)
+import Language.Lsl.Internal.Util(mlookup,lookupByIndex,elemAt)
 import Language.Lsl.WorldDef(Prim(..),PrimFace(..),InventoryItem(..),InventoryItemIdentification(..),
                     LSLObject(..),Script(..),Avatar(..),Region(..),ObjectDynamics(..),Parcel(..),
                     WebHandling(..),isInvNotecardItem,isInvLandmarkItem,isInvClothingItem,
@@ -246,46 +219,45 @@ import System.Random(StdGen(..),Random(..))
 
 -- a data type that defines the state of the 'world'
 data World m = World {
-                    sliceSize :: !Int,
-                    maxTick :: !Int,
-                    nextPause :: !Int,
-                    wqueue :: !WorldEventQueue,
-                    wlisteners :: !(IM.IntMap (Listener,Bool)), -- ![(Int,(Listener,Bool))],
-                    nextListenerId :: !Int,
-                    wobjects :: !(Map String LSLObject),
-                    wprims :: !(Map String Prim),
-                    worldScripts :: !(Map (String,String) Script), 
-                    inventory :: ![(String,LSLObject)],
-                    tick :: !Int,
-                    msglog :: ![LogMessage],
-                    predefs :: !(Map String (PredefFunc m)),
-                    randGen :: !StdGen,
-                    wlibrary :: ![(String,Validity LModule)],
-                    wscripts :: ![(String,Validity CompiledLSLScript)],
-                    worldEventHandler :: !(Maybe (String, [(String,LSLValue Float)])),
-                    worldAvatars :: !(Map String Avatar),
-                    worldBreakpointManager :: !BreakpointManager,
-                    worldSuspended :: !(Maybe (String,String)), -- prim-key, script-name, image
-                    worldRegions :: !(Map (Int,Int) Region),
-                    worldZeroTime :: !Int,
-                    worldKeyIndex :: !Integer,
-                    worldWebHandling :: !WebHandling,
-                    worldOutputQueue :: ![SimEvent],
-                    worldPendingHTTPRequests :: ![String],
-                    worldOpenDataChannels :: !(Map String (String,String),Map (String,String) String),
-                    worldXMLRequestRegistry :: !(Map String XMLRequestSourceType),
-                    worldPhysicsTime :: !Int,
-                    worldTargetCheckTime :: !Int,
-                    worldLastPositions :: !(Map String (Bool,(Float,Float,Float))),
-                    worldCollisions :: !(S.Set (String,String)),
-                    worldLandCollisions :: !(S.Set String),
-                    worldTouches :: !(Map String [Touch]),
-                    worldTouchCheckTime :: !Int
-                } deriving (Show)
+        sliceSize :: !Int,
+        maxTick :: !Int,
+        nextPause :: !Int,
+        wqueue :: !WorldEventQueue,
+        wlisteners :: !(IM.IntMap (Listener,Bool)),
+        nextListenerId :: !Int,
+        wobjects :: !(Map String LSLObject),
+        wprims :: !(Map String Prim),
+        worldScripts :: !(Map (String,String) Script), 
+        inventory :: ![(String,LSLObject)],
+        tick :: !Int,
+        msglog :: ![LogMessage],
+        predefs :: !(Map String (PredefFunc m)),
+        randGen :: !StdGen,
+        wlibrary :: ![(String,Validity LModule)],
+        wscripts :: ![(String,Validity CompiledLSLScript)],
+        worldEventHandler :: !(Maybe (String, [(String,LSLValue Float)])),
+        worldAvatars :: !(Map String Avatar),
+        worldBreakpointManager :: !BreakpointManager,
+        worldSuspended :: !(Maybe (String,String)), -- prim-key, script-name, image
+        worldRegions :: !(Map (Int,Int) Region),
+        worldZeroTime :: !Int,
+        worldKeyIndex :: !Integer,
+        worldWebHandling :: !WebHandling,
+        worldOutputQueue :: ![SimEvent],
+        worldPendingHTTPRequests :: ![String],
+        worldOpenDataChannels :: !(Map String (String,String),Map (String,String) String),
+        worldXMLRequestRegistry :: !(Map String XMLRequestSourceType),
+        worldPhysicsTime :: !Int,
+        worldTargetCheckTime :: !Int,
+        worldLastPositions :: !(Map String (Bool,(Float,Float,Float))),
+        worldCollisions :: !(S.Set (String,String)),
+        worldLandCollisions :: !(S.Set String),
+        worldTouches :: !(Map String [Touch]),
+        worldTouchCheckTime :: !Int
+    } deriving (Show)
 
--- a state monad for the World
-type WorldM m = StateT (World m) m
-   
+-- an ErrorT/StateT/m Monad stack for the World.  The type is parameterized by
+-- the innermost monad...
 newtype WorldE m a = WorldE { unWorldE :: ErrorT String ((StateT (World m) m)) a }
     deriving (Monad)
 
@@ -296,98 +268,97 @@ instance Monad m => MonadState (World m) (WorldE m) where
 instance Monad m => MonadError String (WorldE m) where
     throwError e = WorldE { unWorldE = throwError e }
     catchError v f = WorldE { unWorldE = catchError (unWorldE v) (unWorldE . f) }
-   
-worldM f = StateT (\ s -> return (f s))
+
+instance Monad m => Functor (WorldE m) where
+    fmap = liftM
+    
+instance Monad m => Applicative (WorldE m) where
+   pure  = return
+   (<*>) = ap
 
 -- extracting/updating the world state -----------------------------------------------------                   
-queryWorld q = q `liftM` get --worldM (\w -> (q w, w))
-updateWorld u = put =<< liftM u get -- worldM (\w -> ((), u w))
+updateWorld u = put =<< liftM u get
 
 --getSliceSize :: Monad m => WorldM m Int
-getSliceSize = queryWorld sliceSize
-getSliceSize' = sliceSize `liftM` get
+getSliceSize = sliceSize <$> get
 
-getListeners :: Monad m => WorldM m (IM.IntMap (Listener,Bool))
-getListeners = queryWorld wlisteners
-getMaxTick :: Monad m => WorldM m Int
-getMaxTick = queryWorld maxTick
-getNextPause :: Monad m => WorldM m Int
-getNextPause = queryWorld nextPause
-getTick :: Monad m => WorldM m Int
-getTick = queryWorld tick
-getNextListenerId :: Monad m => WorldM m Int
-getNextListenerId = queryWorld nextListenerId
-getObjects :: Monad m => WorldM m (Map String LSLObject)
-getObjects = (queryWorld wobjects)
-getPrims :: Monad m => WorldM m (Map String Prim)
-getPrims = queryWorld wprims
-getWorldScripts :: Monad m => WorldM m (Map (String,String) Script)
-getWorldScripts = queryWorld worldScripts
-getInventory :: Monad m => WorldM m [(String,LSLObject)]
-getInventory = queryWorld inventory
-getMsgLog :: Monad m => WorldM m [LogMessage]
-getMsgLog = queryWorld msglog
-getWQueue :: Monad m => WorldM m WorldEventQueue
-getWQueue = queryWorld wqueue
-getPredefFuncs :: Monad m => WorldM m (Map String (PredefFunc m))
-getPredefFuncs = queryWorld predefs
-getRandGen :: Monad m => WorldM m StdGen
-getRandGen = queryWorld randGen
-getWScripts :: Monad m => WorldM m  [(String,Validity CompiledLSLScript)]
-getWScripts = queryWorld wscripts
-getWLibrary :: Monad m => WorldM m  [(String,Validity LModule)]
-getWLibrary = queryWorld wlibrary
-getWorldAvatars :: Monad m => WorldM m (Map String Avatar)
-getWorldAvatars = queryWorld worldAvatars
-getWorldBreakpointManager :: Monad m => WorldM m BreakpointManager
-getWorldBreakpointManager = queryWorld worldBreakpointManager
-getWorldSuspended :: Monad m => WorldM m (Maybe (String,String))
-getWorldSuspended = queryWorld worldSuspended
-getWorldRegions :: Monad m => WorldM m (Map (Int,Int) Region)
-getWorldRegions = queryWorld worldRegions
-getWorldZeroTime :: Monad m => WorldM m Int
-getWorldZeroTime = queryWorld worldZeroTime
-getWorldKeyIndex :: Monad m => WorldM m Integer
-getWorldKeyIndex = queryWorld worldKeyIndex
-getWorldWebHandling :: Monad m => WorldM m WebHandling
-getWorldWebHandling = queryWorld worldWebHandling
-getWorldOutputQueue :: Monad m => WorldM m [SimEvent]
-getWorldOutputQueue = queryWorld worldOutputQueue
-getWorldPendingHTTPRequests :: Monad m => WorldM m [String]
-getWorldPendingHTTPRequests = queryWorld worldPendingHTTPRequests
-getWorldOpenDataChannels :: Monad m => WorldM m (Map String (String,String), Map (String,String) String)
-getWorldOpenDataChannels = queryWorld worldOpenDataChannels
-getWorldEventHandler :: Monad m => WorldM m (Maybe (String,[(String,LSLValue Float)]))
-getWorldEventHandler = queryWorld worldEventHandler
-getWorldXMLRequestRegistry :: Monad m => WorldM m (Map String XMLRequestSourceType)
-getWorldXMLRequestRegistry = queryWorld worldXMLRequestRegistry
-getWorldPhysicsTime :: Monad m => WorldM m Int
-getWorldPhysicsTime = queryWorld worldPhysicsTime
-getWorldTargetCheckTime :: Monad m => WorldM m Int
-getWorldTargetCheckTime = queryWorld worldTargetCheckTime
-getWorldLastPositions :: Monad m => WorldM m (Map String (Bool,(Float,Float,Float)))
-getWorldLastPositions = queryWorld worldLastPositions
-getWorldCollisions :: Monad m => WorldM m (S.Set (String,String))
-getWorldCollisions = queryWorld worldCollisions
-getWorldLandCollisions :: Monad m => WorldM m (S.Set (String))
-getWorldLandCollisions = queryWorld worldLandCollisions
-getWorldTouches :: Monad m => WorldM m (Map String [Touch])
-getWorldTouches = queryWorld worldTouches
-getWorldTouchCheckTime :: Monad m => WorldM m Int
-getWorldTouchCheckTime = queryWorld worldTouchCheckTime
+getListeners :: Monad m => WorldE m (IM.IntMap (Listener,Bool))
+getListeners = wlisteners <$> get
+getNextPause :: Monad m => WorldE m Int
+getNextPause = nextPause <$> get
+getTick :: Monad m => WorldE m Int
+getTick = tick <$> get
+getNextListenerId :: Monad m => WorldE m Int
+getNextListenerId = nextListenerId <$> get
+getObjects :: Monad m => WorldE m (Map String LSLObject)
+getObjects = wobjects <$> get
+getPrims :: Monad m => WorldE m (Map String Prim)
+getPrims = wprims <$> get
+getWorldScripts :: Monad m => WorldE m (Map (String,String) Script)
+getWorldScripts = worldScripts <$> get
+getMsgLog :: Monad m => WorldE m [LogMessage]
+getMsgLog = msglog <$> get
+getWQueue :: Monad m => WorldE m WorldEventQueue
+getWQueue = wqueue <$> get
+getPredefFuncs :: Monad m => WorldE m (Map String (PredefFunc m))
+getPredefFuncs = predefs <$> get
+getRandGen :: Monad m => WorldE m StdGen
+getRandGen = randGen <$> get
+getWScripts :: Monad m => WorldE m  [(String,Validity CompiledLSLScript)]
+getWScripts = wscripts <$> get
+getWLibrary :: Monad m => WorldE m  [(String,Validity LModule)]
+getWLibrary = wlibrary <$> get
+getWorldAvatars :: Monad m => WorldE m (Map String Avatar)
+getWorldAvatars = worldAvatars <$> get
+getWorldBreakpointManager :: Monad m => WorldE m BreakpointManager
+getWorldBreakpointManager = worldBreakpointManager <$> get
+getWorldSuspended :: Monad m => WorldE m (Maybe (String,String))
+getWorldSuspended = worldSuspended <$> get
+getWorldRegions :: Monad m => WorldE m (Map (Int,Int) Region)
+getWorldRegions = worldRegions <$> get
+getWorldZeroTime :: Monad m => WorldE m Int
+getWorldZeroTime = worldZeroTime <$> get
+getWorldKeyIndex :: Monad m => WorldE m Integer
+getWorldKeyIndex = worldKeyIndex <$> get
+getWorldWebHandling :: Monad m => WorldE m WebHandling
+getWorldWebHandling = worldWebHandling <$> get
+getWorldOutputQueue :: Monad m => WorldE m [SimEvent]
+getWorldOutputQueue = worldOutputQueue <$> get
+getWorldPendingHTTPRequests :: Monad m => WorldE m [String]
+getWorldPendingHTTPRequests = worldPendingHTTPRequests <$> get
+getWorldOpenDataChannels :: Monad m => WorldE m (Map String (String,String), Map (String,String) String)
+getWorldOpenDataChannels = worldOpenDataChannels <$> get
+getWorldEventHandler :: Monad m => WorldE m (Maybe (String,[(String,LSLValue Float)]))
+getWorldEventHandler = worldEventHandler <$> get
+getWorldXMLRequestRegistry :: Monad m => WorldE m (Map String XMLRequestSourceType)
+getWorldXMLRequestRegistry = worldXMLRequestRegistry <$> get
+getWorldPhysicsTime :: Monad m => WorldE m Int
+getWorldPhysicsTime = worldPhysicsTime <$> get
+getWorldTargetCheckTime :: Monad m => WorldE m Int
+getWorldTargetCheckTime = worldTargetCheckTime <$> get
+getWorldLastPositions :: Monad m => WorldE m (Map String (Bool,(Float,Float,Float)))
+getWorldLastPositions = worldLastPositions <$> get
+getWorldCollisions :: Monad m => WorldE m (S.Set (String,String))
+getWorldCollisions = worldCollisions <$> get
+getWorldLandCollisions :: Monad m => WorldE m (S.Set (String))
+getWorldLandCollisions = worldLandCollisions <$> get
+getWorldTouches :: Monad m => WorldE m (Map String [Touch])
+getWorldTouches = worldTouches <$> get
+getWorldTouchCheckTime :: Monad m => WorldE m Int
+getWorldTouchCheckTime = worldTouchCheckTime <$> get
 
-getWorldAvatar k = lift getWorldAvatars >>= (\ m -> case M.lookup k m of
+getWorldAvatar k = getWorldAvatars >>= (\ m -> case M.lookup k m of
     Nothing -> throwError ("no such avatar/agent: " ++ k)
     Just av -> return av)
     
-getRegion index = (lift getWorldRegions >>= mlookup index)
+getRegion index = (getWorldRegions >>= mlookup index)
 
-getPrimE k = (lift getPrims >>= (\ m -> case M.lookup k m of
+getPrim k = (getPrims >>= (\ m -> case M.lookup k m of
     Nothing -> throwError ("no such prim: " ++ k)
     Just prim -> return prim))
     
 --getPrimVal k f = (lift getPrims >>= M.lookup k >>= return . f)
-getPrimVal k f = getPrimE k >>= return . f
+getPrimVal k f = getPrim k >>= return . f
 getPrimName k = getPrimVal k primName
 getPrimPosition k = getPrimVal k primPosition
 getPrimParent k = getPrimVal k primParent
@@ -412,66 +383,56 @@ getPrimSittingAvatar k = getPrimVal k primSittingAvatar
 getPrimAttachment k = getPrimVal k primAttachment
 getPrimPassTouches k = getPrimVal k primPassTouches
 getPrimPassCollisions k = getPrimVal k primPassCollisions
-getPrimPayInfo k = getPrimVal k primPayInfo
 getPrimPendingEmails k = getPrimVal k primPendingEmails
-getPrimRemoteScriptAccessPin k = getPrimVal k primRemoteScriptAccessPin
 
 getPrimInventory k = getPrimVal k primInventory
 
-getPrimNotecards k = getPrimInventory k >>= return . filter isInvNotecardItem
-getPrimLandmarks k =getPrimInventory k >>= return . filter isInvLandmarkItem
-getPrimClothing k = getPrimInventory k >>= return . filter isInvClothingItem
-getPrimBodyParts k = getPrimInventory k >>= return . filter isInvBodyPartItem
-getPrimObjects k = getPrimInventory k >>= return . filter isInvObjectItem
-getPrimGestures k = getPrimInventory k >>= return . filter isInvGestureItem
-getPrimSounds k = getPrimInventory k >>= return . filter isInvSoundItem
-getPrimAnimations k = getPrimInventory k >>= return . filter isInvAnimationItem
-getPrimTextures k = getPrimInventory k >>= return . filter isInvTextureItem
-getPrimScripts k = getPrimInventory k >>= return . filter isInvScriptItem
+getPrimNotecards k = filter isInvNotecardItem <$> getPrimInventory k
+getPrimLandmarks k = filter isInvLandmarkItem <$> getPrimInventory k
+getPrimClothing k = filter isInvClothingItem <$> getPrimInventory k
+getPrimBodyParts k = filter isInvBodyPartItem <$> getPrimInventory k
+getPrimObjects k = filter isInvObjectItem <$> getPrimInventory k
+getPrimGestures k = filter isInvGestureItem <$> getPrimInventory k
+getPrimSounds k = filter isInvSoundItem <$> getPrimInventory k
+getPrimAnimations k = filter isInvAnimationItem <$> getPrimInventory k
+getPrimTextures k = filter isInvTextureItem <$> getPrimInventory k
+getPrimScripts k = filter isInvScriptItem <$> getPrimInventory k
 
 getActualPrimScripts k = do
-    scriptNames <- getPrimScripts k >>= return . map (fst . inventoryItemNameKey . inventoryItemIdentification)
-    allScripts <- (lift $ getWorldScripts) >>= return . M.toList
+    scriptNames <- map (fst . inventoryItemNameKey . inventoryItemIdentification) <$> getPrimScripts k
+    allScripts <- M.toList <$> getWorldScripts
     return [ s | s@((pk,sn),_) <- allScripts, pk == k && sn `elem` scriptNames ]
     
 getPrimLinkNum pk = do
     mp <- getPrimParent pk
     case mp of
         Nothing -> do  -- this is the root prim
-            links <- lift getObjects >>= mlookup pk >>= return . primKeys
+            links <- getObjects >>= mlookup pk >>= return . primKeys
             return (if null links then 0 else 1)
         Just ok -> do
-            links <- lift getObjects >>= mlookup ok >>= return . primKeys
+            links <- getObjects >>= mlookup ok >>= return . primKeys
             case elemIndex pk links of
                 Nothing -> throwError "internal error, can't find prim in link list of parent object"
                 Just i -> return (i + 1)
 -- TODO: temp until introduce region into Prim definition
---getPrimRegion _ = (lift (return (0 :: Int, 0 :: Int)))
 getPrimRegion _ = return (0 :: Int, 0 :: Int)
-getObjectRegion _ = getPrimRegion
---getObjectRegion _ = (lift (return (0 :: Int,0 :: Int)))
-objectRegion :: a -> (Int,Int)
-objectRegion _ = (0,0)
 
 getPos pkey = runErrPrim pkey
                   (VVal 0.0 0.0 0.0)
-                  (liftM vec2VVal (getRootPrim pkey >>= getObjectPosition))
-
-getRegionIndex pkey = return (0,0)
+                  (vec2VVal <$> (getRootPrim pkey >>= getObjectPosition))
 
 runErrFace k i defaultVal = runAndLogIfErr 
     ("face " ++ (show i) ++ " or prim " ++ k ++ " not found") defaultVal
 
-getPrimFace k i = getPrimFaces k >>= (lookupByIndex i)
-getPrimFaceAlpha k i = getPrimFace k i >>= return . faceAlpha
-getPrimFaceColor k i = getPrimFace k i >>= return . faceColor
-getPrimFaceTextureInfo k i = getPrimFace k i >>= return . faceTextureInfo
+getPrimFace k i = getPrimFaces k >>= (elemAt i)
+getPrimFaceAlpha k i = faceAlpha <$> getPrimFace k i
+getPrimFaceColor k i = faceColor <$> getPrimFace k i
+getPrimFaceTextureInfo k i = faceTextureInfo <$> getPrimFace k i
 
 setListeners l = updateWorld (\w -> w { wlisteners = l })   
 setNextListenerId i = updateWorld (\w -> w { nextListenerId = i })
 setObjects os = updateWorld (\w -> w { wobjects = os })
 setPrims ps = updateWorld (\w -> w { wprims = ps })
-setInventory i = updateWorld (\w -> w { inventory = i })
 setTick t = t `seq` updateWorld (\w -> w { tick = t })
 setMsgLog l = updateWorld (\w -> w { msglog = l })
 setWQueue q = updateWorld (\w -> w { wqueue = q })
@@ -488,7 +449,6 @@ setWorldOpenDataChannels o = updateWorld (\ w -> w { worldOpenDataChannels = o }
 setWorldEventHandler e = updateWorld (\ w -> w { worldEventHandler = e })
 setWorldXMLRequestRegistry r = updateWorld (\ w -> w { worldXMLRequestRegistry = r })
 setWorldPhysicsTime t = updateWorld (\ w -> w { worldPhysicsTime = t })
-setWorldTargetCheckTime t = updateWorld (\ w -> w { worldTargetCheckTime = t })
 setWorldLastPositions p = updateWorld (\ w -> w { worldLastPositions = p })
 setWorldCollisions s = updateWorld (\ w -> w { worldCollisions = s })
 setWorldLandCollisions s = updateWorld (\ w -> w { worldLandCollisions = s })
@@ -499,7 +459,7 @@ setWorldAvatar k av = getWorldAvatars >>= return . M.insert k av >>= setWorldAva
 
 setPrim k p = (getPrims >>= return . (M.insert k p) >>= setPrims)
 
-updatePrimVal k f = runErrPrim k () $ (lift getPrims >>= mlookup k >>= return . f >>= lift . (setPrim k))
+updatePrimVal k f = runErrPrim k () $ (getPrims >>= mlookup k >>= return . f >>= (setPrim k))
 
 runErrPrim k defaultVal = runAndLogIfErr ("prim " ++ k ++ " not found") defaultVal
 
@@ -513,13 +473,10 @@ setPrimFaces k v =  updatePrimVal k (\ p -> p { primFaces = v } )
 setPrimFlexibility k v =  updatePrimVal k (\ p -> p { primFlexibility = v } )
 setPrimMaterial k v =  updatePrimVal k (\ p -> p { primMaterial = v } )
 setPrimOwner k v =  updatePrimVal k (\ p -> p { primOwner = v } )
-setPrimGroup k v =  updatePrimVal k (\ p -> p { primGroup = v } )
 setPrimStatus k v =  updatePrimVal k (\ p -> p { primStatus = v } )
 setPrimVehicleFlags k v =  updatePrimVal k (\ p -> p { primVehicleFlags = v } )
 setPrimLight k v =  updatePrimVal k (\ p -> p { primLight = v } )
 setPrimTempOnRez k v =  updatePrimVal k (\ p -> p { primTempOnRez = v } )
-setPrimTypeInfo k v =  updatePrimVal k (\ p -> p { primTypeInfo = v } )
-setPrimPermissions k v =  updatePrimVal k (\ p -> p { primPermissions = v } )
 setPrimSitTarget k v =  updatePrimVal k (\ p -> p { primSitTarget = v })
 setPrimSittingAvatar k v =  updatePrimVal k (\ p -> p { primSittingAvatar = v } )
 setPrimPassTouches k v  =  updatePrimVal k (\ p -> p { primPassTouches = v } )
@@ -530,92 +487,123 @@ setPrimInventory k v =  updatePrimVal k (\ p -> p { primInventory = v } )
 setPrimPendingEmails k v =  updatePrimVal k (\ p -> p { primPendingEmails = v })
 setPrimRemoteScriptAccessPin k v = updatePrimVal k (\ p -> p { primRemoteScriptAccessPin = v })
 
-setRegion regionIndex region = getWorldRegions >>= return . (M.insert regionIndex region) >>= setWorldRegions
+setRegion regionIndex region = setWorldRegions =<< M.insert regionIndex region <$> getWorldRegions
 
 updatePrimFace k i f = do
     faces <- getPrimFaces k
     let faces' = zipWith (\ face index -> if (index == i) then f face else face) faces [0..]
-    lift $ setPrimFaces k faces'
+    setPrimFaces k faces'
     
 setPrimFaceAlpha k i v = runErrFace k i () $ updatePrimFace k i (\ f -> f { faceAlpha = v })
 setPrimFaceColor k i v = runErrFace k i () $ updatePrimFace k i (\ f -> f { faceColor = v })
 
-data WorldEventType = CreatePrim { wePrimName :: String, wePrimKey :: String }
-                    | AddScript (String,String) String Bool -- script, prim key, activate
-                    | ResetScript String String -- prim key, script name
-                    | ResetScripts String -- object name
-                    | WorldSimEvent { worldSimEventName :: String, worldSimEventArgs :: [SimEventArg] }
-                    | DeferredScriptEvent { deferredScriptEvent :: Event Float, deferredScriptEventTarget :: DeferredScriptEventTarget }
-                    | Chat { chatChannel :: Int, chatterName :: String, chatterKey :: String, chatMessage :: String,
-                             chatLocation :: ((Int,Int),(Float,Float,Float)),
-                             chatRange :: Maybe Float }
-                    | TimerEvent { timerEventInterval :: Float,
-                                   timerAddress :: (String,String) }
-                    | PermissionRequestEvent { permissionRequestPrim :: String,
-                                               permissionRequestScript :: String,
-                                               permissionRequestAgent :: String,
-                                               permissionRequestMask :: Int }
-                    | SensorEvent { sensorAddress :: (String,String),
-                                    sensorSenseName :: String,
-                                    sensorSenseKey :: String,
-                                    sensorSenseType :: Int,
-                                    sensorSenseRange :: Float,
-                                    sensorSenseArc :: Float,
-                                    sensorRepeat :: Maybe Float }
-                    | XMLRequestEvent {  xmlRequestSource :: XMLRequestSourceType,
-                                         xmlRequestChannel :: String,
-                                         xmlRequestIData :: Int,
-                                         xmlRequestSData :: String }
-                    | HTTPRequestEvent { httpRequestSource :: (String,String),
-                                         httpRequestKey :: String,
-                                         httpRequestURL :: String,
-                                         httpRequestMethod :: String,
-                                         httpRequestMimetype :: String,
-                                         httpRequestBodyMaxlength :: Int,
-                                         httpRequestVerifyCert :: Int,
-                                         httpRequestBody :: String }
-                    | XMLReplyEvent { xmlRequestKey :: String,
-                                      xmlRequestChannel :: String,
-                                      xmlRequestMessageId :: String,
-                                      xmlRequestSData :: String,
-                                      xmlRequestIData :: Int }
-                    | DialogEvent { dialogAgent :: String,
-                                    dialogMessage :: String,
-                                    dialogButtons :: [String],
-                                    dialogChannel :: Int,
-                                    dialogSourceObject :: String }
-                    | RezObjectEvent { rezObjectLinkSet :: [Prim],
-                                       rezObjectPos :: (Float,Float,Float),
-                                       rezObjectVel :: (Float,Float,Float),
-                                       rezObjectRot :: (Float,Float,Float,Float),
-                                       rezObjectStartParam :: Int,
-                                       rezObjectRezzer :: String,
-                                       rezObjectCopy :: Bool,
-                                       rezObjectAtRoot :: Bool }
-                    | ResetScriptEvent { resetScriptPrimKey :: String,
-                                         resetScriptScriptName :: String }
-                    | DetachCompleteEvent { detachObject :: String, detachAvatar :: String }
-                    | GiveAvatarInventoryEvent { giveAvatarInventoryKey :: String, giveAvatarInventoryItem :: InventoryItem }
-                    | AvatarOutputEvent { avatarOutputEventKey :: String, avatarOutputEventVal :: AvEvent.AvatarOutputEvent }
-                    | AvatarInputEvent { avatarInputEventKey :: String, avatarInputEventVal :: AvEvent.AvatarInputEvent }
+data WorldEventType = 
+          CreatePrim { wePrimName :: String, wePrimKey :: String }
+        | AddScript (String,String) String Bool -- script, prim key, activate
+        | ResetScript String String -- prim key, script name
+        | ResetScripts String -- object name
+        | WorldSimEvent {
+            worldSimEventName :: String,
+            worldSimEventArgs :: [SimEventArg] }
+        | DeferredScriptEvent { 
+            deferredScriptEvent :: Event Float,
+            deferredScriptEventTarget :: DeferredScriptEventTarget }
+        | Chat { 
+            chatChannel :: Int,
+            chatterName :: String,
+            chatterKey :: String,
+            chatMessage :: String,
+            chatLocation :: ((Int,Int),(Float,Float,Float)),
+            chatRange :: Maybe Float }
+        | TimerEvent { 
+            timerEventInterval :: Float,
+            timerAddress :: (String,String) }
+        | PermissionRequestEvent {
+            permissionRequestPrim :: String,
+            permissionRequestScript :: String,
+            permissionRequestAgent :: String,
+            permissionRequestMask :: Int }
+        | SensorEvent { 
+            sensorAddress :: (String,String),
+            sensorSenseName :: String,
+            sensorSenseKey :: String,
+            sensorSenseType :: Int,
+            sensorSenseRange :: Float,
+            sensorSenseArc :: Float,
+            sensorRepeat :: Maybe Float }
+        | XMLRequestEvent {
+            xmlRequestSource :: XMLRequestSourceType,
+            xmlRequestChannel :: String,
+            xmlRequestIData :: Int,
+            xmlRequestSData :: String }
+        | HTTPRequestEvent {
+            httpRequestSource :: (String,String),
+            httpRequestKey :: String,
+            httpRequestURL :: String,
+            httpRequestMethod :: String,
+            httpRequestMimetype :: String,
+            httpRequestBodyMaxlength :: Int,
+            httpRequestVerifyCert :: Int,
+            httpRequestBody :: String }
+        | XMLReplyEvent {
+            xmlRequestKey :: String,
+            xmlRequestChannel :: String,
+            xmlRequestMessageId :: String,
+            xmlRequestSData :: String,
+            xmlRequestIData :: Int }
+        | DialogEvent {
+            dialogAgent :: String,
+            dialogMessage :: String,
+            dialogButtons :: [String],
+            dialogChannel :: Int,
+            dialogSourceObject :: String }
+        | RezObjectEvent {
+            rezObjectLinkSet :: [Prim],
+            rezObjectPos :: (Float,Float,Float),
+            rezObjectVel :: (Float,Float,Float),
+            rezObjectRot :: (Float,Float,Float,Float),
+            rezObjectStartParam :: Int,
+            rezObjectRezzer :: String,
+            rezObjectCopy :: Bool,
+            rezObjectAtRoot :: Bool }
+        | ResetScriptEvent {
+            resetScriptPrimKey :: String,
+            resetScriptScriptName :: String }
+        | DetachCompleteEvent {
+            detachObject :: String,
+            detachAvatar :: String }
+        | GiveAvatarInventoryEvent { 
+            giveAvatarInventoryKey :: String,
+            giveAvatarInventoryItem :: InventoryItem }
+        | AvatarOutputEvent {
+            avatarOutputEventKey :: String,
+            avatarOutputEventVal :: AvEvent.AvatarOutputEvent }
+        | AvatarInputEvent {
+            avatarInputEventKey :: String,
+            avatarInputEventVal :: AvEvent.AvatarInputEvent }
     deriving (Show)
 
 data XMLRequestSourceType = XMLRequestInternal { xmlRequestTag :: String }
                           | XMLRequestExternal { xmlRequestTag :: String }
     deriving (Show)
 
-data DeferredScriptEventTarget = DeferredScriptEventScriptTarget (String,String)
-                               | DeferredScriptEventPrimTarget String -- pushes to all scripts in prim
-                               | DeferredScriptEventObjectTarget String -- pushes to all scripts in all prims in object
+data DeferredScriptEventTarget = 
+      -- pushes to a specific script in a prim
+      DeferredScriptEventScriptTarget (String,String)
+      -- pushes to all scripts in prim
+    | DeferredScriptEventPrimTarget String
+      -- pushes to all scripts in all prims in object
+    | DeferredScriptEventObjectTarget String
     deriving (Show)
     
 
-data Touch = Touch { touchAvatarKey :: String , 
-                     touchPrimKey :: String, 
-                     touchFace :: Int, 
-                     touchST :: (Float,Float), 
-                     touchStartTick :: Int, 
-                     touchEndTick :: Int  }
+data Touch = Touch {
+    touchAvatarKey :: String , 
+    touchPrimKey :: String, 
+    touchFace :: Int, 
+    touchST :: (Float,Float), 
+    touchStartTick :: Int, 
+    touchEndTick :: Int  }
     deriving (Show)
     
 isSensorEvent (SensorEvent {}) = True
@@ -641,8 +629,6 @@ putWorldEvent delay we =
        t <- getTick
        setWQueue $ putWQ (t + max (durationToTicks delay) 1) we weq
 
-putWorldEventE = lift2 putWorldEvent
-
 pushDeferredScriptEvent event pk sn delay = 
     putWorldEvent delay (DeferredScriptEvent event (DeferredScriptEventScriptTarget (pk,sn)))
 pushDeferredScriptEventToPrim event pk delay =
@@ -650,16 +636,13 @@ pushDeferredScriptEventToPrim event pk delay =
 pushDeferredScriptEventToObject event oid delay =
     putWorldEvent delay (DeferredScriptEvent event (DeferredScriptEventObjectTarget oid))
 
-pushChangedEventToObjectE oid val = lift $ pushDeferredScriptEventToObject (Event "changed" [IVal val] M.empty) oid 0
-pushAttachEventE pk k = pushDeferredScriptEventToPrimE (Event "attach" [KVal k] M.empty) pk 0
+pushChangedEventToObject oid val = pushDeferredScriptEventToObject (Event "changed" [IVal val] M.empty) oid 0
+pushAttachEvent pk k = pushDeferredScriptEventToPrim (Event "attach" [KVal k] M.empty) pk 0
   
-pushDeferredScriptEventE = lift4 pushDeferredScriptEvent
-pushDeferredScriptEventToPrimE = lift3 pushDeferredScriptEventToPrim
-
 putHTTPTimeoutEvent pk sn key = 
     pushDeferredScriptEvent (Event "http_response" [KVal key, IVal 499, LVal [], SVal ""] M.empty) pk sn 
-putHTTPResponseEventE pk sn key status metadata body =
-    pushDeferredScriptEventE (Event "http_response" [KVal key, IVal status, LVal metadata, body] M.empty) pk sn
+putHTTPResponseEvent pk sn key status metadata body =
+    pushDeferredScriptEvent (Event "http_response" [KVal key, IVal status, LVal metadata, body] M.empty) pk sn
 
 
 data SimEvent = SimEvent { simEventName :: String, simEventArgs :: [SimEventArg], simEventDelay :: Int }
@@ -668,36 +651,33 @@ data SimEventArg = SimEventArg { simEventArgName :: String, simEventArgValue :: 
     deriving (Show)
     
 data Listener = Listener {
-                       listenerPrimKey :: String,
-                       listenerScriptName :: String,
-                       listenerChannel :: Int,
-                       listenerName :: String,
-                       listenerKey :: String,
-                       listenerMsg :: String }
+    listenerPrimKey :: String,
+    listenerScriptName :: String,
+    listenerChannel :: Int,
+    listenerName :: String,
+    listenerKey :: String,
+    listenerMsg :: String }
     deriving (Show)
     
+type Predef m = ScriptInfo Float -> [LSLValue Float] -> WorldE m (EvalResult,LSLValue Float)
 data PredefFunc m = PredefFunc { predefFuncName :: String, 
-                                   predefFuncResultType :: LSLType, 
-                                   predef :: ScriptInfo Float -> [LSLValue Float] -> ErrorT String (WorldM m) (EvalResult,LSLValue Float) }
+                                 predefFuncResultType :: LSLType, 
+                                 predef :: Predef m }
      deriving (Show)
 
-instance Monad m => Show (ScriptInfo Float -> [LSLValue Float] -> WorldM m (EvalResult,LSLValue Float)) where
-    showsPrec _ _ = showString "(function :: ScriptInfo -> [LSLValue] -> WorldM m (EvalResult,LSLValue))"
-instance Monad m => Show (ScriptInfo Float -> [LSLValue Float] -> ErrorT String (WorldM m) (EvalResult,LSLValue Float)) where
-    showsPrec _ _ = showString "(function :: ScriptInfo -> [LSLValue] -> ErrorT String (WorldM m) (EvalResult,LSLValue))"
+instance Monad m => Show (Predef m) where
+    showsPrec _ _ = showString "(function :: ScriptInfo -> [LSLValue] -> WorldE m (EvalResult,LSLValue))"
 
-evalErrorT :: ErrorT String m v -> m (Either String v)
-evalErrorT = runErrorT
+evalWorldE :: Monad m => WorldE m v -> StateT (World m) m (Either String v)
+evalWorldE = runErrorT . unWorldE
 
-fromErrorT def val = evalErrorT val >>= (return . either (const def) id)
-    
-runAndLogIfErr msg def val = do
-    result <- evalErrorT val
-    case result of
-        Left s -> logAMessage LogWarn "sim" (msg ++ " (" ++ s ++ ")") >> return def
-        Right v -> return v
+fromWorldE def val =
+    val `catchError` const (return def)
 
---prependLog m = s
+runAndLogIfErr msg def val = 
+    val `catchError` (\ s -> 
+        logAMessage LogWarn "sim" (msg ++ " (" ++ s ++ ")") >> return def)
+
 logAMessage logLevel source s =
     do log <- getMsgLog
        tick <- getTick
@@ -710,7 +690,7 @@ logTrace source s =
        let message = LogMessage tick LogTrace source s 
        setMsgLog (message:log)
               
-newKey :: Monad m => WorldM m  String
+newKey :: Monad m => WorldE m  String
 newKey = do
     i <- getWorldKeyIndex
     setWorldKeyIndex (i + 1)
@@ -719,28 +699,26 @@ newKey = do
 findAsset _ = return Nothing
 
 isSoundAsset _ = False
-isTextureAsset _ = False
-isAnimationAsset _ = False
 
 findTextureAsset "" = mzero
 findTextureAsset _ = return $ InventoryItem (InventoryItemIdentification ("","")) undefined undefined
 
 primHasActiveHandler pk handler =
     do scripts <- getPrimScripts pk
-       images <- lift $ imagesForScripts scripts
+       images <- imagesForScripts scripts
        return $ foldl (\ x y -> x || hasActiveHandler y handler) False images
     where imagesForScripts scriptItems = do
               scripts <- runErrPrim pk [] $ getActualPrimScripts pk
               return [ image | (Script { scriptImage = image } ) <- map snd scripts ]
               
 scriptHasActiveHandler pk sn handler =
-    do script <- lift getWorldScripts >>= mlookup (pk,sn)
+    do script <- getWorldScripts >>= mlookup (pk,sn)
        return $ hasActiveHandler (scriptImage script) handler
              
-lookupDataChannel scriptAddr = lift getWorldOpenDataChannels >>= mlookup scriptAddr . snd
-lookupScriptFromChan chan = lift getWorldOpenDataChannels >>= mlookup chan . fst
+lookupDataChannel scriptAddr = getWorldOpenDataChannels >>= mlookup scriptAddr . snd
+lookupScriptFromChan chan = getWorldOpenDataChannels >>= mlookup chan . fst
 
-insertScriptChannelPair script chan = lift $ do
+insertScriptChannelPair script chan = do
     (c2s,s2c) <- getWorldOpenDataChannels
     setWorldOpenDataChannels (M.insert chan script c2s,M.insert script chan s2c)
     
@@ -749,14 +727,7 @@ insertScriptChannelPair script chan = lift $ do
 durationToTicks dur = floor (1000.0 * dur)
 ticksToDuration ticks = fromIntegral ticks / 1000.0
 
-nextTick :: Monad m => WorldM m Int
-nextTick = do
-    t <- getTick
-    let t' = t + 1
-    setTick t'
-    return t'
-    
-wrand :: (Monad m, Random a) => WorldM m a
+wrand :: (Monad m, Random a) => WorldE m a
 wrand = do g <- getRandGen
            let (v,g') = random g
            setRandGen g'
@@ -764,51 +735,17 @@ wrand = do g <- getRandGen
 
 setObject oid obj = getObjects >>= setObjects . M.insert oid obj
 
--- some lifted operations.
--- for want of a better naming convention, the lifted operations
--- are suffixed with an 'E' (because they'll be used in an 
--- ErrorT monad).  The actual type is more general, so if I 
--- were exporting these, I'd have to do better.  Originally I 
--- marked them with a ', (i.e. newKey vs. newKey') but that
--- seems even more unfriendly...
-newKeyE = lift newKey
-getListenersE = lift getListeners
-setListenersE = lift1 setListeners
-getObjectsE = lift getObjects
-setObjectsE = lift1 setObjects
-setObjectE = lift2 setObject
-setPrimAttachmentE = lift2 setPrimAttachment
-getPrimsE = lift getPrims
-setPrimsE = lift1 setPrims
-setPrimE = lift2 setPrim
-setPrimFacesE = lift2 setPrimFaces
-setPrimInventoryE = lift2 setPrimInventory
-setPrimParentE = lift2 setPrimParent
-setPrimRotationE = lift2 setPrimRotation
-setWorldAvatarE = lift2 setWorldAvatar
+getObject name = getObjects >>= mlookup name
 
-getWorldAvatarsE = lift getWorldAvatars
-setWorldAvatarsE = lift1 setWorldAvatars
-setWorldCollisionsE = lift1 setWorldCollisions
-setWorldEventHandlerE = lift1 setWorldEventHandler
-getWorldScriptsE = lift getWorldScripts
-setWorldScriptsE = lift1 setWorldScripts
-getWQueueE = lift getWQueue
-setWQueueE = lift1 setWQueue
-getTickE = lift getTick
-
-getObjectE name = getObjectsE >>= mlookup name
-
-getObjectDynamics = liftM objectDynamics . getObjectE
-setObjectDynamics k d = getObjectE k >>= \ o -> setObjectE k o { objectDynamics = d }
+getObjectDynamics = liftM objectDynamics . getObject
+setObjectDynamics k d = getObject k >>= \ o -> setObject k o { objectDynamics = d }
 getObjectPosition = liftM objectPosition . getObjectDynamics
 getObjectRotation = liftM objectRotation . getObjectDynamics
 getObjectVelocity = liftM objectVelocity . getObjectDynamics
 
-getScriptE = curry ((getWorldScriptsE >>=) . mlookup)
-setScriptE pk sn s = liftM (M.insert (pk,sn) s) getWorldScriptsE >>= setWorldScriptsE
-delScriptE pk sn = getWorldScriptsE >>= setWorldScriptsE . M.delete (pk,sn)
-logAMessageE = lift3 logAMessage
+getScript = curry ((getWorldScripts >>=) . mlookup)
+setScript pk sn s = liftM (M.insert (pk,sn) s) getWorldScripts >>= setWorldScripts
+delScript pk sn = getWorldScripts >>= setWorldScripts . M.delete (pk,sn)
 
 getParcelByPosition regionIndex (x,y,_) = 
     getRegion regionIndex >>= findParcel 0 . regionParcels
@@ -829,7 +766,7 @@ putParcel regionIndex index parcel = do
     region <- getRegion regionIndex
     let (before,after) = splitAt index (regionParcels region)
     let parcels' = if null after then parcel : before else before ++ (parcel : tail after)
-    lift $ setRegion regionIndex $ region { regionParcels = parcels' }
+    setRegion regionIndex $ region { regionParcels = parcels' }
 
 findTexture pk id =
     do  textures <- getPrimTextures pk
@@ -847,7 +784,7 @@ setTexture tk face pkey =
                 let faces' = map (\ face -> 
                         let info = faceTextureInfo face in 
                             face { faceTextureInfo = info { textureKey = tk } }) faces
-                setPrimFacesE pkey faces'
+                setPrimFaces pkey faces'
         else do faces <- getPrimFaces pkey
                 f <- lookupByIndex face faces
                 let tInfo = faceTextureInfo f

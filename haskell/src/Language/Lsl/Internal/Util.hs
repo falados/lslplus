@@ -3,6 +3,8 @@ module Language.Lsl.Internal.Util (
     mlookup,
     ilookup,
     throwStrError,
+    safeIndex,
+    elemAt,
     ctx,
     readM,
     filtMap, 
@@ -11,7 +13,7 @@ module Language.Lsl.Internal.Util (
     lookupM,
     removeLookup,
     findM,
-    elemAtM,
+    elemAtM, -- get rid of this
     indexOf,
     fromInt,
     tuplify,
@@ -27,22 +29,18 @@ module Language.Lsl.Internal.Util (
     snd3,
     thd3,
     module Language.Lsl.Internal.Math,
-    lift1,
-    lift2,
-    lift3,
-    lift4,
     (<||>),
     (<??>),
     flip3,
     rotL,
     rotR,
     optional,
+    required,
     whenJust
     ) where
 
-import Control.Monad(liftM,when)
+import Control.Monad(liftM,when,MonadPlus(..))
 import Control.Monad.Error(MonadError(..),Error(..))
-import Control.Monad.Trans(lift)
 import Data.Char
 import Data.List(find,elemIndex,isPrefixOf,tails)
 import qualified Data.ByteString.Lazy.Char8 as B
@@ -68,22 +66,19 @@ rotR f x y z = f y z x
 rotL f x y z = f z x y
 flip3 f x y z = f z y x
 
--- some extra lift!
-lift1 f = lift . f
-lift2 f x = lift . f x
-lift3 f x y = lift . f x y
-lift4 f x y z = lift . f x y z
-
 -- lifting lookups for Map (if key is instance of Show) and IntMap
+mlookup k m = required ("key " ++ show k ++ " not found") (Map.lookup k m) 
+ilookup i m = required ("key " ++ show i ++ " not found") (IntMap.lookup i m)
+elemAt i x = required ("index " ++ show i ++ " out of range") (safeIndex x i)
 
-mlookup k m = 
-    maybe (throwError $ "key " ++ show k ++ " not found") return (Map.lookup k m)
-ilookup i m = 
-    maybe (throwError $ "key " ++ show i ++ " not found") return (IntMap.lookup i m)
-
+safeIndex :: [a] -> Int -> Maybe a
+safeIndex xs i = foldl mplus Nothing [ Just v | (j,v) <- zip [0..] xs, j == i]
+                   
 throwStrError :: (Error e, MonadError e m) => String -> m a
 throwStrError = throwError . strMsg
     
+required msg = maybe (throwError msg) return
+
 tuplify [] = []
 tuplify (_:[]) = []
 tuplify (a:b:rest) = (a,b) : tuplify rest
@@ -151,7 +146,6 @@ elemAtM :: (Monad m) => Int -> [a] -> m a
 elemAtM index list =
     if index >= 0 && index < length list then return (list !! index)
     else fail ("index " ++ (show index) ++ " out of range")
-  
 
 unescape = unEscapeString
 
