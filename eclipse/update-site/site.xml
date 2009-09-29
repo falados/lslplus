@@ -35,4 +35,7 @@
    <feature url="features/lslplus_part_linux_x86_0.11.2.jar" id="lslplus_part_linux_x86" version="0.11.2"/>
    <feature url="features/lslplus-part-macosx-x86_0.11.2.jar" id="lslplus-part-macosx-x86" version="0.11.2"/>
    <feature url="features/lslplus-part-macosx-x86_0.11.2.1.jar" id="lslplus-part-macosx-x86" version="0.11.2.1"/>
+   <feature url="features/lslplus-part-win32-x86_0.11.3.jar" id="lslplus-part-win32-x86" version="0.11.3" os="win32" arch="x86"/>
+   <feature url="features/lslplus-part-macosx-x86_0.11.3.jar" id="lslplus-part-macosx-x86" version="0.11.3"/>
+   <feature url="features/lslplus_part_linux_x86_0.11.3.jar" id="lslplus_part_linux_x86" version="0.11.3"/>
 </site>
