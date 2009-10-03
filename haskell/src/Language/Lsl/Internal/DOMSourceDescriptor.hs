@@ -1,35 +1,12 @@
-{-# OPTIONS_GHC -XFlexibleContexts #-}
-module Language.Lsl.Internal.DOMSourceDescriptor(sourceFiles,sourceFilesElement) where
+{-# LANGUAGE FlexibleContexts, NoMonomorphismRestriction #-}
+{-# OPTIONS_GHC -fwarn-unused-binds -fwarn-unused-imports #-}
+module Language.Lsl.Internal.DOMSourceDescriptor(sources) where
 
-import Control.Monad.Error(MonadError(..))
-import Language.Lsl.Internal.DOMProcessing(ElemAcceptor(..),elementList,findElement,match,simple,findBoolOrDefault)
-import Text.XML.HaXml(Element(..),Content(..))
+import Control.Applicative
+import Language.Lsl.Internal.DOMProcessing
 
-sourceFiles e = match sourceFilesElement e
+item = (,) <$> req "identifier" text <*> req "path" text
 
-sourceFilesElement :: MonadError String m => ElemAcceptor m (Bool,[(String,String)],[(String,String)])
-sourceFilesElement = 
-    let f (Elem _ _ contents) = do
-            (optimize,contents0) <- findBoolOrDefault False "optimize" contents
-            (m,contents1) <- findElement modulesElement [ e | e@(CElem _ _) <- contents0 ]
-            (s,[]) <- findElement scriptsElement contents1
-            return (optimize,m,s)
-    in ElemAcceptor "source_files" f
-
-modulesElement :: MonadError String m => ElemAcceptor m [(String,String)]
-modulesElement = elementList "modules" itemElement
-scriptsElement :: MonadError String m => ElemAcceptor m [(String,String)]
-scriptsElement = elementList "scripts" itemElement
-
-itemElement :: MonadError String m => ElemAcceptor m (String,String)
-itemElement =
-    let f (Elem _ _ contents) = do
-            (id,contents1) <- findElement idElement [ e | e@(CElem _ _) <- contents ]
-            (p,[]) <- findElement pathElement contents1
-            return (id,p)
-    in ElemAcceptor "item" f
-
-idElement :: MonadError String m => ElemAcceptor m String
-idElement = ElemAcceptor "identifier" simple
-pathElement :: MonadError String m => ElemAcceptor m String
-pathElement = ElemAcceptor "path" simple
+itemlist = liste "item" item
+sources = (,,) <$> def "optimize" False bool
+    <*> req "modules" itemlist <*> req "scripts" itemlist

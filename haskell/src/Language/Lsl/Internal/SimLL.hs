@@ -362,24 +362,24 @@ llResetOtherScript info@(ScriptInfo _ _ sn pk _) [SVal sn'] =
         continueV
     
 resetScript pk sn = do
-         logAMessage LogDebug "sim" "resetting a script"
-         script <- getScript pk sn
-         t <- getTick
-         let img = scriptImage script
-         let doReset execState =
-                 setScript pk sn script {
-                            scriptImage = (hardReset img) {executionState = execState},
-                            scriptActive = True,
-                            scriptPermissions = M.empty,
-                            scriptLastPerm = Nothing,
-                            scriptLastResetTick = t,
-                            scriptEventQueue = [Event "state_entry" [] M.empty] }
-                 in case executionState img of
-                     Executing -> doReset Waiting
-                     Waiting -> doReset Waiting
-                     SleepingTil i -> doReset (WaitingTil i)
-                     WaitingTil i -> doReset (WaitingTil i)
-                     _ -> throwError "can't reset script that is crashed or suspended"
+    logAMessage LogDebug "sim" "resetting a script"
+    script <- getScript pk sn
+    t <- getTick
+    let img = scriptImage script
+    let doReset execState =
+            setScript pk sn script {
+                scriptImage = (hardReset img) {executionState = execState},
+                scriptActive = True,
+                scriptPermissions = M.empty,
+                scriptLastPerm = Nothing,
+                scriptLastResetTick = t,
+                scriptEventQueue = [Event "state_entry" [] M.empty] }
+         in case executionState img of
+             Executing -> doReset Waiting
+             Waiting -> doReset Waiting
+             SleepingTil i -> doReset (WaitingTil i)
+             WaitingTil i -> doReset (WaitingTil i)
+             _ -> throwError "can't reset script that is crashed or suspended"
                      
 llGetScriptState info@(ScriptInfo _ _ _ pk _) [SVal sn] =
     do  script <- getScript pk sn

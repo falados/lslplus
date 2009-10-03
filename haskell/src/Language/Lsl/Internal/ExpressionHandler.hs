@@ -1,6 +1,8 @@
-{-# OPTIONS_GHC -XFlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# OPTIONS_GHC -fwarn-unused-binds -fwarn-unused-imports #-}
 module Language.Lsl.Internal.ExpressionHandler(validateExpression,evaluateExpression) where
 
+import Control.Applicative
 import Control.Monad.Error
 import Data.Bits
 import IO
@@ -309,14 +311,6 @@ evalExpr (Cast t e) = do
        
 evalExpr expr = fail "expression not valid in this context"
 
-evalArithExpr fi ff e0 e1 =
-    do (v0,v1) <- evalEach e0 e1
-       case (v0,v1) of
-           (IVal i0, IVal i1) -> return $ IVal (fi i0 i1)
-           (FVal f0, IVal i1) -> return $ FVal (ff f0 $ fromInt i1)
-           (FVal f0, FVal f1) -> return $ FVal (ff f0 f1)
-           (IVal i0, FVal f1) -> return $ FVal (ff (fromInt i0) f1)
-
 evalEqExpr f e0 e1 =
     do (v0,v1) <- evalEach e0 e1
        let b = case (v0,v1) of
@@ -349,17 +343,12 @@ extractExpressionFromXML s =
     let doc = xmlParse "" s in processDOMExpr doc
        
 processDOMExpr (Document _ _ root _) = 
-    case match expressionElementAcceptor root of
+    --case match expressionElementAcceptor root of
+    case runSimpleContext expression root of
         Left s -> error s
         Right v -> v
 
-expressionElementAcceptor :: MonadError String m => ElemAcceptor m (String,String)
-expressionElementAcceptor =
-    let f (Elem _ _ contents) = do
-            (t,contents1) <- findElement (ElemAcceptor "type" simple) (elementsOnly contents)
-            (text,[]) <- findElement (ElemAcceptor "text" simple) contents1
-            return (t,text)
-    in ElemAcceptor "expression" f
+expression = tag "expression" >> (,) <$> req "type" text <*> req "text" text
 
 expressionValidatorEmitter (Left s) =
     (emit "result" [ emit "ok" [showString "false"], emit "msg" [showString $ xmlEscape s]]) ""

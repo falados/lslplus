@@ -1,239 +1,171 @@
-module Language.Lsl.Internal.DOMProcessing(ElemAcceptor(..),
-                         findElement,
-                         findOptionalElement,
-                         findOrDefault,
-                         findSimple,
-                         findSimpleOrDefault,
-                         findValueOrDefault,
-                         findBoolOrDefault,
-                         findValue,
-                         findOptionalValue,
-                         findOptionalBool,
-                         valueAcceptor, -- String -> ElemAcceptor m t
-                         ctxelem,
-                         simple,
-                         simpleElement,
-                         matchChoice,
-                         matchMaybe,
-                         cmatch,
-                         match,
-                         attValueString,
-                         acceptList, -- 
-                         elementList,
-                         elementListWith,
-                         elementsOnly,
-                         attrString,
-                         Content(..),
-                         Document(..),
-                         Element(..),
-                         xmlParse,
-                         --module Text.XML.HaXml,
-                         --module Text.XML.HaXml.Posn
-                         ) where
+{-# LANGUAGE FlexibleContexts, NoMonomorphismRestriction,
+    FlexibleInstances, MultiParamTypeClasses, TypeSynonymInstances,
+    GeneralizedNewtypeDeriving #-}
+{-# OPTIONS_GHC -fwarn-unused-binds -fwarn-unused-imports #-}
+module Language.Lsl.Internal.DOMProcessing(
+    Content(..),
+    Document(..),
+    Element(..),
+    Posn,
+    xmlParse,
+    ElementAcceptContext(..),
+    getContent,setContent,
+    getAttrs,setAttrs,
+    getTag,
+    tag, tagit, clattr, clsit,
+    req, opt, def, text, val,
+    choice, choicec, choicet, choose,
+    elist,liste,SimpleContext(..),bool,
+    runSimpleContext
+    ) where
 
 import Data.Maybe
-import Control.Monad(MonadPlus(..),liftM2)
-import Control.Monad.Error(MonadError(..))
+import Control.Applicative
+import Control.Monad(liftM,unless,foldM,ap)
+import Control.Monad.Error(MonadError(..),ErrorT(..))
+import Control.Monad.State(MonadState(..),State(..),evalState)
 import Language.Lsl.Internal.Util(readM)
-import Text.XML.HaXml(Attribute,AttValue(..),Document(..),Element(..),Content(..),Reference(..),xmlParse)
+import Text.XML.HaXml(Attribute,AttValue(..),Document(..),Element(..),
+    Content(..),Reference(..),xmlParse)
 import Text.XML.HaXml.Posn(Posn(..))
 
-data Monad m => ElemAcceptor m t = ElemAcceptor { acceptorTag :: String,  acceptorFunc :: (Element Posn -> m t) }
-
-findElement (ElemAcceptor tag acceptor) list =          
-    let find' _ [] = throwError ("element not found: " ++ tag)
-        find' bs (ce@(CElem (Elem nm _ _) _):cs) | nm == tag  = 
-                                                       do  val <- ctxelem acceptor ce
-                                                           return (val, reverse bs ++ cs)
-                                                 | otherwise = find' (ce:bs) cs
-    in find' [] list
-
-findOptionalElement (ElemAcceptor tag acceptor) list =
-    let find' bs [] = return (Nothing,bs)
-        find' bs (ce@(CElem (Elem nm _ _) _):cs) | nm == tag =
-                                                     do val <- ctxelem acceptor ce
-                                                        return (Just val, reverse bs ++ cs)
-                                                 | otherwise = find' (ce:bs) cs
-    in find' [] list
-
-findOrDefault def acceptor list =
-    do (v,rest) <- findOptionalElement acceptor list
-       return $ case v of Nothing -> (def, rest); Just v' -> (v',rest)
-
-findSimpleOrDefault def tag = findOrDefault def (simpleElement tag)
-                                                                     
-ctxelem f (CElem e i) = catchError (f e) handler
-    where handler s = throwError ("at " ++ (show i) ++ ": " ++ s)
-
-cmatch acceptor (CElem e@(Elem n _ _) i) = catchError (match acceptor e) handler
-    where handler s = throwError ("at " ++ (show i) ++ ": " ++ s)
-
-match acceptor e@(Elem n _ _) | n /= acceptorTag acceptor = throwError ("unexpected element " ++ n ++ " (expected " ++ acceptorTag acceptor ++ ")")
-                              | otherwise = acceptorFunc acceptor e
-                              
-simple (Elem _ _ []) = return ""
-simple (Elem _ _ contents) = return (processContents contents)
-
-simpleElement s = ElemAcceptor s simple
-
-findSimple s = findElement (simpleElement s)
-
-processContents = concatMap processContentItem
-processContentItem (CElem (Elem name _ _) _) = error ("unexpected content element (" ++ name ++ ")")
-processContentItem (CString _ s _) = s
-processContentItem (CRef (RefEntity "lt") _) = "<"
-processContentItem (CRef (RefEntity "gt") _) = ">"
-processContentItem (CRef (RefEntity "amp") _) = "&"
-processContentItem (CRef (RefEntity "quot") _) = "\""
-processContentItem (CRef (RefEntity "apos") _) = "'"
-processContentItem (CMisc _ _) = error "unexpected content"
-
-matchChoice acceptors (CElem e@(Elem name _ _) i) =
-    do  result <- foldl (liftM2 mplus) (return Nothing) $ map (matchMaybe e) acceptors
-        case result of
-            Nothing -> throwError ("at " ++ show i ++ ": unexpected element " ++ name)
-            Just val -> return val
-
-matchMaybe e@(Elem n a c) (ElemAcceptor name f) | n /= name = return Nothing
-                                                | otherwise = f e >>= return . Just
-
-attValueString (AttValue list) = concat [ s | Left s <- list ]
-
-acceptList itemAcceptor (Elem _ _ contents) = mapM (cmatch itemAcceptor) (elementsOnly contents)
-
-elementList name itemAcceptor = ElemAcceptor name (acceptList itemAcceptor)
-
-acceptListWith f (Elem _ _ contents) = mapM f (elementsOnly contents)
-elementListWith name f = ElemAcceptor name (acceptListWith f)
-    
-elementsOnly cs = [ e | e@(CElem _ _) <- cs]
-
-acceptValue e = do
-   s <- simple e
-   value <- readM s
-   return value
+class (MonadError String m, Applicative m) => ElementAcceptContext m where
+    getContext :: m (Element Posn)
+    setContext :: Element Posn -> m ()
+    withContext :: Element Posn -> m a -> m a
    
-valueAcceptor s = ElemAcceptor s acceptValue
+setContent :: ElementAcceptContext m => [Content Posn] -> m ()
+setContent c = getContext >>= \ (Elem nm attr _) -> setContext (Elem nm attr c)
 
-findValue name contents =
-    do (sval,rest) <- findSimple name contents
-       value <- readM sval
-       return (value,rest)
+setAttrs :: ElementAcceptContext m => [Attribute] -> m ()
+setAttrs a = getContext >>= \ (Elem nm _ c) -> setContext (Elem nm a c)
 
-findOptionalValue name contents =
-    do (v,rest) <- findOptionalElement (simpleElement name) contents
-       case v of
-           Nothing -> return (Nothing,contents)
-           Just s -> do
-               value <- readM s
-               return (value, rest)
-               
-findOptionalBool name contents =
-    do (v,rest) <- findOptionalElement (simpleElement name) contents
-       case v of 
-           Nothing -> return (Nothing,contents)
-           Just "true" -> return (Just True,rest)
-           Just "false" -> return (Just False,rest)
-           Just s -> fail ("unable to parse " ++ s)
-           
-findBoolOrDefault def name contents =
-    do (sval,rest) <- findOptionalElement (simpleElement name) contents
-       case sval of 
-            Nothing -> return (def,contents)
-            Just "true" -> return (True,rest)
-            Just "false" -> return (False,rest)
-            Just s -> fail ("unable to parse " ++ s)
-            
-findValueOrDefault def name contents =
-    do (sval,rest) <- findOptionalElement (simpleElement name) contents
-       case sval of
-           Nothing -> return (def, contents)
-           Just s -> do
-               value <- readM s
-               return (value, rest)
-                     
--- for backwards compatibility
-attrString (AttValue v) = concatMap decode v
-    where
-      decode (Left  v)               = v
-      decode (Right (RefEntity ent)) = "&"++ent++";"
-      decode (Right (RefChar cref))  = "&"++show cref++";"
+getContent :: ElementAcceptContext m => m [Content Posn]
+getContent = getContext >>= \ (Elem _ _ c) -> return c
 
--- type ContentAcceptor a = [Content Posn] -> Either String a
--- type ContentFinder a = [Content Posn] -> Either String (Maybe a, [Content Posn])
--- type ElementAcceptor a = Element Posn -> Either String a
--- type ElementTester a = Element Posn -> Either String (Maybe a)
--- type AttributeAcceptor a = [Attribute] -> Either String a
+getTag :: ElementAcceptContext m => m String
+getTag = getContext >>= \ (Elem tag _ _) -> return tag
 
--- mustBe :: String -> (b -> a) -> ContentAcceptor b -> ElementAcceptor a
--- mustBe tag f cf (Elem name _ cs) | tag /= name = Left ("expected " ++ tag)
---                                  | otherwise = case cf cs of
---                                       Left s -> Left s
---                                       Right v -> Right (f v)
+getAttrs :: ElementAcceptContext m => m [Attribute]
+getAttrs = getContext >>= \ (Elem _ attrs _) -> return attrs
 
--- canBe :: String -> (b -> a) -> ContentAcceptor b -> ElementTester a
--- canBe tag f cf (Elem name _ cs) | tag /= name = Right Nothing
---                                 | otherwise = case cf cs of
---                                       Left s -> Left s
---                                       Right v -> Right (Just (f v))
+type CAcceptor m t = m t
 
--- mustBeWith :: String -> (a -> b -> c) -> AttributeAcceptor a -> ContentAcceptor b -> ElementAcceptor c
--- mustBeWith tag f af cf (Elem name attrs cs) | tag /= name = Left ("expected " ++ tag)
---                                             | otherwise = do
---                                                   av <- af attrs
---                                                   cv <- cf cs
---                                                   return (f av cv)
+runAcc :: ElementAcceptContext m => m b -> (a -> m b) -> CAcceptor m (Maybe a) -> m b
+runAcc nf f acceptor = do 
+    content <- getContent
+    find [] content `catchError`
+        \ s -> getTag >>= \ t -> throwError ("in element " ++ t ++ ": " ++ s)
+    where find bs [] = nf
+          find bs (ce@(CElem e@(Elem nm attrs ec) i):cs) = 
+              (try nm e i >>= maybe (find (ce:bs) cs) (\ v -> setContent (reverse bs ++ cs) >> f v))
+          find bs (ce:cs) = find (ce:bs) cs
+          try nm e i = withContext e acceptor `catchError` \ s ->
+              throwError ("in element " ++ nm ++ " in " ++ show i ++ ": " ++ s)
 
--- canBeWith :: String -> (a -> b -> c) -> AttributeAcceptor a -> ContentAcceptor b -> ElementTester c
--- canBeWith tag f af cf (Elem name attrs cs) | tag /= name = Right Nothing
---                                            | otherwise = do
---                                                   av <- af attrs
---                                                   cv <- cf cs
---                                                   return (Just (f av cv))
+tag :: ElementAcceptContext m => String -> CAcceptor m ()
+tag t = do
+    tagMatches <- (==) <$> pure t <*> getTag
+    unless tagMatches $ throwError ("tag " ++ t ++ " not matched")
 
--- liftElemTester :: ((Element Posn) -> Either String (Maybe a)) -> (Content Posn -> Either String (Maybe a))
--- liftElemAcceptor ef (CElem e pos) = case ef e of
---     Left s -> Left ("at " ++ show pos ++ ": " ++ s)
---     Right v -> Right v
---     
--- canHaveElem :: ElementAcceptor a -> ContentFinder a
--- canHaveElem ef cs = mapM (\ c -> liftElemAcceptor ef c >>= return . (,) c) cs >>= (\ vs -> case span (isNothing . snd) vs of
---     (bs,[]) -> Right (Nothing,map fst bs)
---     (bs,c:cs) -> Right (snd c,map fst $ bs ++ cs))
---    
--- mustHaveElem :: ElementAcceptor a -> ContentFinder a
--- mustHaveElem ef cs = mapM (\ c -> liftElemAcceptor ef c >>= return . (,) c) cs >>= (\ vs -> case span (isNothing . snd) vs of
---     (bs,[]) -> Left ("element not found")
---     (bs,c:cs) -> Right (snd c,map fst $ bs ++ cs))
+tagit :: ElementAcceptContext m => String -> CAcceptor m a 
+    -> CAcceptor m (Maybe a)
+tagit s acc = do
+    found <- (tag s >> return True) `catchError` const (return False)
+    if found then Just <$> acc else return Nothing
 
--- boolContent cs = simpleContent cs >>= (\ v -> case v of
---     "true" -> Right True
---     "false" -> Right False
---     s -> Left ("unrecognized bool " ++ s))
---     
--- readableContent :: Read a => ContentAcceptor a
--- readableContent cs = simpleContent cs >>= readM
+clattr :: ElementAcceptContext m => String -> CAcceptor m ()
+clattr c = do
+    attrs <- getAttrs
+    unless (("class",AttValue [Left c]) `elem` attrs) $
+        throwError ("attribute class=\"" ++ c ++ "\" not matched")
+        
+clsit :: ElementAcceptContext m => String -> CAcceptor m a 
+    -> CAcceptor m (Maybe a)
+clsit s acc = 
+    (clattr s >> Just <$> acc) `catchError` const (return Nothing)
 
--- simpleContent :: ContentAcceptor String
--- simpleContent cs = mapM processContentItem cs >>= return . concat
---     where
---         processContentItem (CElem (Elem name _ _) _) = Left ("unexpected content element (" ++ name ++ ")")
---         processContentItem (CString _ s _) = Right s
---         processContentItem (CRef (RefEntity "lt") _) = Right "<"
---         processContentItem (CRef (RefEntity "gt") _) = Right ">"
---         processContentItem (CRef (RefEntity "amp") _) = Right "&"
---         processContentItem (CRef (RefEntity "quot") _) = Right "\""
---         processContentItem (CRef (RefEntity "apos") _) = Right "'"
---         processContentItem (CMisc _ _) = Right "unexpected content"
+-- req : this element is a required child, with the specified tag
+req t acceptor = runAcc (throwError ("element not found: " ++ t)) return 
+    (tagit t acceptor)
 
--- empty :: ContentAcceptor ()
--- empty [] = Right ()
--- empty _ = Left "unexpected content"
+opt t acceptor = runAcc (return Nothing) (return . Just) 
+    (tagit t acceptor)
+def t def acceptor = runAcc (return def) return (tagit t acceptor)
 
--- data FooBar = FooBar { foo :: Int, bar :: String }
+text :: (ElementAcceptContext m) => m String
+text = do
+    s <- (liftM concat . mapM textItem) =<< getContent
+    setContent []
+    return s
 
--- fooE :: ElementAcceptor Int
--- fooE = mustBe "foo" id readableContent
+val :: (ElementAcceptContext m, Read a) => CAcceptor m a
+val = text >>= readM
 
--- -- foobar = mustBe "FooBar" (\ _ -> FooBar 0 "") ( \ cs -> do
---      mustHave (mustBe "foo" 
+bool = text >>= \ s -> case s of
+    "true" -> return True
+    "false" -> return False
+    "True" -> return True
+    "False" -> return False
+    s -> throwError ("unacceptable bool value: " ++ s)
+    
+textItem :: ElementAcceptContext m => Content Posn -> m String
+textItem (CElem _ i) = throwError ("unexpected element in " ++ show i)
+textItem (CString _ s _) = return s
+textItem (CRef (RefEntity "lt") _) = return "<"
+textItem (CRef (RefEntity "gt") _) = return ">"
+textItem (CRef (RefEntity "amp") _) = return "&"
+textItem (CRef (RefEntity "quot") _) = return "\""
+textItem (CRef (RefEntity "apos") _) = return "'"
+textItem (CMisc _ i) = throwError ("unexpected content in " ++ show i)
+
+choose :: ElementAcceptContext m => CAcceptor m a -> CAcceptor m a -> CAcceptor m a
+choose i j = i `catchError` (const j)
+
+choice :: ElementAcceptContext m => [CAcceptor m (Maybe a)] -> CAcceptor m (Maybe a)
+choice [] = return Nothing --throwError "nothing matched"
+choice (c:cs) = c >>= maybe (choice cs) (return . Just)
+
+choicec :: ElementAcceptContext m => [(String,CAcceptor m a)] -> CAcceptor m (Maybe a)
+choicec = choice . map (uncurry clsit)
+
+choicet :: ElementAcceptContext m => [(String,CAcceptor m a)] -> CAcceptor m (Maybe a)
+choicet = choice . map (uncurry tagit)
+
+elist :: ElementAcceptContext m => CAcceptor m (Maybe a) -> CAcceptor m [a]
+elist acc = foldM f [] =<< getContent where
+    f l (CElem e@(Elem nm _ _) i) = --withContext e acc >>= return . (l ++) . (:[])
+        withContext e acc >>= 
+            maybe (throwError ("unexpected element " ++ nm ++ " in list in " ++ show i))
+            (return . (l ++) . (:[]))
+    f l (CMisc _ i) = err i
+    f l (CRef _ i) = err i
+    f l (CString _ _ i) = return l
+    err i = throwError ("in " ++ show i ++ " unexpected non-element content")
+          
+liste s = (elist . tagit s)
+
+newtype SimpleContext a = SimpleContext { unSimpleContext :: ErrorT String (State (Element Posn)) a }
+    deriving (Monad)
+
+instance MonadState (Element Posn) SimpleContext where
+   get = SimpleContext { unSimpleContext = get }
+   put v = SimpleContext { unSimpleContext = put v }
+   
+instance MonadError String SimpleContext where
+    throwError e = SimpleContext { unSimpleContext = throwError e }
+    catchError v f = SimpleContext { unSimpleContext = catchError (unSimpleContext v) (unSimpleContext . f) }
+
+instance Functor SimpleContext where
+    fmap = liftM
+    
+instance Applicative SimpleContext where
+   pure  = return
+   (<*>) = ap
+
+instance ElementAcceptContext SimpleContext where
+   getContext = get
+   setContext = put
+   withContext c a = either throwError return $ runSimpleContext a c
+   
+runSimpleContext = (evalState . runErrorT . unSimpleContext)

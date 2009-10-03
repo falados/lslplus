@@ -1,7 +1,7 @@
 -- The Lsl "compiler" parses LSL+ 'modules' and 'scripts', and can then:
 --   issue a report on all the errors it has found
 --   generate LSL scripts for those LSL+ scripts that successfully 'compiled'
-
+{-# OPTIONS_GHC -fwarn-unused-binds -fwarn-unused-imports #-}
 module Language.Lsl.Internal.Compiler(
     compile,
     main0,
@@ -14,10 +14,10 @@ import Control.Monad(when)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.UTF8 as UTF8
 import IO(Handle,hGetContents,stdin)
-import Language.Lsl.Internal.DOMSourceDescriptor(sourceFiles)
+import Language.Lsl.Internal.DOMProcessing(tag,runSimpleContext)
+import Language.Lsl.Internal.DOMSourceDescriptor(sources)
 import Language.Lsl.Internal.Load(loadModules,loadScripts)
 import Language.Lsl.Render(renderCompiledScript)
-import Language.Lsl.Internal.OptimizerOptions(OptimizerOption(..))
 import Language.Lsl.Syntax(AugmentedLibrary(..),CompiledLSLScript(..),Ctx(..),Func(..),Global(..),
                      GlobDef(..),Handler(..),LModule(..),SourceContext(..),State(..),Validity,Var(..),
                      TextLocation(..),funcName,funcParms,funcType,libFromAugLib)
@@ -25,7 +25,7 @@ import Language.Lsl.Internal.Type(lslTypeString)
 import System.Directory(doesFileExist,removeFile)
 import System.FilePath(replaceExtension)
 import System.Time(calendarTimeToString,getClockTime,toCalendarTime)
-import Text.XML.HaXml(Document(..),xmlParse) --hiding (when,xmlEscape)
+import Text.XML.HaXml(Document(..),xmlParse)
 import Text.XML.HaXml.Posn(Posn(..))
 import Language.Lsl.Internal.Optimize(optimizeScript,OptimizerOption(..)) 
 import Language.Lsl.Internal.XmlCreate hiding (emit)
@@ -57,11 +57,6 @@ compile (_,moduleInfo,scriptInfo) =
     do augLib <- loadModules moduleInfo
        scripts <- loadScripts (libFromAugLib augLib) scriptInfo
        return (augLib,scripts)
--- compile' :: ([(String,String)],[(String,String)]) -> IO (AugmentedLibrary,[(String,Validity CompiledLSLScript)])
--- compile' (moduleInfo,scriptInfo) =
---     do augLib <- loadModules' moduleInfo
---        scripts <- loadScripts' (libFromAugLib augLib) scriptInfo
---        return (augLib,scripts)
        
 formatCompilationSummary :: (AugmentedLibrary,[(String,Validity CompiledLSLScript)]) -> String
 formatCompilationSummary (augLib, scripts) = 
@@ -78,9 +73,6 @@ formatScriptCompilationSummary (name,result) =
                 [emit "status" [emit "ok" [showString "true"]],
                 emit "entryPoints" (map emitFunc funcs ++ concatMap stateEntryPointEmitters states),
                 emit "globals" (map emitGlobal globals)])
-    where funcNames = map (\ (Func dec _) -> ctxItem $ funcName dec)
-          handlerPaths = concatMap (\ (Ctx _ (State ctxName handlers)) -> map (\ (Ctx _ (Handler ctxName1 _ _)) ->
-              ctxItem ctxName ++ "." ++ ctxItem ctxName1) handlers)
  
 formatModuleCompilationSummary (name,result) =
     emit "item"
@@ -137,7 +129,8 @@ readSourceList handle = do
     
 processCompileList :: Document Posn -> (Bool,[(String,String)],[(String,String)])
 processCompileList (Document _ _ root _) = 
-    case sourceFiles root of
+    --case sourceFiles root of
+    case runSimpleContext (tag "source_files" >> sources) root of
         Left s -> error s
         Right v -> v
 

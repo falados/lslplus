@@ -1,4 +1,5 @@
-{-# OPTIONS_GHC -XFlexibleContexts -XDeriveDataTypeable #-}
+{-# LANGUAGE FlexibleContexts, DeriveDataTypeable,
+    NoMonomorphismRestriction #-}
 module Language.Lsl.Internal.Type(
     LSLType(..),
     LSLValue(..),
@@ -27,7 +28,6 @@ module Language.Lsl.Internal.Type(
     onI,
     onF,
     onS,
-    lslValueElement,
     defaultValue,
     vecMulScalar,
     rotMulVec,
@@ -42,13 +42,15 @@ module Language.Lsl.Internal.Type(
     liftV1,
     liftV2) where
     
+import Control.Applicative
 import Control.Monad.Error(MonadError)
 import Data.Data(Data,Typeable)
 import Data.List(intersperse)
 import Language.Lsl.Internal.NumberParsing(readInt,readHexFloat)
 import Language.Lsl.Internal.Key(nullKey)
 import Language.Lsl.Internal.Util(lookupM,readM,cross,quaternionMultiply,quaternionToMatrix,fromInt)
-import Language.Lsl.Internal.DOMProcessing(Element(..),ElemAcceptor(..),findValue,elementsOnly,simple,attrString,acceptList)
+import Language.Lsl.Internal.DOMProcessing(req,choicet,text,elist,val)
+     --(Element(..),ElemAcceptor(..),findValue,elementsOnly,simple,attrString,acceptList)
 
 import Text.Printf(printf,PrintfArg(..))
 
@@ -216,38 +218,16 @@ toSVal (LVal l) =
 comp2Str :: RealFloat a => a -> String
 comp2Str f = printf "%.5f" (realToFrac f :: Double)
 
-lslValueElement :: (RealFloat a, Read a, MonadError String m) => ElemAcceptor m (LSLValue a)
-lslValueElement =
-    let f e@(Elem _ attrs contents) = do
-            valType <- lookupM "class" attrs
-            case attrString valType of
-                "string" -> simple e >>= return . SVal
-                "key" -> simple e >>= return . KVal
-                "int" -> simple e >>= readM >>= return . IVal
-                "float" -> simple e >>= readM >>= return . FVal
-                "vector" -> acceptVector e
-                "rotation" -> acceptRotation e
-                "list" -> acceptLslList e
-                _ -> fail "unrecognized value element"
-    in ElemAcceptor "value" f
+lslValueE = choicet [
+    ("string",SVal <$> text),
+    ("key",KVal <$> text),
+    ("int",IVal <$> val),
+    ("float",FVal <$> val),
+    ("vector",VVal <$> req "x" val <*> req "y" val <*> req "z" val),
+    ("rotation",RVal <$> req "x" val <*> req "y" val <*> req "z" val
+        <*> req "s" val),
+    ("list", LVal <$> elist lslValueE)]
  
-acceptVector (Elem _ _ contents) = do
-            (x,c1) <- findValue "x" (elementsOnly contents)
-            (y,c2) <- findValue "y" (elementsOnly c1)
-            (z,[]) <- findValue "z" (elementsOnly c2)
-            return $ VVal x y z
-            
-acceptRotation (Elem _ _ contents) = do
-            (x,c1) <- findValue "x" (elementsOnly contents)
-            (y,c2) <- findValue "y" (elementsOnly c1)
-            (z,c3) <- findValue "z" (elementsOnly c2)
-            (s,[]) <- findValue "s" (elementsOnly c3)
-            return $ RVal x y z s
-        
-acceptLslList e = do
-        l <- acceptList lslValueElement e
-        return $ LVal l
-
 -- vector and rotation operations
 vecMulScalar (VVal x y z) f = (VVal (x*f) (y*f) (z*f))
 rotMul (RVal x1 y1 z1 s1) (RVal x2 y2 z2 s2) = 

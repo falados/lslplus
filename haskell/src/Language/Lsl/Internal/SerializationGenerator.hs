@@ -9,7 +9,6 @@ import Data.Maybe
 import qualified Control.Monad.State as State
 import qualified Data.Map as M
 import Language.Lsl.Internal.XmlCreate
-import Language.Lsl.Internal.DOMProcessing
 import Language.Lsl.Internal.DOMCombinators
 import Data.Generics
 import Data.Int

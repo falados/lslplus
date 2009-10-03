@@ -1,93 +1,61 @@
-{-# OPTIONS_GHC -XFlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, NoMonomorphismRestriction #-}
+{-# OPTIONS_GHC -fwarn-unused-binds -fwarn-unused-imports #-}
 module Language.Lsl.Internal.SystemTester where
 
-import Control.Monad(MonadPlus(..))
-import Control.Monad.Error(MonadError(..),ErrorT(..))
-import Control.Monad.State(evalState)
-import qualified Data.Map as M
+import Control.Applicative
+import Control.Monad.Error(MonadError(..))
 import IO
-import Language.Lsl.Internal.BreakpointsDeserialize(breakpointsElement)
+import Language.Lsl.Internal.BreakpointsDeserialize(bps)
 import Language.Lsl.Internal.Compiler(compile)
-import Language.Lsl.Internal.DOMProcessing(Content(..),Document(..),Element(..),ElemAcceptor(..),
-                         elementList,simple,findElement,findOptionalElement,match,xmlParse)
-import Language.Lsl.Internal.DOMSourceDescriptor(sourceFilesElement)
+import Language.Lsl.Internal.DOMProcessing(xmlParse,req,tagit,def,getTag,
+    choice,val,liste,text,Document(..),runSimpleContext)
+import Language.Lsl.Internal.DOMSourceDescriptor(sources)
 import Language.Lsl.Internal.ExecInfo(emitExecutionInfo)
 import Language.Lsl.Internal.Log(LogMessage(..),logLevelToName)
 import Language.Lsl.Syntax(libFromAugLib)
 import Language.Lsl.Internal.Util(unescape,processLinesS)
-import Language.Lsl.Sim(SimCommand(..),SimEvent(..),SimEventArg(..),SimStatus(..),SimStateInfo(..),simStep)
-import Language.Lsl.WorldDef(worldElement)
+import Language.Lsl.Sim(SimCommand(..),SimEvent(..),SimEventArg(..),
+    SimStatus(..),SimStateInfo(..),simStep)
+import Language.Lsl.WorldDef(world,evalAcceptContext,newAcceptState)
 import Language.Lsl.Internal.XmlCreate(emit,emitList,emitSimple)
 
-initializationFromXML xml = let doc = xmlParse "" xml in parseInitialization doc
-
-parseInitialization (Document _ _ root _) = match initSimElement root
-
---initSimElement :: MonadError String m => ElemAcceptor m (([(String,String)],[(String,String)]),FullWorldDef)
-initSimElement =
-    let f (Elem _ _ contents) =
-            do (sources,contents1) <- findElement sourceFilesElement [ e | e@(CElem _ _) <- contents]
-               (worldDef,[]) <- findElement worldElement contents1
-               return (sources,worldDef)
-    in ElemAcceptor "sim-descriptor" f
-
-commandFromXML xml = 
-     let (Document _ _ root _) = xmlParse "" xml in 
-         case simCommand root of
-             Left s -> error s
-             Right command -> command
-
---simCommand e = match (ElemAcceptor "sim-continue" simple) e >> return (SimContinue [] [])
-simCommand e = --execCmd "sim-continue" SimContinue e
-    (matchSimContinue e) `mplus` (matchSimStep e) `mplus` (matchSimStepOver e) `mplus` (matchSimStepOut e)
+commandFromXML' xml = 
+    either error id $ runSimpleContext command root
+    where (Document _ _ root _) = xmlParse "input" xml
     
-matchSimContinue e = execCmd "sim-continue" SimContinue e
-matchSimStep e = execCmd "sim-step" SimStep e
-matchSimStepOver e = execCmd "sim-step-over" SimStepOver e
-matchSimStepOut e = execCmd "sim-step-out" SimStepOut e
-
-execCmd s f e = do
-    (bp,events) <- match (ElemAcceptor s commandContent) e
-    return (f bp events)
-  
-commandContent (Elem _ _ contents) = do
-    (breakpoints,contents1) <- findOptionalElement  breakpointsElement [ e | e@(CElem _ _) <- contents]
-    (events,[]) <- findOptionalElement  (elementList "events" simEventElement) contents1
-    return $ (maybe [] id breakpoints, maybe [] id events)
-
-simEventElement :: MonadError String m => ElemAcceptor m SimEvent
-simEventElement =
-    let f (Elem _ _ contents) = 
-             do (name,contents1) <- findElement (ElemAcceptor "name" simple) [ e | e@(CElem _ _) <- contents]
-                (delay,contents2) <- findElement (ElemAcceptor "delay" simple) contents1
-                (args,[]) <- findOptionalElement (elementList "args" simArgElement) contents2
-                case reads delay of
-                    [] -> fail "invalid delay: expected integer"
-                    ((i,_):_) -> return $ SimEvent name (maybe [] id args) i
-    in ElemAcceptor "event" f
-
-simArgElement :: MonadError String m => ElemAcceptor m SimEventArg
-simArgElement = 
-    let f (Elem _ _ contents) =
-            do (name,contents1) <- findElement (ElemAcceptor "name" simple) [ e | e@(CElem _ _) <- contents]
-               (value,[]) <- findElement (ElemAcceptor "value" simple) contents1
-               return $ SimEventArg name value
-    in ElemAcceptor "arg" f
+command = choice cmds >>= maybe
+    (getTag >>= \ t -> throwError ("unrecognized command: " ++ t))
+    return
     
-outputToXML (SimInfo _ log state) = (emit "sim-info" [] [emitLog log,emitState state]) ""
-outputToXML (SimEnded _ log state) = (emit "sim-ended" [] [emitLog log,emitState state]) ""
-outputToXML (SimSuspended _ suspendInfo log state) = (emit "sim-suspended" [] [emitExecutionInfo suspendInfo,
-                                                                               emitLog log,
-                                                                               emitState state]) ""
+cmds = [cmd "sim-continue" SimContinue, cmd "sim-step" SimStep,
+    cmd "sim-step-over" SimStepOver, cmd "sim-step-out" SimStepOut]
+    
+cmd s f = tagit s $ f <$> def "breakpoints" [] bps 
+    <*> def "events" [] (liste "event" event)
+    
+event = SimEvent <$> req "name" text <*> def "args" [] (liste "arg" arg) 
+    <*> req "delay" val
+
+arg = SimEventArg <$> req "name" text <*> req "value" text
+
+outputToXML (SimInfo _ log state) = 
+    (emit "sim-info" [] [emitLog log,emitState state]) ""
+outputToXML (SimEnded _ log state) =
+    (emit "sim-ended" [] [emitLog log,emitState state]) ""
+outputToXML (SimSuspended _ suspendInfo log state) = 
+    (emit "sim-suspended" [] [emitExecutionInfo suspendInfo,
+                              emitLog log,
+                              emitState state]) ""
                                                                                
 emitLog log =
     emit "messages" [] $ map emitMessage (log)
 
 emitMessage logMessage =
-    emit "message" [] [ emitSimple "time" [] (show $ logMessageTime logMessage),
-                        emitSimple "level" [] (logLevelToName $ logMessageLevel logMessage),
-                        emitSimple "source" [] (logMessageSource logMessage),
-                        emitSimple "text" [] (logMessageText logMessage)]
+    emit "message" [] [ 
+        emitSimple "time" [] (show $ logMessageTime logMessage),
+        emitSimple "level" [] (logLevelToName $ logMessageLevel logMessage),
+        emitSimple "source" [] (logMessageSource logMessage),
+        emitSimple "text" [] (logMessageText logMessage)]
 
 emitState state =
     emit "state" [] [ emitSimple "time" [] (show $ simStateInfoTime state),
@@ -98,21 +66,25 @@ emitPrims prims = emitList "prims" emitPrim prims
 emitAvatars avatars = emitList "avatars" emitAvatar avatars
 emitScripts scripts = emitList "scripts" emitScript scripts
 
-emitPrim (key,name) = emit "prim" [] [emitSimple "key" [] key, emitSimple "name" [] name]
-emitAvatar (key,name) = emit "avatar" [] [emitSimple "key" [] key, emitSimple "name" [] name]
-emitScript (pk,sname) = emit "script" [] [emitSimple "primKey" [] pk, emitSimple "scriptName" [] sname]
+emitPrim (key,name) = 
+    emit "prim" [] [emitSimple "key" [] key, emitSimple "name" [] name]
+emitAvatar (key,name) = 
+    emit "avatar" [] [emitSimple "key" [] key, emitSimple "name" [] name]
+emitScript (pk,sname) = 
+    emit "script" [] [emitSimple "primKey" [] pk, emitSimple "scriptName" [] sname]
 
 testSystem :: IO ()
-testSystem = 
-    do  input <- getLine
-        --hPutStrLn stderr input
-        let result = (evalState . runErrorT) (initializationFromXML  (unescape input)) (M.empty,1)
-        case result of
-            Left s -> fail s
-            Right (src,worldDef) -> do
-                (augLib,scripts) <- compile src
-                let runStep state s =
-                        let command = commandFromXML s
-                            (e,state') = simStep state command
-                        in (state',outputToXML e)
-                processLinesS (Left (worldDef,scripts,libFromAugLib augLib)) "quit" runStep
+testSystem = do
+    input <- unescape <$> getLine
+    case init input of
+        Left s -> error s
+        Right (src,worldDef) -> do
+            (augLib,scripts) <- compile src
+            let runStep state s =
+                    let command = commandFromXML' s
+                        (e,state') = simStep state command
+                    in (state',outputToXML e)
+            processLinesS (Left (worldDef,scripts,libFromAugLib augLib)) "quit" runStep
+    where init s = let (Document _ _ root _) = xmlParse "" s in
+            flip evalAcceptContext (newAcceptState root) $
+                (,) <$> req "source_files" sources <*> req "world-def" world
