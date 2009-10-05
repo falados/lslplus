@@ -8,7 +8,7 @@ import Data.Bits
 import IO
 
 import Language.Lsl.Internal.Constants
-import Language.Lsl.Internal.DOMProcessing
+import Language.Lsl.Internal.DOMProcessing(req,tag,text,xmlAccept)
 import Language.Lsl.Parse
 import Language.Lsl.Syntax
 import Language.Lsl.Internal.Type
@@ -339,14 +339,7 @@ evalEach e0 e1 =
        v1 <- evalCtxExpr e1
        return (v0,v1)
        
-extractExpressionFromXML s =
-    let doc = xmlParse "" s in processDOMExpr doc
-       
-processDOMExpr (Document _ _ root _) = 
-    --case match expressionElementAcceptor root of
-    case runSimpleContext expression root of
-        Left s -> error s
-        Right v -> v
+extractExpressionFromXML s = either error id $ xmlAccept expression s
 
 expression = tag "expression" >> (,) <$> req "type" text <*> req "text" text
 
@@ -362,5 +355,3 @@ validateExpression hIn hOut =
                    Right v -> v
                    Left s -> error (show s)
        putStr $ expressionValidatorEmitter (checkExpr t text)
-           
-       

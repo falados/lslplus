@@ -7,8 +7,8 @@ import Control.Monad.Error(MonadError(..))
 import IO
 import Language.Lsl.Internal.BreakpointsDeserialize(bps)
 import Language.Lsl.Internal.Compiler(compile)
-import Language.Lsl.Internal.DOMProcessing(xmlParse,req,tagit,def,getTag,
-    choice,val,liste,text,Document(..),runSimpleContext)
+import Language.Lsl.Internal.DOMProcessing(req,tagit,def,getTag,
+    choice,val,liste,text,xmlAccept)
 import Language.Lsl.Internal.DOMSourceDescriptor(sources)
 import Language.Lsl.Internal.ExecInfo(emitExecutionInfo)
 import Language.Lsl.Internal.Log(LogMessage(..),logLevelToName)
@@ -16,12 +16,10 @@ import Language.Lsl.Syntax(libFromAugLib)
 import Language.Lsl.Internal.Util(unescape,processLinesS)
 import Language.Lsl.Sim(SimCommand(..),SimEvent(..),SimEventArg(..),
     SimStatus(..),SimStateInfo(..),simStep)
-import Language.Lsl.WorldDef(world,evalAcceptContext,newAcceptState)
+import Language.Lsl.WorldDef(world,worldXMLAccept)
 import Language.Lsl.Internal.XmlCreate(emit,emitList,emitSimple)
 
-commandFromXML' xml = 
-    either error id $ runSimpleContext command root
-    where (Document _ _ root _) = xmlParse "input" xml
+commandFromXML xml = either error id $ xmlAccept command xml
     
 command = choice cmds >>= maybe
     (getTag >>= \ t -> throwError ("unrecognized command: " ++ t))
@@ -81,10 +79,9 @@ testSystem = do
         Right (src,worldDef) -> do
             (augLib,scripts) <- compile src
             let runStep state s =
-                    let command = commandFromXML' s
+                    let command = commandFromXML s
                         (e,state') = simStep state command
                     in (state',outputToXML e)
             processLinesS (Left (worldDef,scripts,libFromAugLib augLib)) "quit" runStep
-    where init s = let (Document _ _ root _) = xmlParse "" s in
-            flip evalAcceptContext (newAcceptState root) $
+    where init s = worldXMLAccept s $
                 (,) <$> req "source_files" sources <*> req "world-def" world

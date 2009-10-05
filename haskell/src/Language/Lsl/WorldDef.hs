@@ -60,24 +60,24 @@ module Language.Lsl.WorldDef(
     defaultRegions,
     mkScript,
     world,
-    AcceptState(..),
-    AcceptContext(..),
-    evalAcceptContext,
-    newAcceptState) where
+    worldXMLAccept
+    ) where
 
 import Control.Applicative
-import Control.Monad(when,foldM,ap,liftM)
-import Control.Monad.Error(MonadError(..),ErrorT(..))
+import Control.Monad(when,foldM)
+import Control.Monad.Error(MonadError(..))
+import Control.Monad.State(evalState)
 import Control.Monad.Writer(tell,lift,runWriterT)
 
-import qualified Control.Monad.State as SM(MonadState(..),State,runState,evalState)
+import qualified Control.Monad.State as SM(get,put,State)
 import Data.List(find,sortBy)
 import qualified Data.Map as M
 import qualified Data.IntMap as IM
 import Data.Maybe(isNothing)
 
 import Language.Lsl.Internal.DOMProcessing(req,opt,def,val,text,elist,
-    liste,choicet,Element(..),Posn,ElementAcceptContext(..))
+    liste,choicet,MonadXMLAccept(..),AcceptT(..),
+    xmlAcceptT)
 import Language.Lsl.Internal.Evaluation(Event(..))
 import Language.Lsl.Internal.Exec(ScriptImage,initLSLScript)
 import Language.Lsl.Internal.Key(mkKey,nullKey)
@@ -574,12 +574,12 @@ world = do
     FullWorldDef <$> req "maxTime" val <*> req "sliceSize" val
         <*> pure webHandling <*> pure handler <*> req "objects" objects
         <*> pure ps <*> pure avs 
-        <*> pure (defaultRegions "") <*> (asKeyIndex <$> SM.get)
+        <*> pure (defaultRegions "") <*> (snd <$> get')
 
 objects = liste "object" object
 
 object = do
-    keys <- mapM findRealKey' =<< req "primKeys" (liste "string" text)
+    keys <- mapM findRealKey =<< req "primKeys" (liste "string" text)
     position <- dvec0 "position"
     LSLObject <$> pure keys <*> pure defaultDynamics { objectPosition = position }
     
@@ -592,9 +592,9 @@ prim = do
     key <- req "key" text
     scripts <- req "scripts" (liste "script" script)
     inventory <- def "inventory" [] (elist invItem)
-    owner <- findRealKey' =<< def "owner" "" text
+    owner <- findRealKey =<< def "owner" "" text
     rotation <- rotationsToQuaternion P123 <$> dvec0 "rotation"
-    Prim <$> req "name" text <*> newKey' (Just key) <*> pure Nothing
+    Prim <$> req "name" text <*> newKey (Just key) <*> pure Nothing
         <*> def "description" "" text <*> pure (scripts ++ inventory)
         <*> pure owner <*> pure Nothing <*> pure owner 
         <*> def "position" (128,128,0) vec <*> pure rotation <*> dvec1 "scale"
@@ -631,13 +631,13 @@ invLandmark = curry InvLandmark <$> req "region" region <*> req "position" vec
 
 inventoryItem f = do
     id <- curry InventoryItemIdentification <$> req "name" text 
-        <*> newKey' Nothing
+        <*> newKey Nothing
     info <- InventoryInfo <$> req "creator" text 
         <*> pure defaultInventoryPermissions
-    findRealKey' $ inventoryInfoCreator info
+    findRealKey $ inventoryInfoCreator info
     InventoryItem id info <$> f
 
-script = scriptInventoryItem <$> req "scriptName" text <*> newKey' Nothing
+script = scriptInventoryItem <$> req "scriptName" text <*> newKey Nothing
     <*> req "scriptId" text
     
 primFace = PrimFace <$> dval "alpha" 0 <*> dvec1 "color"
@@ -673,59 +673,29 @@ avatar = do
     (name,x,y,z,handlerName) <- (,,,,) <$> req "name" text 
         <*> req "xPos" val <*> req "yPos" val <*> req "zPos" val
         <*> opt "avatarEventHandler" text
-    key <- newKey' (Just name)
+    key <- newKey (Just name)
     return $ (defaultAvatar key) {
         avatarName = name, 
         avatarPosition = (x,y,z),
         avatarCameraPosition = (x,y,z), 
         avatarEventHandler = fmap (flip (,) []) handlerName }
     
-data AcceptState = AcceptState {
-    asKeys :: M.Map String String,
-    asKeyIndex :: Integer,
-    asElement :: Element Posn }
-
-newKey' :: Maybe String -> AcceptContext String
-newKey' xref = do
-    s <- SM.get
-    let k = mkKey (asKeyIndex s)
-    let m' = case xref of
-                 Nothing -> asKeys s
-                 Just v -> M.insert v k (asKeys s)
-    SM.put s { asKeys = m', asKeyIndex = 1 + asKeyIndex s }
+findRealKey k = fst <$> get' >>= mlookup k
+newKey xref = do
+    (m,i) <- get'
+    let k = mkKey i
+    let m' = maybe m (\ v -> M.insert v k m) xref
+    put' (m',i + 1)
     return k
 
-findRealKey' k = asKeys <$> SM.get >>= mlookup k
+worldXMLAccept s a = evalState (((xmlAcceptT . unWorldXMLAccept) a) s) (M.empty,1)
 
-newAcceptState e = AcceptState M.empty 1 e
- 
-newtype AcceptContext a = AcceptContext { unAcceptContext :: ErrorT String (SM.State AcceptState) a }
-    deriving (Monad)
+newtype WorldXMLAccept a = WorldXMLAccept { unWorldXMLAccept :: AcceptT (SM.State (M.Map String String, Integer)) a }
+    deriving (Monad,Applicative,Functor,MonadXMLAccept)
 
-instance SM.MonadState AcceptState AcceptContext where
-   get = AcceptContext { unAcceptContext = SM.get }
-   put v = AcceptContext { unAcceptContext = SM.put v }
-   
-instance MonadError String AcceptContext where
-    throwError e = AcceptContext { unAcceptContext = throwError e }
-    catchError v f = AcceptContext { unAcceptContext = catchError (unAcceptContext v) (unAcceptContext . f) }
+get' = WorldXMLAccept $ lift $ SM.get
+put' v = WorldXMLAccept $ lift $ SM.put v
 
-instance Functor AcceptContext where
-    fmap = liftM
-    
-instance Applicative AcceptContext where
-   pure  = return
-   (<*>) = ap
-
-instance ElementAcceptContext AcceptContext where
-   getContext = asElement <$> SM.get
-   setContext c = SM.get >>= \ s -> SM.put s { asElement = c }
-   withContext c a = SM.get >>= \ s -> case runAcceptContext a s { asElement = c } of
-       (Left s, _) -> throwError s
-       (Right v, s') -> SM.get >>= 
-           \ s -> SM.put s { asKeys = asKeys s', asKeyIndex = asKeyIndex s' } >>
-           return v
-   
-runAcceptContext = (SM.runState . runErrorT . unAcceptContext)
-evalAcceptContext = (SM.evalState . runErrorT . unAcceptContext)
-   
+instance MonadError String WorldXMLAccept where
+    throwError e = WorldXMLAccept { unWorldXMLAccept = throwError e }
+    catchError v f = WorldXMLAccept { unWorldXMLAccept = catchError (unWorldXMLAccept v) (unWorldXMLAccept . f) }

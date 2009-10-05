@@ -14,19 +14,18 @@ import Control.Monad(when)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.UTF8 as UTF8
 import IO(Handle,hGetContents,stdin)
-import Language.Lsl.Internal.DOMProcessing(tag,runSimpleContext)
+import Language.Lsl.Internal.DOMProcessing(tag,xmlAccept)
 import Language.Lsl.Internal.DOMSourceDescriptor(sources)
 import Language.Lsl.Internal.Load(loadModules,loadScripts)
 import Language.Lsl.Render(renderCompiledScript)
-import Language.Lsl.Syntax(AugmentedLibrary(..),CompiledLSLScript(..),Ctx(..),Func(..),Global(..),
-                     GlobDef(..),Handler(..),LModule(..),SourceContext(..),State(..),Validity,Var(..),
-                     TextLocation(..),funcName,funcParms,funcType,libFromAugLib)
+import Language.Lsl.Syntax(AugmentedLibrary(..),CompiledLSLScript(..),Ctx(..),
+    Func(..),Global(..),GlobDef(..),Handler(..),LModule(..),SourceContext(..),
+    State(..),Validity,Var(..),TextLocation(..),funcName,funcParms,funcType,
+    libFromAugLib)
 import Language.Lsl.Internal.Type(lslTypeString)
 import System.Directory(doesFileExist,removeFile)
 import System.FilePath(replaceExtension)
 import System.Time(calendarTimeToString,getClockTime,toCalendarTime)
-import Text.XML.HaXml(Document(..),xmlParse)
-import Text.XML.HaXml.Posn(Posn(..))
 import Language.Lsl.Internal.Optimize(optimizeScript,OptimizerOption(..)) 
 import Language.Lsl.Internal.XmlCreate hiding (emit)
 import qualified Language.Lsl.Internal.XmlCreate as E
@@ -124,15 +123,7 @@ formatCtx (Just (SourceContext { srcTextLocation = TextLocation { textLine0 = l0
 readSourceList :: Handle -> IO (Bool,[(String,String)],[(String,String)])
 readSourceList handle = do
     input <- hGetContents handle
-    let doc = xmlParse "" input
-    return $ processCompileList doc
-    
-processCompileList :: Document Posn -> (Bool,[(String,String)],[(String,String)])
-processCompileList (Document _ _ root _) = 
-    --case sourceFiles root of
-    case runSimpleContext (tag "source_files" >> sources) root of
-        Left s -> error s
-        Right v -> v
+    return $ either error id $ xmlAccept (tag "source_files" >> sources) input
 
 renderScriptsToFiles :: Bool -> [(String,Validity CompiledLSLScript)] -> [(String,String)] -> IO ()
 renderScriptsToFiles opt compiledScripts pathTable = 

@@ -6,7 +6,7 @@ import Control.Applicative
 import Control.Monad.Error(MonadError(..))
 import Language.Lsl.Internal.BreakpointsDeserialize(bps)
 import Language.Lsl.Internal.Compiler(compile)
-import Language.Lsl.Internal.DOMProcessing(choice,req,tag,tagit,getTag,def,runSimpleContext)
+import Language.Lsl.Internal.DOMProcessing(choice,req,tag,tagit,getTag,def,xmlAccept)
 import Language.Lsl.Internal.DOMSourceDescriptor(sources)
 import Language.Lsl.Internal.DOMUnitTestDescriptor(tests)
 import Language.Lsl.Internal.ExecInfo(emitExecutionInfo)
@@ -15,12 +15,10 @@ import Language.Lsl.Internal.TestResult(emitTestResult)
 import Language.Lsl.UnitTestEnv(ExecCommand(..),TestEvent(..),simStep)
 import Language.Lsl.Internal.Util(unescape,processLinesS)
 import Language.Lsl.Internal.XmlCreate(emit)
-import Text.XML.HaXml(Document(..),xmlParse)
 
 execElement = tag "test-descriptor" >> (,) <$> req "source_files" sources <*> req "tests" tests
 
-testExecutionDescriptionFromXML' input = runSimpleContext execElement root
-    where (Document _ _ root _) = xmlParse "input" input
+testExecutionDescriptionFromXML' input = xmlAccept execElement input
     
 main2 :: IO ()
 main2 = 
@@ -37,11 +35,7 @@ main2 =
 
 testEventToXML e = emitTestEvent e ""
 
-execCommandFromXML' xml = 
-     let (Document _ _ root _) = xmlParse "" xml in 
-         case runSimpleContext command root of
-             Left s -> error s
-             Right command -> command
+execCommandFromXML' xml = either error id $ xmlAccept command xml
 
 command = choice cmds >>= maybe
     (getTag >>= \ t -> throwError ("unrecognized command: " ++ t))
