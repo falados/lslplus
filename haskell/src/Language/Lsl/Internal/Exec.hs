@@ -269,9 +269,9 @@ initVar name _ (Just v) = (name,v)
 
 writeMem :: Monad m => String -> LSLValue a -> MemRegion a -> m (MemRegion a)
 writeMem name value cells = 
-  case break (\(name',element) -> name' == name) cells of
-      (cells',[]) -> fail "no such variable"
-      (xs,y:ys) -> return ((name,value):(xs ++ ys))
+    case break (\(name',element) -> name' == name) cells of
+        (cells',[]) -> fail "no such variable"
+        (xs,y:ys) -> return ((name,value):(xs ++ ys))
 
 readMem :: Monad m => String -> MemRegion a -> m (LSLValue a)
 readMem = lookupM
@@ -640,35 +640,31 @@ evalScript maxTick queue = do
     case executionState of
         Suspended _ -> setExecutionState Executing >> evalScript maxTick queue
         Erroneous _ -> return queue
-        Waiting -> do
-            oid <- getObjectId
-            pid <- getPrimId
-            primKey <- getMyPrimKey
-            scriptName <- getScriptName
-            case queue of
-                [] -> return queue
-                (event:queue') -> do
-                    states <- getStates
-                    curState <- case event of
-                        -- when a state_exit event occurs we've already changed the state variable in the image
-                        -- to the new state.  the event itself contains the name of the old state, so we can
-                        -- find the right event handler.
-                        Event "state_exit" _ m -> 
-                            case M.lookup "last_state" m of
-                                Just (SVal s) -> return s
-                                Nothing -> logMsg "not a valid state exit!" >> getCurState
-                        _ -> getCurState
-                    (State _ handlers) <- incontext ("state " ++ curState ++ ":") $ findState curState states
-                    case matchEvent event handlers of
-                        Nothing -> return queue'
-                        Just (mem,stmts,name,ctx) -> do
-                            initStacks
-                            pushFrame name ctx Nothing
-                            pushScope mem $ labelBlocks stmts
-                            pushElements [EvMark,EvBlock stmts]
-                            setExecutionState Executing
-                            setCurrentEvent event
-                            evalScript maxTick queue'
+        Waiting -> case queue of
+            [] -> return queue
+            (event:queue') -> do
+                curState <- case event of
+                    -- when a state_exit event occurs we've already changed the state variable in the image
+                    -- to the new state.  the event itself contains the name of the old state, so we can
+                    -- find the right event handler.
+                    Event "state_exit" _ m -> 
+                        case M.lookup "last_state" m of
+                            Just (SVal s) -> return s
+                            Nothing -> logMsg "not a valid state exit!" >> getCurState
+                    _ -> getCurState
+                states <- getStates
+                (State _ handlers) <- incontext ("state " ++ curState ++ ":") $
+                    findState curState states
+                case matchEvent event handlers of
+                    Nothing -> return queue'
+                    Just (mem,stmts,name,ctx) -> do
+                        initStacks
+                        pushFrame name ctx Nothing
+                        pushScope mem $ labelBlocks stmts
+                        pushElements [EvMark,EvBlock stmts]
+                        setExecutionState Executing
+                        setCurrentEvent event
+                        evalScript maxTick queue'
         Executing -> do 
             result <- eval maxTick
             case result of
@@ -679,7 +675,7 @@ evalScript maxTick queue = do
                     if curState /= newState
                         -- the event queue gets cleared, with the state exit/entry events added.
                         then return [Event "state_exit" [] $ M.singleton "last_state" (SVal curState),
-                                   Event "state_entry" [] M.empty]
+                                Event "state_entry" [] M.empty]
                         else return queue
                 EvalComplete _ -> setExecutionState Waiting >> return queue
                 YieldTil i -> setExecutionState (SleepingTil i) >> return queue
@@ -717,185 +713,179 @@ eval' =
             popFrame
             noMoreFrames <- callStackEmpty
             return (if noMoreFrames then EvalComplete Nothing else EvalIncomplete)
-    in
-    do cs <- getCallStack
-       vs <- getVStack
-       es <- getEStack
-       noMoreElements <- elementStackEmpty
-       if noMoreElements then popAndCheck
-         else do
-           element <- popElement
-           case element of
-               EvReturn -> do
-                   val <- peekVal
-                   logMsg  ("return: " ++ lslShowVal val)
+    in do
+        cs <- getCallStack
+        vs <- getVStack
+        es <- getEStack
+        noMoreElements <- elementStackEmpty
+        if noMoreElements then popAndCheck else do
+            element <- popElement
+            case element of
+                EvReturn -> do
+                   logMsg . ("return: " ++) . lslShowVal =<< peekVal
                    popAndCheck
-               EvBlock [] -> popScope >> eval'
-               EvMark -> modMark ((-)1) >> continue
-               EvBlock (s:ss) -> pushElements [EvBlock ss,EvCtxStatement s]
-               EvCtxStatement s -> do
+                EvBlock [] -> popScope >> eval'
+                EvMark -> modMark ((-)1) >> continue
+                EvBlock (s:ss) -> pushElements [EvBlock ss,EvCtxStatement s]
+                EvCtxStatement s -> do
                    pushElement (EvStatement $ ctxItem s)
                    case srcCtx s of
-                       Just (SourceContext { srcTextLocation = txtl }) -> 
-                           let bp = mkBreakpoint (textName txtl) (textLine0 txtl) 0 in
-                                    do  brk <- checkBp bp
-                                        if brk then return $ BrokeAt bp
-                                               else continue
+                       Just (SourceContext { srcTextLocation = txtl }) -> do
+                           brk <- checkBp bp
+                           if brk then return $ BrokeAt bp else continue
+                           where bp = mkBreakpoint (textName txtl) (textLine0 txtl) 0
                        Nothing -> continue
-               EvStatement (Return mexpr) -> pushElements [EvReturn,EvMexpr $ fromMCtx mexpr]
-               EvStatement (NullStmt) -> eval'
-               EvStatement (StateChange s) -> return $ EvalComplete $ Just s
-               EvStatement (Do expr) -> pushElements [EvDiscard,EvExpr $ ctxItem expr]
-               EvStatement (Decl (Var name t) Nothing) ->
-                   do initVar1 name t Nothing
-                      continue
-               EvStatement (Decl (Var name t) mexpr) -> pushElements [EvBind name t,EvMexpr $ fromMCtx mexpr]
-               EvStatement (If expr stmt1 stmt2) -> pushElements [EvCond stmt1 stmt2,EvExpr $ ctxItem expr]
-               EvStatement (While expr stmt) -> modMark (+1) >> pushElements [EvMark,EvLoop (ctxItem expr) [] stmt,EvExpr $ ctxItem expr]
-               EvStatement (DoWhile stmt expr) -> modMark (+1) >>
-                   pushElements [EvMark,EvLoop (ctxItem expr) [] stmt, EvExpr (ctxItem expr),EvCtxStatement stmt]
-               EvStatement (For mexpr1 mexpr2 mexpr3 stmt) ->
-                   do let expr =  case mexpr2 of
-                                      Nothing -> (IntLit 1)
-                                      Just expr2 -> ctxItem expr2
-                      modMark (+1)
-                      pushElement EvMark
-                      pushElement (EvLoop expr (mexpr3) stmt)
-                      pushElement (EvExpr expr)
-                      pushElements [EvDiscard, EvExpr (ListExpr mexpr1)]
-                      continue
-               EvStatement (Compound ss) ->
-                   do pushScope [] $ labelBlocks ss
-                      pushElement EvMark
-                      pushElement (EvBlock ss)
-                      continue
-               EvStatement (Label _) -> eval'
-               EvStatement (Jump name) ->
-                   do (n,stmts) <- unwindToLabel name
-                      popMarks n
-                      pushElements [EvMark,EvBlock stmts]
-                      continue
-               EvMexpr Nothing ->  pushVal VoidVal >> continue
-               EvMexpr (Just expr) -> pushElements [EvExpr expr]
-               EvDiscard -> popVal >> continue
-               EvBind name t ->
-                   do val <- popVal
-                      initVar1 name t (Just val)
-                      continue
-               EvLoop expr mexpr stmt ->
-                   do val <- popVal
-                      when (trueCondition val) $ do
-                              pushElement element               -- last, re-evaluate loop
-                              pushElement (EvExpr expr)         -- next-to-last, re-evaluate expr)
-                              pushElements [EvDiscard, EvExpr (ListExpr mexpr)]  -- evaluate end-of-loop expressions
-                              pushElement (EvCtxStatement stmt)    -- first, evaluate statement)
-                      continue
-               EvCond stmt1 stmt2 ->
-                   do val <- popVal
-                      pushElement (EvCtxStatement (if trueCondition val then stmt1 else stmt2))
-                      continue
-               EvExpr (IntLit i) -> pushVal (IVal i) >> continue
-               EvExpr (FloatLit f) -> pushVal (FVal (realToFrac f)) >> continue
-               EvExpr (StringLit s) -> pushVal (SVal s) >> continue
-               EvExpr (KeyLit k) -> pushVal (KVal k) >> continue
-               EvExpr (VecExpr e1 e2 e3) ->
+                EvStatement (Return mexpr) -> pushElements [EvReturn,EvMexpr $ fromMCtx mexpr]
+                EvStatement (NullStmt) -> eval'
+                EvStatement (StateChange s) -> return $ EvalComplete $ Just s
+                EvStatement (Do expr) -> pushElements [EvDiscard,EvExpr $ ctxItem expr]
+                EvStatement (Decl (Var name t) Nothing) -> do
+                     initVar1 name t Nothing
+                     continue
+                EvStatement (Decl (Var name t) mexpr) -> pushElements [EvBind name t,EvMexpr $ fromMCtx mexpr]
+                EvStatement (If expr stmt1 stmt2) -> pushElements [EvCond stmt1 stmt2,EvExpr $ ctxItem expr]
+                EvStatement (While expr stmt) -> modMark (+1) >> pushElements [EvMark,EvLoop (ctxItem expr) [] stmt,EvExpr $ ctxItem expr]
+                EvStatement (DoWhile stmt expr) -> modMark (+1) >>
+                     pushElements [EvMark,EvLoop (ctxItem expr) [] stmt, EvExpr (ctxItem expr),EvCtxStatement stmt]
+                EvStatement (For mexpr1 mexpr2 mexpr3 stmt) -> do
+                    let expr =  maybe (IntLit 1) ctxItem mexpr2
+                    modMark (+1)
+                    pushElement EvMark
+                    pushElement (EvLoop expr (mexpr3) stmt)
+                    pushElement (EvExpr expr)
+                    pushElements [EvDiscard, EvExpr (ListExpr mexpr1)]
+                    continue
+                EvStatement (Compound ss) -> do
+                    pushScope [] $ labelBlocks ss
+                    pushElement EvMark
+                    pushElement (EvBlock ss)
+                    continue
+                EvStatement (Label _) -> eval'
+                EvStatement (Jump name) -> do
+                    (n,stmts) <- unwindToLabel name
+                    popMarks n
+                    pushElements [EvMark,EvBlock stmts]
+                    continue
+                EvMexpr Nothing ->  pushVal VoidVal >> continue
+                EvMexpr (Just expr) -> pushElements [EvExpr expr]
+                EvDiscard -> popVal >> continue
+                EvBind name t -> do
+                    val <- popVal
+                    initVar1 name t (Just val)
+                    continue
+                EvLoop expr mexpr stmt -> do
+                    val <- popVal
+                    when (trueCondition val) $ do
+                        pushElement element               -- last, re-evaluate loop
+                        pushElement (EvExpr expr)         -- next-to-last, re-evaluate expr)
+                        pushElements [EvDiscard, EvExpr (ListExpr mexpr)]  -- evaluate end-of-loop expressions
+                        pushElement (EvCtxStatement stmt)    -- first, evaluate statement)
+                    continue
+                EvCond stmt1 stmt2 -> do
+                    val <- popVal
+                    pushElement (EvCtxStatement (if trueCondition val then stmt1 else stmt2))
+                    continue
+                EvExpr (IntLit i) -> pushVal (IVal i) >> continue
+                EvExpr (FloatLit f) -> pushVal (FVal (realToFrac f)) >> continue
+                EvExpr (StringLit s) -> pushVal (SVal s) >> continue
+                EvExpr (KeyLit k) -> pushVal (KVal k) >> continue
+                EvExpr (VecExpr e1 e2 e3) ->
                    -- TODO: this is probably the WRONG order of evaluation!!!
-                   pushElements [EvMkVec,EvExpr $ ctxItem e3, EvExpr $ ctxItem e2, EvExpr $ ctxItem e1]
-               EvExpr (RotExpr e1 e2 e3 e4) ->
-                   pushElements [EvMkRot,EvExpr $ ctxItem e4, EvExpr $ ctxItem e3, EvExpr $ ctxItem e2, EvExpr $ ctxItem e1]
-               EvExpr (ListExpr []) -> pushVal (LVal []) >> continue
-               EvExpr (ListExpr ((Ctx _ e):es)) ->
-                   pushElements [EvCons,EvExpr (ListExpr es), EvExpr e]
-               EvExpr (Add expr1 expr2) -> pushBinary EvAdd expr1 expr2
-               EvExpr (Sub expr1 expr2) -> pushBinary EvSub expr1 expr2
-               EvExpr (Mul expr1 expr2) -> pushBinary EvMul expr1 expr2
-               EvExpr (Div expr1 expr2) -> pushBinary EvDiv expr1 expr2
-               EvExpr (Mod expr1 expr2) -> pushBinary EvMod expr1 expr2
-               EvExpr (BAnd expr1 expr2) -> pushBinary EvBAnd expr1 expr2
-               EvExpr (BOr expr1 expr2) -> pushBinary EvBOr expr1 expr2
-               EvExpr (Xor expr1 expr2) -> pushBinary EvBXor expr1 expr2
-               EvExpr (And expr1 expr2) -> pushBinary EvAnd expr1 expr2
-               EvExpr (Or expr1 expr2) -> pushBinary EvOr expr1 expr2
-               EvExpr (Lt expr1 expr2) -> pushBinary EvLt expr1 expr2
-               EvExpr (Le expr1 expr2) -> pushBinary EvLe expr1 expr2
-               EvExpr (Gt expr1 expr2) -> pushBinary EvGt expr1 expr2
-               EvExpr (Ge expr1 expr2) -> pushBinary EvGe expr1 expr2
-               EvExpr (Equal expr1 expr2) -> pushBinary EvEq expr1 expr2
-               EvExpr (NotEqual expr1 expr2) -> pushBinary EvNe expr1 expr2
-               EvExpr (ShiftL expr1 expr2) -> pushBinary EvShiftL expr1 expr2
-               EvExpr (ShiftR expr1 expr2) -> pushBinary EvShiftR expr1 expr2
-               EvExpr (Not expr) -> pushUnary EvNot expr
-               EvExpr (Neg expr) -> pushUnary EvNeg expr
-               EvExpr (Inv expr) -> pushUnary EvBInv expr
-               EvExpr (Cast t expr) -> pushElements [EvCast t,EvExpr $ ctxItem expr]
-               EvExpr (Get var) -> pushElements [EvGet $ ctxVr2Vr var]
-               EvExpr (Set var expr) -> pushElements [EvSet $ ctxVr2Vr var, EvExpr $ ctxItem expr]
-               EvExpr (IncBy var expr) -> pushModBy var EvAdd $ ctxItem expr
-               EvExpr (DecBy var expr) -> pushModBy var EvSub $ ctxItem expr
-               EvExpr (MulBy var expr) -> pushModBy var EvMul $ ctxItem expr
-               EvExpr (DivBy var expr) -> pushModBy var EvDiv $ ctxItem expr
-               EvExpr (ModBy var expr) -> pushModBy var EvMod $ ctxItem expr
-               EvExpr (PreInc var) -> pushModBy var EvAdd (IntLit 1)
-               EvExpr (PreDec var) -> pushModBy var EvSub (IntLit 1)
-               EvExpr (PostInc var) ->
-                   do  -- after all operations, top of stack should be var value prior to increment
-                       pushElement (EvPop) -- take that value off, leaving the original value
-                       pushModBy var EvAdd (IntLit 1)
-                       pushElement (EvGet $ ctxVr2Vr var) -- put the current value on the stack
-                       continue
-               EvExpr (PostDec var) ->
-                   do  -- after all operations, top of stack should be var value prior to increment
-                       pushElement (EvPop)
-                       pushModBy var EvSub (IntLit 1)
-                       pushElement (EvGet $ ctxVr2Vr var) -- put the current value on the stack
-                       continue
-               EvExpr (Call (Ctx _ name) exprs) ->
-                   case findFuncDec name predefFuncs of
-                       Just (FuncDec _ t parms) -> pushElements [EvPredef name, EvExpr (ListExpr exprs)]
-                       Nothing ->
-                           do 
-                              (Func (FuncDec ctxName t parms) stmts) <- getFunc name
-                              pushElement (EvCall (ctxItem ctxName) (srcCtx ctxName) (ctxItems parms) stmts (t == LLVoid))
-                              pushElement (EvExpr (ListExpr exprs))  -- first evaluate the arguments
-                              continue
-               EvCons ->
-                   do (LVal l) <- popVal
-                      val <- popVal
-                      pushVal (LVal (val:l))
-                      continue
-               EvCall name ctx parms stmts voidFunc ->
-                   do (LVal val) <- popVal -- should be the list of arguments
-                      logMsg ("call: " ++ renderCall name val)
-                      pushFrame name ctx Nothing
-                      pushScope [] $ labelBlocks stmts
-                      initVars1 parms val
+                    pushElements [EvMkVec,EvExpr $ ctxItem e3, EvExpr $ ctxItem e2, EvExpr $ ctxItem e1]
+                EvExpr (RotExpr e1 e2 e3 e4) ->
+                    pushElements [EvMkRot,EvExpr $ ctxItem e4, EvExpr $ ctxItem e3, EvExpr $ ctxItem e2, EvExpr $ ctxItem e1]
+                EvExpr (ListExpr []) -> pushVal (LVal []) >> continue
+                EvExpr (ListExpr ((Ctx _ e):es)) ->
+                    pushElements [EvCons,EvExpr (ListExpr es), EvExpr e]
+                EvExpr (Add expr1 expr2) -> pushBinary EvAdd expr1 expr2
+                EvExpr (Sub expr1 expr2) -> pushBinary EvSub expr1 expr2
+                EvExpr (Mul expr1 expr2) -> pushBinary EvMul expr1 expr2
+                EvExpr (Div expr1 expr2) -> pushBinary EvDiv expr1 expr2
+                EvExpr (Mod expr1 expr2) -> pushBinary EvMod expr1 expr2
+                EvExpr (BAnd expr1 expr2) -> pushBinary EvBAnd expr1 expr2
+                EvExpr (BOr expr1 expr2) -> pushBinary EvBOr expr1 expr2
+                EvExpr (Xor expr1 expr2) -> pushBinary EvBXor expr1 expr2
+                EvExpr (And expr1 expr2) -> pushBinary EvAnd expr1 expr2
+                EvExpr (Or expr1 expr2) -> pushBinary EvOr expr1 expr2
+                EvExpr (Lt expr1 expr2) -> pushBinary EvLt expr1 expr2
+                EvExpr (Le expr1 expr2) -> pushBinary EvLe expr1 expr2
+                EvExpr (Gt expr1 expr2) -> pushBinary EvGt expr1 expr2
+                EvExpr (Ge expr1 expr2) -> pushBinary EvGe expr1 expr2
+                EvExpr (Equal expr1 expr2) -> pushBinary EvEq expr1 expr2
+                EvExpr (NotEqual expr1 expr2) -> pushBinary EvNe expr1 expr2
+                EvExpr (ShiftL expr1 expr2) -> pushBinary EvShiftL expr1 expr2
+                EvExpr (ShiftR expr1 expr2) -> pushBinary EvShiftR expr1 expr2
+                EvExpr (Not expr) -> pushUnary EvNot expr
+                EvExpr (Neg expr) -> pushUnary EvNeg expr
+                EvExpr (Inv expr) -> pushUnary EvBInv expr
+                EvExpr (Cast t expr) -> pushElements [EvCast t,EvExpr $ ctxItem expr]
+                EvExpr (Get var) -> pushElements [EvGet $ ctxVr2Vr var]
+                EvExpr (Set var expr) -> pushElements [EvSet $ ctxVr2Vr var, EvExpr $ ctxItem expr]
+                EvExpr (IncBy var expr) -> pushModBy var EvAdd $ ctxItem expr
+                EvExpr (DecBy var expr) -> pushModBy var EvSub $ ctxItem expr
+                EvExpr (MulBy var expr) -> pushModBy var EvMul $ ctxItem expr
+                EvExpr (DivBy var expr) -> pushModBy var EvDiv $ ctxItem expr
+                EvExpr (ModBy var expr) -> pushModBy var EvMod $ ctxItem expr
+                EvExpr (PreInc var) -> pushModBy var EvAdd (IntLit 1)
+                EvExpr (PreDec var) -> pushModBy var EvSub (IntLit 1)
+                EvExpr (PostInc var) -> do
+                    -- after all operations, top of stack should be var value prior to increment
+                    pushElement EvPop -- take that value off, leaving the original value
+                    pushModBy var EvAdd (IntLit 1)
+                    pushElement (EvGet $ ctxVr2Vr var) -- put the current value on the stack
+                    continue
+                EvExpr (PostDec var) -> do
+                    -- after all operations, top of stack should be var value prior to increment
+                    pushElement EvPop
+                    pushModBy var EvSub (IntLit 1)
+                    pushElement (EvGet $ ctxVr2Vr var) -- put the current value on the stack
+                    continue
+                EvExpr (Call (Ctx _ name) exprs) ->
+                    case findFuncDec name predefFuncs of
+                        Just (FuncDec _ t parms) -> pushElements [EvPredef name, EvExpr (ListExpr exprs)]
+                        Nothing -> do 
+                            (Func (FuncDec ctxName t parms) stmts) <- getFunc name
+                            pushElement (EvCall (ctxItem ctxName) (srcCtx ctxName) (ctxItems parms) stmts (t == LLVoid))
+                            pushElement (EvExpr (ListExpr exprs))  -- first evaluate the arguments
+                            continue
+                EvCons -> do
+                    (LVal l) <- popVal
+                    val <- popVal
+                    pushVal (LVal (val:l))
+                    continue
+                EvCall name ctx parms stmts voidFunc -> do
+                    (LVal val) <- popVal -- should be the list of arguments
+                    logMsg ("call: " ++ renderCall name val)
+                    pushFrame name ctx Nothing
+                    pushScope [] $ labelBlocks stmts
+                    initVars1 parms val
                       -- a void function may not have an explicit return; if it does, this
                       -- element will get popped off without being evaluated.
-                      when voidFunc (pushElement EvReturn >> pushElement (EvMexpr Nothing))
-                      pushElements [EvMark,EvBlock stmts]
-                      continue
-               EvPredef name -> evalPredef' name
-               EvGet (name,c) ->
-                   do val <- getVar name
-                      pushVal $ lslValueComponent c val
-                      continue
-               EvPop -> popVal >> continue
-               EvSet (name,c) ->
-                   do val <- peekVal
-                      varVal <- getVar name
-                      let t = typeOfLSLComponent varVal c
-                      let val' = case (t,val) of
-                              (LLFloat,IVal i) -> FVal (fromInt i)
-                              (LLString,KVal k) -> SVal k
-                              (LLKey,SVal s) -> KVal s
-                              (t, v) | t == typeOfLSLValue v -> v
-                                     | otherwise -> error ("can't implicitly convert from " ++ 
-                                                           (show $ typeOfLSLValue v) ++ 
-                                                           " to " ++ (show t))
-                      let varVal' = replaceLslValueComponent c varVal val'
-                      setVar name varVal'
-                      continue
-               EvAdd -> evalBinary $ \val1 val2 -> case (val1,val2) of
+                    when voidFunc (pushElement EvReturn >> pushElement (EvMexpr Nothing))
+                    pushElements [EvMark,EvBlock stmts]
+                    continue
+                EvPredef name -> evalPredef' name
+                EvGet (name,c) -> do 
+                    val <- getVar name
+                    pushVal $ lslValueComponent c val
+                    continue
+                EvPop -> popVal >> continue
+                EvSet (name,c) -> do
+                    val <- peekVal
+                    varVal <- getVar name
+                    let t = typeOfLSLComponent varVal c
+                    let val' = case (t,val) of
+                          (LLFloat,IVal i) -> FVal (fromInt i)
+                          (LLString,KVal k) -> SVal k
+                          (LLKey,SVal s) -> KVal s
+                          (t, v) | t == typeOfLSLValue v -> v
+                                 | otherwise -> error ("can't implicitly convert from " ++ 
+                                                       (show $ typeOfLSLValue v) ++ 
+                                                       " to " ++ (show t))
+                    let varVal' = replaceLslValueComponent c varVal val'
+                    setVar name varVal'
+                    continue
+                EvAdd -> evalBinary $ \val1 val2 -> case (val1,val2) of
                     (IVal v1, IVal v2) -> IVal (v1 + v2)
                     (FVal v1, IVal v2) -> FVal (v1 + fromInt v2)
                     (IVal v1, FVal v2) -> FVal (v2 + fromInt v1)
@@ -907,7 +897,7 @@ eval' =
                     (LVal l1, v) -> LVal (l1 ++ [v])
                     (SVal s1,SVal s2) -> SVal (s1 ++ s2)
                     _ -> error ("invalid Add operands: " ++ (show val1) ++ ", " ++ (show val2))
-               EvSub -> evalBinary $ \ val1 val2 -> case (val1,val2) of
+                EvSub -> evalBinary $ \ val1 val2 -> case (val1,val2) of
                     (IVal i1,IVal i2) -> IVal (i1 - i2)
                     (IVal i1,FVal f2) -> FVal (fromInt i1 - f2)
                     (FVal f1,IVal i2) -> FVal (f1 - fromInt i2)
@@ -915,7 +905,7 @@ eval' =
                     (VVal x1 y1 z1,VVal x2 y2 z2) -> VVal (x1 - x2) (y1 - y2) (z1 - z2)
                     (RVal x1 y1 z1 s1,RVal x2 y2 z2 s2) -> RVal (x1 - x2) (y1 - y2) (z1 - z2) (s1 - s2)
                     _ -> error ("cannot apply - operator to " ++ (show val1) ++ " and " ++ (show val2))
-               EvMul -> evalBinary $ \ val1 val2 -> case (val1,val2) of
+                EvMul -> evalBinary $ \ val1 val2 -> case (val1,val2) of
                     (IVal i1,IVal i2) -> IVal (i1*i2)
                     (IVal i1,FVal f2) -> FVal (fromInt i1 * f2)
                     (FVal f1,IVal i2) -> FVal (f1 * fromInt i2)
@@ -928,7 +918,7 @@ eval' =
                     (v@(VVal _ _ _),r@(RVal _ _ _ _)) -> rotMulVec r v
                     (r1@(RVal _ _ _ _),r2@(RVal _ _ _ _)) -> rotMul r1 r2
                     _ -> error ("cannot apply * operator to " ++ (show val1) ++ " and " ++ (show val2))
-               EvDiv -> evalBinary $ \ val1 val2 -> case (val1,val2) of
+                EvDiv -> evalBinary $ \ val1 val2 -> case (val1,val2) of
                     (IVal i1,IVal i2) -> IVal (i1 `div` i2) -- TODO: how does SL handle divide by zero?
                     (IVal i1,FVal f2) -> FVal (fromInt i1 / f2)
                     (FVal f1,IVal i2) -> FVal (f1 / fromInt i2)
@@ -938,127 +928,123 @@ eval' =
                     (v@(VVal _ _ _),r@(RVal _ _ _ _)) -> rotMulVec (invRot r) v
                     (r1@(RVal _ _ _ _),r2@(RVal _ _ _ _)) -> rotMul r1 $ invRot r2
                     _ -> error ("cannot apply operator to " ++ (show val1) ++ " and " ++ (show val2))
-               EvMod -> evalBinary $ \ val1 val2 -> case (val1,val2) of
+                EvMod -> evalBinary $ \ val1 val2 -> case (val1,val2) of
                     (IVal i1,IVal i2) -> IVal (i1 `mod` i2)
                     (v1@(VVal _ _ _),v2@(VVal _ _ _)) -> v1 `vcross` v2
                     _ -> error ("cannot apply operator to " ++ (show val1) ++ " and " ++ (show val2))
-               EvBAnd -> evalBinary $ \ val1 val2 -> case (val1,val2) of
+                EvBAnd -> evalBinary $ \ val1 val2 -> case (val1,val2) of
                     (IVal i1,IVal i2) -> IVal (i1 .&. i2)
                     _ -> error ("cannot apply operator to " ++ (show val1) ++ " and " ++ (show val2))
-               EvBOr -> evalBinary $ \ val1 val2 -> case (val1,val2) of
+                EvBOr -> evalBinary $ \ val1 val2 -> case (val1,val2) of
                     (IVal i1,IVal i2) -> IVal (i1 .|. i2)
                     _ -> error ("cannot apply operator to " ++ (show val1) ++ " and " ++ (show val2))
-               EvBXor -> evalBinary $ \ val1 val2 -> case (val1,val2) of
+                EvBXor -> evalBinary $ \ val1 val2 -> case (val1,val2) of
                     (IVal i1,IVal i2) -> IVal (i1 `xor` i2)
                     _ -> error ("cannot apply operator to " ++ (show val1) ++ " and " ++ (show val2))
-               EvAnd -> evalBinary $ \ val1 val2 -> case (val1,val2) of
+                EvAnd -> evalBinary $ \ val1 val2 -> case (val1,val2) of
                     (IVal i1,IVal i2) -> IVal (if (toBool i1 && toBool i2) then 1 else 0)
                     _ -> error ("cannot apply operator to " ++ (show val1) ++ " and " ++ (show val2))
-               EvOr -> evalBinary $ \ val1 val2 -> case (val1,val2) of
+                EvOr -> evalBinary $ \ val1 val2 -> case (val1,val2) of
                     (IVal i1,IVal i2) -> IVal (if (toBool i1 || toBool i2) then 1 else 0)
                     _ -> error ("cannot apply operator to " ++ (show val1) ++ " and " ++ (show val2))
-               EvLt -> evalBinary $ \ val1 val2 -> case (val1,val2) of
+                EvLt -> evalBinary $ \ val1 val2 -> case (val1,val2) of
                     (IVal i1,IVal i2) -> toLslBool $ i1 < i2
                     (FVal f1,FVal f2) -> toLslBool $ f1 < f2
                     (FVal f1,IVal i2) -> toLslBool $ f1 < fromInt i2
                     (IVal i1,FVal f2) -> toLslBool $ fromInt i1 < f2
                     _ -> error ("cannot apply operator to " ++ (show val1) ++ " and " ++ (show val2))
-               EvLe -> evalBinary $ \ val1 val2 -> case (val1,val2) of
+                EvLe -> evalBinary $ \ val1 val2 -> case (val1,val2) of
                     (IVal i1,IVal i2) -> toLslBool $ i1 <= i2
                     (FVal f1,FVal f2) -> toLslBool $ f1 <= f2
                     (FVal f1,IVal i2) -> toLslBool $ f1 <= fromInt i2
                     (IVal i1,FVal f2) -> toLslBool $ fromInt i1 <= f2
                     _ -> error ("cannot apply operator to " ++ (show val1) ++ " and " ++ (show val2))
-               EvGt -> evalBinary $ \ val1 val2 -> case (val1,val2) of
+                EvGt -> evalBinary $ \ val1 val2 -> case (val1,val2) of
                     (IVal i1,IVal i2) -> toLslBool $ i1 > i2
                     (FVal f1,FVal f2) -> toLslBool $ f1 > f2
                     (FVal f1,IVal i2) -> toLslBool $ f1 > fromInt i2
                     (IVal i1,FVal f2) -> toLslBool $ fromInt i1 > f2
                     _ -> error ("cannot apply operator to " ++ (show val1) ++ " and " ++ (show val2))
-               EvGe -> evalBinary $ \ val1 val2 -> case (val1,val2) of
+                EvGe -> evalBinary $ \ val1 val2 -> case (val1,val2) of
                     (IVal i1,IVal i2) -> toLslBool $ i1 >= i2
                     (FVal f1,FVal f2) -> toLslBool $ f1 >= f2
                     (FVal f1,IVal i2) -> toLslBool $ f1 >= fromInt i2
                     (IVal i1,FVal f2) -> toLslBool $ fromInt i1 >= f2
                     _ -> error ("cannot apply operator to " ++ (show val1) ++ " and " ++ (show val2))
-               EvEq -> evalBinary $ \ val1 val2 -> case (val1,val2) of
+                EvEq -> evalBinary $ \ val1 val2 -> case (val1,val2) of
                     (LVal l1, LVal l2) -> toLslBool $ length l1 == length l2 -- special case of LSL weirdness
                     (SVal s, KVal k) -> toLslBool $ s == k
                     (KVal k, SVal s) -> toLslBool $ k == s
                     (FVal f1,IVal i2) -> toLslBool $ f1 == fromInt i2
                     (IVal i1,FVal f2) -> toLslBool $ fromInt i1 == f2
                     (v1,v2) -> toLslBool $ v1 == v2
-               EvNe -> evalBinary $ \ val1 val2 -> case (val1,val2) of
+                EvNe -> evalBinary $ \ val1 val2 -> case (val1,val2) of
                     (LVal l1, LVal l2) -> IVal (length l1 - length l2) -- special case of LSL weirdness
                     (SVal s, KVal k) -> toLslBool $ s /= k
                     (KVal k, SVal s) -> toLslBool $ k /= s
                     (FVal f1,IVal i2) -> toLslBool $ f1 /= fromInt i2
                     (IVal i1,FVal f2) -> toLslBool $ fromInt i1 /= f2
                     (v1,v2) -> toLslBool $ v1 /= v2
-               EvShiftL -> evalBinary $ \ val1 val2 -> case (val1,val2) of
+                EvShiftL -> evalBinary $ \ val1 val2 -> case (val1,val2) of
                     (IVal i1,IVal i2) -> IVal (i1 `shiftL` i2)
                     _ -> error ("cannot apply operator to " ++ (show val1) ++ " and " ++ (show val2))
-               EvShiftR -> evalBinary $ \ val1 val2 -> case (val1,val2) of
+                EvShiftR -> evalBinary $ \ val1 val2 -> case (val1,val2) of
                     (IVal i1,IVal i2) -> IVal (i1 `shiftR` i2)
                     _ -> error ("cannot apply operator to " ++ (show val1) ++ " and " ++ (show val2))
-               EvNot -> do
+                EvNot -> do
                     val <- popVal
                     pushVal $ case val of
-                       (IVal i) -> IVal (if i == 0 then 1 else 0)
-                       _ -> error ("cannot apply operator to " ++ (show val))
+                        (IVal i) -> IVal (if i == 0 then 1 else 0)
+                        _ -> error ("cannot apply operator to " ++ (show val))
                     continue
-               EvBInv -> do
+                EvBInv -> do
                     val <- popVal
                     pushVal $ case val of
-                       (IVal i) -> IVal $ complement i
-                       _ -> error ("cannot apply operator to " ++ (show val))
+                        (IVal i) -> IVal $ complement i
+                        _ -> error ("cannot apply operator to " ++ (show val))
                     continue
-               EvNeg -> do
+                EvNeg -> do
                     val <- popVal
                     pushVal $ case val of
-                       (IVal i) -> IVal (-i)
-                       (FVal f) -> FVal (-f)
-                       (VVal x y z) -> VVal (-x) (-y) (-z)
-                       (RVal x y z s) -> RVal (-x) (-y) (-z) (-s)
-                       _ -> error ("cannot apply operator to " ++ (show val))
+                        (IVal i) -> IVal (-i)
+                        (FVal f) -> FVal (-f)
+                        (VVal x y z) -> VVal (-x) (-y) (-z)
+                        (RVal x y z s) -> RVal (-x) (-y) (-z) (-s)
+                        _ -> error ("cannot apply operator to " ++ (show val))
                     continue
-               EvCast t -> do
+                EvCast t -> do
                     -- TODO: what are the valid typecasts?
                     -- TODO: what are the formats?
                     val <- popVal
                     pushVal $ case (t,val) of
-                       (LLInteger,IVal i) -> IVal i
-                       (LLInteger,FVal f) -> IVal (truncate f)
-                       (LLInteger,SVal s) -> IVal (parseInt s)
-                       -- TODO: can you cast a key to an int?
-                       (LLFloat,FVal f) -> FVal f
-                       (LLFloat,IVal i) -> FVal (fromInteger $ toInteger i)
-                       (LLFloat,SVal s) -> FVal (parseFloat s)
-                       -- TODO: can you cast a key to a float?
-                       (LLString,v) -> toSVal v
-                       -- TODO: can you cast anything but a string to a key?
-                       (LLVector,SVal s) -> parseVector s
-                       (LLRot,SVal s) -> parseRotation s
-                       (LLKey,SVal s) -> KVal s
-                       (LLKey,KVal s) -> KVal s
-                       (LLVector, v@(VVal _ _ _)) -> v
-                       (LLRot, v@(RVal _ _ _ _)) -> v
-                       (LLList, LVal l) -> LVal l
-                       (LLList,v) -> LVal [v]
+                        (LLInteger,IVal i) -> IVal i
+                        (LLInteger,FVal f) -> IVal (truncate f)
+                        (LLInteger,SVal s) -> IVal (parseInt s)
+                        -- TODO: can you cast a key to an int?
+                        (LLFloat,FVal f) -> FVal f
+                        (LLFloat,IVal i) -> FVal (fromInteger $ toInteger i)
+                        (LLFloat,SVal s) -> FVal (parseFloat s)
+                        -- TODO: can you cast a key to a float?
+                        (LLString,v) -> toSVal v
+                        -- TODO: can you cast anything but a string to a key?
+                        (LLVector,SVal s) -> parseVector s
+                        (LLRot,SVal s) -> parseRotation s
+                        (LLKey,SVal s) -> KVal s
+                        (LLKey,KVal s) -> KVal s
+                        (LLVector, v@(VVal _ _ _)) -> v
+                        (LLRot, v@(RVal _ _ _ _)) -> v
+                        (LLList, LVal l) -> LVal l
+                        (LLList,v) -> LVal [v]
                     continue
-               EvMkVec -> do
-                   z <- popVal
-                   y <- popVal
-                   x <- popVal
-                   pushVal $ VVal (toFloat x) (toFloat y) (toFloat z)
-                   continue
-               EvMkRot -> do
-                   s <- popVal
-                   z <- popVal
-                   y <- popVal
-                   x <- popVal
-                   pushVal $ RVal (toFloat x) (toFloat y) (toFloat z) (toFloat s)
-                   continue
+                EvMkVec -> 
+                    revVec <$> popF <*> popF <*> popF >>= pushVal >> continue
+                EvMkRot -> 
+                    revRot <$> popF <*> popF <*> popF <*> popF >>= pushVal
+                       >> continue
+
+revRot s z y x = RVal x y z s
+revVec z y x = VVal x y z
+popF = toFloat <$> popVal
 
 trueCondition (IVal i) = (i /= 0)
 trueCondition (FVal f) = (f /= 0)
