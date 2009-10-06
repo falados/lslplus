@@ -1,5 +1,7 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# OPTIONS_GHC -XDeriveDataTypeable #-}
 {-# OPTIONS_GHC -XQuasiQuotes #-}
+{-# OPTIONS_GHC -fwarn-unused-binds -fwarn-unused-imports #-}
 module Language.Lsl.Parse(
         alternateScriptParser,
         alternateModuleParser,
@@ -21,33 +23,40 @@ module Language.Lsl.Parse(
         sourceName
     ) where
 
+import Control.Applicative hiding (many) -- use parsec's many (s.b. equivalent)
+import Control.Monad(ap,mplus,mzero)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.UTF8 as UTF8
-import Data.Data
 import Data.Char(digitToInt)
-import Data.List(intersperse)
+import Data.List(intersperse,intercalate)
+import Data.Maybe(catMaybes)
 import Language.Lsl.Internal.Pragmas(Pragma(..))
-import Language.Lsl.Syntax(Expr(..),Statement(..),Func(..),FuncDec(..),Handler(Handler),State(..),Ctx(..),
-                  TextLocation(..),SourceContext(..),LSLType(..),
-                  Component(..),Var(..),LModule(..),LSLScript(..),GlobDef(..),goodHandlers,nullCtx)
-import Text.ParserCombinators.Parsec hiding (State)
+import Language.Lsl.Syntax(Expr(..),Statement(..),Func(..),FuncDec(..),
+    Handler(Handler),State(..),Ctx(..),TextLocation(..),SourceContext(..),
+    LSLType(..),Component(..),Var(..),LModule(..),LSLScript(..),GlobDef(..),
+    goodHandlers,nullCtx)
+import Text.ParserCombinators.Parsec hiding (State,(<|>))
 import qualified Text.ParserCombinators.ParsecExtras.Token as P
-import Text.ParserCombinators.ParsecExtras.Language( javaStyle, emptyDef )
+import Text.ParserCombinators.ParsecExtras.Language(javaStyle, emptyDef)
 import Text.ParserCombinators.Parsec.Error
 import Text.ParserCombinators.Parsec.Pos
-import Text.Here
 
-import Debug.Trace
+instance Applicative (GenParser s a) where
+    pure = return
+    (<*>) = ap
 
+instance Alternative (GenParser s a) where
+    empty = mzero
+    (<|>) = mplus
+     
 data ParseState = ParseState {
-        atStart :: !Bool,
-        initialComment :: !String,
-        parseAntiQuotations :: !Bool,
-        pendingPragmas :: ![Pragma],
-        trailingWS :: !String,
-        leadingWS :: !String,
-        preWSPos :: !(Maybe SourcePos)
-    }
+    atStart :: !Bool,
+    initialComment :: !String,
+    parseAntiQuotations :: !Bool,
+    pendingPragmas :: ![Pragma],
+    trailingWS :: !String,
+    leadingWS :: !String,
+    preWSPos :: !(Maybe SourcePos) }
     
 getAQState = getState >>= return . parseAntiQuotations
 
@@ -68,54 +77,53 @@ newNoAQState = ParseState {
     leadingWS = "",
     preWSPos = Nothing }
 
-data WS = WSSimple { wsText :: String } | WSSingle { wsText :: String } | WSMulti { wsText :: String }
-    deriving Show
+data WS = WSSimple String | WSSingle String | WSMulti String deriving Show
     
 custWS simpleSpace oneLineComment multiLineComment = do
-         startPos <- getPosition
-         st <- getState
-         ws <- many ((simpleSpace >>= return . WSSimple) <|> 
-                     (oneLineComment >>= return . WSSingle) <|> 
-                     (multiLineComment >>= return . WSMulti) <?> "")
-         let (trailing,leading) = if atStart st then ([],ws) else extractTrailing ws
-         let pragmas = foldl extractPragma [] leading
-         let (initComment,leading') = if atStart st
-               then findInitialComment True [] leading
-               else (initialComment st, leading)
-         setState st { atStart = False,
-                       initialComment = initComment,
-                       pendingPragmas = pragmas, 
-                       trailingWS = wsCat trailing,
-                       leadingWS = wsCat leading',
-                       preWSPos = Just startPos }
-     where wsCat = concatMap showWS
-           showWS (WSSimple txt) = txt
-           showWS (WSSingle txt) = "//" ++ txt
-           showWS (WSMulti txt) = "/*" ++ txt ++ "*/"
-           extractTrailing [] = ([],[])
-           extractTrailing (WSSimple txt:rest) =
-               case break (=='\n') txt of
-                   (ttxt,[]) -> let (t,rest') = extractTrailing rest in (WSSimple ttxt:t,rest')
-                   ([],mtxt) -> ([],WSSimple mtxt:rest)
-                   (ttxt,mtxt) -> ([WSSimple ttxt],WSSimple mtxt:rest)
-           extractTrailing (ws@(WSSingle txt):rest) = ([ws],rest)
-           extractTrailing (ws@(WSMulti txt):rest) | '\n' `elem` txt = ([ws],rest)
-                                                   | otherwise       = let (t,rest') = extractTrailing rest in (ws:t,rest')
-           extractPragma ps (WSSingle txt) = maybe ps (:ps) (parsePragma txt)
-           extractPragma ps _ = ps
-           findInitialComment :: Bool -> [WS] -> [WS] -> (String,[WS])
-           findInitialComment _ rleading [] = ("",reverse rleading)
-           findInitialComment onNewLine rleading (ws@(WSSimple txt):wss)
-               | null txt = findInitialComment onNewLine rleading wss
-               | (onNewLine && newlines txt > 0) || newlines txt > 1 = (wsCat (reverse (ws:rleading)), wss)
-               | otherwise = findInitialComment (last txt == '\n') (ws:rleading) wss
-           findInitialComment onNewLine rleading (ws:wss) = findInitialComment False (ws:rleading) wss
-           newlines s = length [ c | c <- s, c == '\n']
+    startPos <- getPosition
+    st <- getState
+    ws <- many ((WSSimple <$> simpleSpace) <|> 
+             (WSSingle <$> oneLineComment) <|> 
+             (WSMulti <$> multiLineComment) <?> "")
+    let (trailing,leading) = if atStart st then ([],ws) else extractTrailing ws
+    let pragmas = foldl extractPragma [] leading
+    let (initComment,leading') = if atStart st
+            then findInitialComment True [] leading
+            else (initialComment st, leading)
+    setState st { atStart = False,
+               initialComment = initComment,
+               pendingPragmas = pragmas, 
+               trailingWS = wsCat trailing,
+               leadingWS = wsCat leading',
+               preWSPos = Just startPos }
+    where 
+        wsCat = concatMap showWS
+        showWS (WSSimple txt) = txt
+        showWS (WSSingle txt) = "//" ++ txt
+        showWS (WSMulti txt) = "/*" ++ txt ++ "*/"
+        extractTrailing [] = ([],[])
+        extractTrailing (WSSimple txt:rest) = case break (=='\n') txt of
+               (ttxt,[]) -> let (t,rest') = extractTrailing rest in (WSSimple ttxt:t,rest')
+               ([],mtxt) -> ([],WSSimple mtxt:rest)
+               (ttxt,mtxt) -> ([WSSimple ttxt],WSSimple mtxt:rest)
+        extractTrailing (ws@(WSSingle txt):rest) = ([ws],rest)
+        extractTrailing (ws@(WSMulti txt):rest) | '\n' `elem` txt = ([ws],rest)
+                                               | otherwise       = let (t,rest') = extractTrailing rest in (ws:t,rest')
+        extractPragma ps (WSSingle txt) = maybe ps (:ps) (parsePragma txt)
+        extractPragma ps _ = ps
+        findInitialComment :: Bool -> [WS] -> [WS] -> (String,[WS])
+        findInitialComment _ rleading [] = ("",reverse rleading)
+        findInitialComment onNewLine rleading (ws@(WSSimple txt):wss)
+           | null txt = findInitialComment onNewLine rleading wss
+           | (onNewLine && newlines txt > 0) || newlines txt > 1 = (wsCat (reverse (ws:rleading)), wss)
+           | otherwise = findInitialComment (last txt == '\n') (ws:rleading) wss
+        findInitialComment onNewLine rleading (ws:wss) = findInitialComment False (ws:rleading) wss
+        newlines s = length [ c | c <- s, c == '\n']
 parsePragma :: String -> Maybe Pragma
 parsePragma txt =
-      case parse parser "" txt of
-          Left _ -> Nothing
-          Right p -> Just p
+  case parse parser "" txt of
+      Left _ -> Nothing
+      Right p -> Just p
    where 
        pragmaStyle = emptyDef { P.reservedNames = ["pragma","inline","noinlining"], P.commentLine = "--" }
        lexer :: P.TokenParser ()
@@ -138,97 +146,87 @@ getTrailingWS = getState >>= return . trailingWS
 getLeadingWS = getState >>= return . leadingWS
 
 -- define basic rules for lexical analysis
-lslStyle = javaStyle
-             { P.reservedOpNames= ["*","/","+","++","-","--","^","&","&&",
-                                   "|","||","==","=","!=","<","<=",">=",">",
-                                   "<<",">>","!","%","~","@","+=","-=","*=","/=","%="],
-               P.reservedNames = ["state","default","string","integer","list","vector","rotation","key","float","if","else",
-                                "while","for","do","jump","return","default", "$import", "$module","quaternion"],
-               P.caseSensitive = True,
-               P.identStart = letter <|> char '_',
-               P.opLetter = oneOf "*/+:!#$%&*+/=?@\\^|-~",
-               P.opStart = oneOf ":!#$%&*+./<=>?@\\^|-~",
-               P.custWhiteSpace = Just custWS }
+lslStyle = javaStyle { 
+    P.reservedOpNames= ["*","/","+","++","-","--","^","&","&&",
+                        "|","||","==","=","!=","<","<=",">=",">",
+                        "<<",">>","!","%","~","@","+=","-=","*=","/=","%="],
+    P.reservedNames = ["state","default","string","integer","list","vector","rotation","key","float","if","else",
+                      "while","for","do","jump","return","default", "$import", "$module","quaternion"],
+    P.caseSensitive = True,
+    P.identStart = letter <|> char '_',
+    P.opLetter = oneOf "*/+:!#$%&*+/=?@\\^|-~",
+    P.opStart = oneOf ":!#$%&*+./<=>?@\\^|-~",
+    P.custWhiteSpace = Just custWS }
+    
 lexer :: P.TokenParser ParseState
-lexer  = P.makeTokenParser lslStyle
+lexer = P.makeTokenParser lslStyle
 
 identLetter = P.identLetter lslStyle
                
 identifier       = P.identifier lexer
 reserved         = P.reserved lexer
-operator         = P.operator lexer
 reservedOp       = P.reservedOp lexer
-                        
-charLiteral      = P.charLiteral lexer
--- stringLiteral    = P.stringLiteral lexer
-natural          = P.natural lexer
-integer          = P.integer lexer
-float            = P.float lexer
---naturalOrFloat   = P.naturalOrFloat lexer
-decimal          = P.decimal lexer
-hexadecimal      = P.hexadecimal lexer
-octal            = P.octal lexer
-
 symbol           = P.symbol lexer
 lexeme           = P.lexeme lexer
 whiteSpace       = P.whiteSpace lexer
-             
 parens           = P.parens lexer 
 braces           = P.braces lexer
-angles           = P.angles lexer
 brackets         = P.brackets lexer
 semi             = P.semi lexer
 comma            = P.comma lexer
-colon            = P.colon lexer
 dot              = P.dot lexer
-semiSep          = P.semiSep lexer
-semiSep1         = P.semiSep1 lexer
 commaSep         = P.commaSep lexer
-commaSep1        = P.commaSep1 lexer
 
-decimalFraction w = do char '.'
-                       fracPart True w
+openParen = lexeme $ char '('
+closeParen = lexeme $ char ')'
+openAngle = lexeme $ char '<'
+closeAngle = lexeme $ char '>'
+
+decimalFraction w = char '.' >> fracPart True w
                        
-fracPart reqDigit w = do digits <- (if reqDigit then many1 else many) digit <?> "fractional part of decimal"
-                         p <- option 1.0 expon
-                         return $ p * (w + (foldr (\ b d -> (b + d) / 10.0) 0 $ map (fromIntegral.digitToInt) digits))
+fracPart reqDigit w = do 
+    digits <- (if reqDigit then many1 else many) digit 
+        <?> "fractional part of decimal"
+    p <- option 1.0 expon
+    return $ p * (w + (foldr (\ b d -> (b + d) / 10.0) 0 
+        $ map (fromIntegral.digitToInt) digits))
 
 expon :: GenParser Char st Double
-expon = do oneOf "eE"
-           s <- option '+' (oneOf "+-")
-           let k x = if s == '+' then x else 1/x
-           digits <- many1 digit <?> "exponent"
-           let p = foldl (\ b d -> b * 10 + d) 0 $ map digitToInt digits
-           return (k (10^p))
+expon = do 
+    oneOf "eE"
+    s <- option '+' (oneOf "+-")
+    let k x = if s == '+' then x else 1/x
+    digits <- many1 digit <?> "exponent"
+    let p = foldl (\ b d -> b * 10 + d) 0 $ map digitToInt digits
+    return (k (10^p))
 
-hex = do oneOf "xX"
-         digits <- many1 hexDigit <?> "hex digit"
-         return (foldl (\ b d -> b * 16 + d) 0 $ map digitToInt digits)
+hex = do 
+    oneOf "xX"
+    digits <- many1 hexDigit <?> "hex digit"
+    return (foldl (\ b d -> b * 16 + d) 0 $ map digitToInt digits)
 -- lsl doesn't support octal!
 -- oct = do oneOf "oO"
 --          digits <- many1 octDigit <?> "octal digit"
 --          return (foldl (\ b d -> b * 8 + d) 0 $ map digitToInt digits)
 
 -- Like Parsec 'naturalOrFloat', but accept <digits>. and .<digits><exp> as valid floating point numbers
-naturalOrFloat = do v <- natOrFloat <?> "number"
-                    whiteSpace
-                    return v
+naturalOrFloat = lexeme natOrFloat <?> "number"
 
-natOrFloat =  (decimalFraction 0.0 >>= return . Right)
+natOrFloat =   Right <$> decimalFraction 0.0
            <|> try (char '0' >> option  (Left 0) prefZeroNum)
            <|> decimalOrFloat
 
-prefZeroNum = (hex >>= return . Left)
-          <|> (decimalFraction 0.0 >>= return . Right)
+prefZeroNum = Left <$> hex -- (hex >>= return . Left)
+          <|> Right <$> decimalFraction 0.0
           <|> decimalOrFloat
           
-decimalOrFloat =
-    do wholeDigits <- many1 digit <?> "number"
-       let w = foldl (\ b d -> b * 10 + d) 0 $ map digitToInt wholeDigits
-       mf <- option Nothing (char '.' >> option (fromIntegral w) (fracPart False (fromIntegral w)) >>= return . Just)
-       case mf of
-           Nothing -> try ( expon >>= \ p -> return $ Right (fromIntegral w * p) ) <|> (return $ Left w)
-           Just f -> return $ Right f
+decimalOrFloat = do
+    wholeDigits <- many1 digit <?> "number"
+    let w = foldl (\ b d -> b * 10 + d) 0 $ map digitToInt wholeDigits
+    mf <- option Nothing (char '.' >> option (fromIntegral w) (fracPart False (fromIntegral w)) >>= return . Just)
+    case mf of
+        Nothing -> try ( expon >>= \ p -> return $ Right (fromIntegral w * p) ) <|> (return $ Left w)
+        Just f -> return $ Right f
 
 stringLiteral   = lexeme (
                       do{ str <- between (char '"')                   
@@ -239,32 +237,26 @@ stringLiteral   = lexeme (
                       <?> "literal string")
 
 stringChar :: CharParser st (Maybe Char)
-stringChar      =   do{ c <- stringLetter; return (Just c) }
-                <|> try stringEscape
-                <|> (char '\\' >> return (Just '\\'))
-                <?> "string character"
+stringChar = do{ c <- stringLetter; return (Just c) }
+         <|> try stringEscape
+         <|> (char '\\' >> return (Just '\\'))
+         <?> "string character"
                 
-stringLetter    = satisfy (\c -> (c /= '"') && (c /= '\\') && (c > '\026'))
+stringLetter = satisfy (\c -> (c /= '"') && (c /= '\\') && (c > '\026'))
 
 stringEscape = do
-                   char '\\'
-                   choice [char 't' >> return (Just '\t'),
-                           char 'n' >> return (Just '\n'),
-                           char '\"' >> return (Just '\"'),
-                           char '\\' >> return (Just '\\')]
+    char '\\'
+    choice [char 't' >> return (Just '\t'),
+            char 'n' >> return (Just '\n'),
+            char '\"' >> return (Just '\"'),
+            char '\\' >> return (Just '\\')]
 
 --- EXPRESSION PARSING -------------------------------------------------------
---mtrace s v = return v -- trace (s ++ show v) (return v)
-mtrace s v = 
-    -- trace (s ++ show v) 
-    (return v)
 
 combineExprs e [] = e
 combineExprs e0 ((p0,p1,op,e1):rest) = combineExprs (op p0 p1 e0 e1) rest
 
-isFollowedBy p = do
-    lookAhead p
-    return ()
+isFollowedBy p = lookAhead p >> return ()
     
 reservedOp' name = 
     lexeme $ try $
@@ -280,12 +272,9 @@ op2 = ((opmatch' "<<" shiftlop) <|> (opmatch' ">>" shiftrop)) <?> "operator"
 op3 = (choice [opmatch' "<" ltop, opmatch' "<=" leop, opmatch' ">" gtop, opmatch' ">=" geop]) <?> "operator"
 op4 = ((opmatch' "==" eqop) <|> (opmatch' "!=" neop)) <?> "operator"
 
-opAndExpr opf ef = do pos0 <- getPosition
-                      op <- opf
-                      pos1 <- getPosition
-                      e <- ef
-                      return (pos0,pos1,op,e)
-
+opAndExpr opf ef = mkIt <$> getPosition <*> opf <*> getPosition <*> ef
+    where mkIt p0 op p1 e = (p0,p1,op,e)
+    
 exprChain opf ef = do e0 <- ef
                       rest <- many (opAndExpr opf ef)
                       return $ combineExprs e0 rest
@@ -293,9 +282,8 @@ exprChain opf ef = do e0 <- ef
 mulExpr = exprChain op0 expr2
 addExpr = exprChain op1 mulExpr
 shiftExpr = exprChain op2 addExpr
-relExpr = do e0 <- shiftExpr
-             rest <- (try (many (try (opAndExpr op3 shiftExpr))) <|> return [])
-             return $ combineExprs e0 rest
+relExpr = combineExprs <$> shiftExpr <*> 
+    (try (many (try (opAndExpr op3 shiftExpr))) <|> return [])
 eqExpr = exprChain op4 relExpr
 bandExpr = exprChain (opmatch' "&" bandop <?> "operator") eqExpr
 xorExpr = exprChain (opmatch' "^" xorop <?> "operator") bandExpr
@@ -325,16 +313,19 @@ borop pos0 pos1 = bop BOr pos0 pos1
 andop pos0 pos1 = bop And pos0 pos1
 orop pos0 pos1 = bop Or pos0 pos1
 
-structAccess = do id <- ctxify identifier
-                  whiteSpace
-                  dot
-                  whiteSpace
-                  c <- oneOf "xyzs"
-                  whiteSpace
-                  return (id,stringToComponent [c])
+structAccess =
+    (,) <$> ctxify identifier 
+        <*> (char '.' >> (stringToComponent . (:[])) <$> lexeme (oneOf "xyzs"))
+-- structAccess = do id <- ctxify identifier
+--                   whiteSpace
+--                   dot
+--                   whiteSpace
+--                   c <- oneOf "xyzs"
+--                   whiteSpace
+--                   return (id,stringToComponent [c])
+                      
 var = try structAccess
-   <|> do id <- ctxify identifier
-          return (id,All)
+   <|> (,) <$> ctxify identifier <*> pure All
 
 assignment = ctxify $ 
              do v <- var
@@ -353,9 +344,7 @@ stringToComponent "y" = Y
 stringToComponent "z" = Z
 stringToComponent "s" = S
 
-listExpr = do whiteSpace
-              exprs <- (brackets $ commaSep expr) <?> "list expression"
-              return $ ListExpr exprs
+listExpr = ListExpr <$> ((brackets $ commaSep expr) <?> "list expression")
               
 -- there's a conflict between a relational expression embedded in the last component of a vector/rotation and the
 -- the normal end of the expression... in particular:
@@ -365,41 +354,20 @@ listExpr = do whiteSpace
 -- which is the difference between two vectors (which is both syntactically correct and type correct) until you
 -- parse the ';'.  So the complexity of the grammar here exists to disambiguate these cases (which requires a
 -- bit of lookahead...)
-structStart = do whiteSpace
-                 char '<' <?> "vector/rotation expression"
-                 whiteSpace
-                 e1 <- expr
-                 mtrace "structExpr:1 " e1
-                 char ','
-                 whiteSpace
-                 e2 <- expr
-                 mtrace "structExpr:2 " e2
-                 char ',' >> whiteSpace
-                 return (e1,e2)
+structStart = (,) <$> (openAngle >> expr) <*> (comma >> expr) <* comma
                  
-vecRotExpr = do (x,y) <- structStart
-                ((try (do z <- expr
-                          char ',' >> whiteSpace
-                          s <- tailStruct
-                          return $ RotExpr x y z s)) <|>
-                 (do z <- tailStruct
-                     return $ VecExpr x y z))
-                     
-tailStruct = (try (do e <- expr
-                      char '>' >> whiteSpace
-                      return e))
-             <|> (do e <- shiftExpr
-                     char '>' >> whiteSpace
-                     return e)                 
-callExpr = do 
-    name <- ctxify identifier
-    exprs <- parens $ commaSep expr
-    return $ Call name exprs
+vecRotExpr = do (x,y) <- structStart 
+                (try (rotTail x y)  <|> vecTail x y)
               
-castExpr = ctxify $
-           do t <- parens typeName
-              e <- choice [try postfixExpr, atomicExpr]
-              return $ Cast t e
+rotTail x y = RotExpr <$> pure x <*> pure y <*> expr <*> (comma >> tailStruct)
+vecTail x y = VecExpr <$> pure x <*> pure y <*> tailStruct
+       
+tailStruct = try ( expr <* closeAngle) <|> shiftExpr <* closeAngle
+
+callExpr = Call <$> ctxify identifier <*> parens (commaSep expr) 
+              
+castExpr = 
+    ctxify $ Cast <$> parens typeName <*> choice [try postfixExpr, atomicExpr]
 
 ctxify f = do
     pragmas <- getState >>= return . pendingPragmas
@@ -410,40 +378,40 @@ ctxify f = do
     post <- getTrailingWS
     return $ Ctx (pos2Ctx (pos0,pos1) pre post pragmas) v
 
-notExpr = ctxify ((char '!' <?> "prefix operator") >> whiteSpace >> expr2 >>= return.Not)
-invExpr = ctxify ((char '~' <?> "prefix operator") >> whiteSpace >> expr2 >>= return.Inv)
-negExpr = ctxify ((char '-' <?> "prefix operator") >> whiteSpace >> expr2 >>= return.Neg)
+notExpr = ctxify ((reservedOp "!" <?> "prefix operator") >> expr2 >>= return . Not)
+invExpr = ctxify ((reservedOp "~" <?> "prefix operator") >> expr2 >>= return . Inv)
+negExpr = ctxify ((reservedOp "-" <?> "prefix operator") >> expr2 >>= return . Neg)
 
-atomicExpr = do
-    aq <- getAQState
-    (ctxify $
-              try ( do m <- option 1 (reservedOp "-" >> return (-1))
-                       n <- naturalOrFloat
-                       return $ case n of
-                           Left nat -> (IntLit $ m * fromIntegral nat)
-                           Right flt -> (FloatLit $ fromRational $ toRational m * toRational flt)))
-         <|> (ctxify (stringLiteral >>= return.StringLit))
-         <|> (if aq then (ctxify (reservedOp "$string:" >> identifier >>= return . AQString)) else fail "")
-         <|> (if aq then (ctxify (reservedOp "$integer:" >> identifier >>= return . AQInteger)) else fail "")
-         <|> (if aq then (ctxify (reservedOp "$key:" >> identifier >>= return . AQKey)) else fail "")
-         <|> (if aq then (ctxify (reservedOp "$float:" >> identifier >>= return . AQFloat)) else fail "")
-         <|> (ctxify listExpr)
-         <|> (ctxify vecRotExpr)
-         <|> (ctxify $ try callExpr)
-         <|> (ctxify $ do v <- var
-                          return $ Get v)
-         <|> parens expr
+atomicExpr = getAQState >>= \ aq ->
+        (ctxify $
+            try ( do 
+                m <- option 1 (reservedOp "-" >> return (-1))
+                n <- naturalOrFloat
+                return $ case n of
+                    Left nat -> (IntLit $ m * fromIntegral nat)
+                    Right flt -> (FloatLit $ fromRational $ toRational m * toRational flt)))
+    <|> ctxify (StringLit <$> stringLiteral)
+    <|> aqParse aq (ctxify $ reservedOp "$string:" >> AQString <$> identifier)
+    <|> aqParse aq (ctxify $ reservedOp "$integer:" >> AQInteger <$> identifier)
+    <|> aqParse aq (ctxify $ reservedOp "$key:" >> AQKey <$> identifier)
+    <|> aqParse aq (ctxify $ reservedOp "$float:" >> AQFloat <$> identifier)
+    <|> ctxify listExpr
+    <|> ctxify vecRotExpr
+    <|> (ctxify $ try callExpr)
+    <|> (ctxify $ Get <$> var)
+    <|> parens expr
 
-postfixExpr = ctxify $
-              do v <- var
-                 f <- choice [reservedOp' "++" >> return PostInc,
-                              reservedOp' "--" >> return PostDec] <?> "postfix operator"
-                 return $ f v
-prefixExpr = ctxify $
-             do f <- choice [reservedOp "--" >> return (PreDec),
-                             reservedOp "++" >> return PreInc] <?> "prefix operator"
-                v <- var
-                return $ f v
+aqParse False _ = mzero
+aqParse True p = p
+         
+postfixExpr = ctxify $ do
+    v <- var
+    (choice [reservedOp' "++" >> return (PostInc v),
+            reservedOp' "--" >> return (PostDec v)] <?> "postfix operator")
+    --return $ f v
+prefixExpr = ctxify (
+    choice [reservedOp "--" >> PreDec <$> var,
+            reservedOp "++" >> PreInc <$> var] <?> "prefix operator")
                             
 unaryExpr = choice [try prefixExpr,notExpr,invExpr, negExpr,try castExpr,atomicExpr]
 
@@ -453,18 +421,17 @@ expr2 = choice [try assignment, try postfixExpr, unaryExpr]
 expr1 = orExpr
 
 expr :: GenParser Char ParseState (Ctx Expr)
-expr = 
-    do r <- choice [try assignment, expr1]
-       mtrace "expr: " r
+expr = choice [try assignment, expr1]
 
 exprParser :: String -> Either ParseError (Ctx Expr)
 exprParser text = runParser (whiteSpace>>expr) newNoAQState "" text
 
+optionalExpr = option Nothing (Just <$> expr)
+
 ------------------------------------------------------------------------------
 -- STATEMENT PARSING
 
-statements = do whiteSpace
-                many (ctxify statement)
+statements = many (ctxify statement)
              
 statement = declStatement
         <|> returnStatement
@@ -479,12 +446,11 @@ statement = declStatement
         <|> doWhileStatement
         <|> forStatement
 
-declStatement = do t <- typeName
-                   id <- identifier
-                   rest <- (option Nothing (reservedOp' "=" >> expr >>= return . Just))
-                   semi
-                   return $ Decl (Var id t) rest
+optionalInit = option Nothing (reservedOp' "=" >> Just <$> expr)
 
+declStatement = mkDecl <$> typeName <*> identifier <*> optionalInit <* semi
+    where mkDecl t nm init = Decl (Var nm t) init
+          
 integerType     = (reserved "integer" >> return LLInteger)
 floatType       = (reserved "float" >> return LLFloat)
 keyType         = (reserved "key" >> return LLKey)
@@ -495,71 +461,37 @@ listType        = (reserved "list" >> return LLList)
 
 typeName = choice [integerType,floatType,keyType,vectorType,stringType,rotationType,listType]
 
-returnStatement = do  reserved "return"
-                      e <- (option Nothing (expr >>= return . Just))
-                      semi
-                      return $ Return e
-jumpStatement = do reserved "jump"
-                   id <- identifier
-                   semi
-                   return $ Jump id
-labelStatement = do reservedOp "@"
-                    id <- identifier
-                    semi
-                    return $ Label id
-exprStatement = do e <- expr
-                   semi
-                   return $ Do e
+returnStatement = reserved "return" >> Return <$> optionalExpr <* semi
 
-blockStatement = do stmts <- braces statements
-                    return $ Compound stmts
+jumpStatement = reserved "jump" >> Jump <$> identifier <* semi
+
+labelStatement = reservedOp "@" >> Label <$> identifier <* semi
+
+exprStatement = Do <$> expr <* semi
+
+blockStatement = Compound <$> braces statements
 
 nullStatement = (semi >> return NullStmt)
 
-whileStatement = do reserved "while"
-                    e <- parens expr
-                    stmt <- ctxify statement
-                    return $ While e stmt
-ifElseStatement = do reserved "if"
-                     e <- parens expr
-                     stmt1 <- ctxify statement
-                     stmt2 <- (option (nullCtx NullStmt) (reserved "else" >> ctxify statement))
-                     return $ If e stmt1 stmt2
-                     
-stateStatement = do reserved "state"
-                    id <- (identifier <|> (reserved "default" >> return "default"))
-                    semi
-                    return $ StateChange id
+whileStatement = reserved "while" >> While <$> parens expr <*> ctxify statement
 
-forStatement = do reserved "for"
-                  char '('
-                  whiteSpace
-                  mexpr1 <- commaSep expr
-                  semi
-                  mexpr2 <- option Nothing (expr >>= return . Just)
-                  semi
-                  mexpr3 <- commaSep expr
-                  char ')'
-                  whiteSpace
-                  stmt <- ctxify statement
-                  return $ For mexpr1 mexpr2 mexpr3 stmt
+ifElseStatement = reserved "if" >> If <$> parens expr <*> ctxify statement 
+    <*> option (nullCtx NullStmt) (reserved "else" >> ctxify statement)
+                    
+stateStatement = reserved "state" >> StateChange 
+    <$> (identifier <|> (reserved "default" >> return "default")) <* semi
 
-doWhileStatement = do reserved "do"
-                      stmt <- ctxify statement
-                      reserved "while"
-                      e <- parens expr
-                      semi
-                      return $ DoWhile stmt e
+forStatement = reserved "for" >> openParen
+    >> For <$> commaSep expr <*> (semi >> optionalExpr)
+        <*> (semi >> commaSep expr) <*> (closeParen >> ctxify statement)
+
+doWhileStatement = reserved "do" >> DoWhile <$> ctxify statement 
+    <*> (reserved "while" >> parens expr) <* semi
 
 parseType text = runParser typeName newNoAQState "" text
 ------------------------------------------------------------
 -- HANDLER Parsing
 
-hparam theType = ctxify $
-                 do t <- (typeParser theType)
-                    id <- identifier
-                    return $ Var id t
-                    
 typeParser LLInteger = integerType
 typeParser LLFloat = floatType
 typeParser LLList = listType
@@ -568,20 +500,21 @@ typeParser LLVector = vectorType
 typeParser LLKey = keyType
 typeParser LLRot = rotationType
 
-hparams [] = return []
-hparams (theType:[]) = (hparam theType >>= return . (:[]))
-hparams (theType:ts) = do p <- hparam theType
-                          comma
-                          ps <- hparams ts
-                          return (p:ps)
+-- from a list of parameter types, generate a parser that parses a comma
+-- separated list of parameter declarations.  (Since we know what types
+-- the parameters must be for any handler, we can catch the type errors
+-- at parse time).
+hparams ts = catMaybes <$> 
+    (sequence $ intersperse (comma >> return Nothing) (map hparam ts))
+   where hparam theType = 
+            Just <$> (ctxify $ mkVar <$> typeParser theType <*> identifier)
+         mkVar t id = Var id t
 
-handlerName name = try (do id <- symbol name; notFollowedBy identLetter; return id)
+handlerName name = try (symbol name <* notFollowedBy identLetter)
 
-handler' name types =  
-             ctxify $ do ctxname <- ctxify $ handlerName name
-                         parms <- parens (hparams types)
-                         stmts <- braces statements
-                         return $ Handler ctxname parms stmts
+handler' name types =  ctxify $
+    Handler <$> ctxify (handlerName name) <*> parens (hparams types)
+        <*> braces statements
  
 handler = choice $ map (\ (n,ts) -> handler' n ts) goodHandlers
 
@@ -590,10 +523,7 @@ handler = choice $ map (\ (n,ts) -> handler' n ts) goodHandlers
 
 stateName = choice [reserved "default" >> return "default" , reserved "state" >> identifier]
 
-stateDecl = do ctxify $ do
-                   name <- ctxify stateName
-                   handlers <- braces $ many handler
-                   return $ State name handlers
+stateDecl = ctxify $ State <$> ctxify stateName <*> braces (many handler)
 
 stateDecls = many stateDecl
 
@@ -619,7 +549,7 @@ func t id pragmas pos0 pre =
                             return $ GF $ Ctx (pos2Ctx (pos0, pos1) pre post pragmas) $ Func (FuncDec id t ps) stmts
 ---------------------------------------------------------------
 -- GLOBAL VARIABLES parsing
-gvar ctx t (Ctx _ id) = do mexpr <- option Nothing (reservedOp' "=" >> expr >>= return . Just)
+gvar ctx t (Ctx _ id) = do mexpr <- optionalInit
                            semi
                            return $ GV (Ctx ctx (Var id t)) mexpr
 --------------------------------------------------------------
@@ -637,12 +567,9 @@ params = commaSep param
 gimport = do reserved "$import" <?> "$import keyword"
              ids <- (ctxify (char '$' >> identifier >>= return . (:[]) . ("$"++)))
                  <|>(ctxify $ sepBy identifier dot)
-             let id = fmap (concat . intersperse ".") ids
-             let binding = do id0 <- identifier
-                              reservedOp "="
-                              id1 <- identifier
-                              return (id0,id1)
-             bindings <- option [] $ parens $ commaSep binding
+             let id = fmap (intercalate ".") ids
+             let bindv = (,) <$> identifier <*> (reservedOp "=" >> identifier)
+             bindings <- option [] $ parens $ commaSep bindv
              prefix <- option "" identifier
              semi
              return $ GI id bindings prefix
@@ -655,15 +582,12 @@ lslParser = do whiteSpace
                globs <- globals
                ss <- stateDecls
                eof
-               comment <- getState >>= return . initialComment
+               comment <- initialComment <$> getState
                return $ LSLScript comment globs ss
 
-moduleParser = do whiteSpace
-                  reserved "$module"
-                  freevars <- option [] $ parens params
-                  globs <- globals
-                  eof
-                  return $ LModule globs freevars
+moduleParser = whiteSpace >> reserved "$module" >> 
+    mkModule <$> option [] (parens params) <*> globals <* eof
+    where mkModule fvars globs = LModule globs fvars
 
 -- error recovering parser
 -- this section implements a parser with limited error recovery, based on the parsers
@@ -679,12 +603,6 @@ data PResult a = PResult {
 
 type PartialParser st a = GenParser Char st (PResult a)
 
--- stateInitial = do
---     name <- ctxify stateName
---     lexeme (char '{')
---     hs <- many $ try handler
---     return (State name hs)
-
 withRest :: CharParser st a -> SourcePos -> PartialParser st a
 withRest a p = do
     setPosition p
@@ -692,12 +610,6 @@ withRest a p = do
     st <- getParserState
     return PResult { resultInput = stateInput st, resultPosition = statePos st, resultItem = v }
 
--- parsePartialInitial = withRest $ do
---     whiteSpace
---     name <- ctxify stateName
---     lexeme (char '{')
---     hs <- many $ try handler
---     return (State name hs)
 -- parse as many globals then states without failing
 parseGreedy1 = withRest $
     (do try whiteSpace
@@ -836,7 +748,7 @@ fromParseError err =
             msg)
 
 parseFile p file =
-    do s <- B.readFile file >>= return . UTF8.toString
+    do s <- UTF8.toString <$> B.readFile file
        case parser s of
            Left err -> return $ Left (fromParseError err)
            Right x -> return $ Right x
@@ -869,50 +781,3 @@ combineContexts1
     (Just (SourceContext (TextLocation l0 c0 _ _ n) pre _ prag))
     (Just (SourceContext (TextLocation _ _ l1 c1 _) _ post _)) = 
         (Just (SourceContext (TextLocation l0 c0 l1 c1 n) pre post prag))
-        
-tst = [$here|@
-    integer foo() {
-        return 1;
-    }
-    @
-    default {
-        state_entry() {
-        }
-    }
-    |]
-    
-tst1 = [$here|
-    integer foo() {
-        return 1;
-    }
-    
-    default {
-        @
-        state_entry() {
-        }
-    }
-    |]
-    
-tst2 = [$here|
-    @
-    $module (integer x)
-    
-    integer foo() {
-    }
-    
-    |]
-    
-tst3 = [$here|
-    integer foo() {
-        return 0;
-    }
-    
-    default {
-        state_entry() {
-            llOwnerSay();
-        }
-    }
-    
-    state boo {
-    }
-    |]
