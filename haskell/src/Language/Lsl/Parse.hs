@@ -378,9 +378,9 @@ ctxify f = do
     post <- getTrailingWS
     return $ Ctx (pos2Ctx (pos0,pos1) pre post pragmas) v
 
-notExpr = ctxify ((reservedOp "!" <?> "prefix operator") >> expr2 >>= return . Not)
-invExpr = ctxify ((reservedOp "~" <?> "prefix operator") >> expr2 >>= return . Inv)
-negExpr = ctxify ((reservedOp "-" <?> "prefix operator") >> expr2 >>= return . Neg)
+notExpr = ctxify (((lexeme . char) '!' <?> "prefix operator") >> expr2 >>= return . Not)
+invExpr = ctxify (((lexeme . char) '~' <?> "prefix operator") >> expr2 >>= return . Inv)
+negExpr = ctxify (((lexeme . char) '-' <?> "prefix operator") >> expr2 >>= return . Neg)
 
 atomicExpr = getAQState >>= \ aq ->
         (ctxify $

@@ -447,28 +447,18 @@ vsmInBranch action = do
     put'vsBranchReturns info
     return val
     
-vsmWithinState action = do
-    put'vsHandlersUsed []
-    action
+vsmWithinState action = put'vsHandlersUsed [] >> action
 
 whenM mp action = do
     p <- mp
     when p action
     
-whenJust mv action =
-    case mv of
-        Nothing -> return ()
-        Just v -> action v
+whenJust mv action = maybe (return ()) action mv
 
-whenIsJust mv p action =
-    case mv of
-        Nothing -> return ()
-        Just v | p v -> action
-               | otherwise -> return ()
+whenIsJust mv p action = whenJust mv (flip when action . p)
                
 safeHead [] = Nothing
 safeHead (x:_) = Just x
-    
 
 compileLSLScript' :: Library -> LSLScript -> Validity CompiledLSLScript
 compileLSLScript' library script = evalState (compileLSLScript script) (emptyValidationState { vsLib = library })
@@ -647,105 +637,96 @@ compileCtxSimple gvs (Ctx ctx expr) = do
         Nothing -> vsmAddErr (ctx,"expression is not valid as an initializer for a global variable") >> return t
         _ -> return t
 
+err ctx msg = vsmAddErr (ctx,msg) >> notype
+notype = return Nothing
+typeval t = return (Just t)
+
 compileSimple :: [Var] -> Expr -> VState (Maybe LSLType)
-compileSimple _ (IntLit i) = return $ Just LLInteger
-compileSimple _ (FloatLit i) = return $ Just LLFloat
-compileSimple _ (StringLit s) = return $ Just LLString
-compileSimple _ (KeyLit k) = return $ Just LLKey
+compileSimple _ (IntLit i) = typeval LLInteger
+compileSimple _ (FloatLit i) = typeval LLFloat
+compileSimple _ (StringLit s) = typeval LLString
+compileSimple _ (KeyLit k) = typeval LLKey
 compileSimple gvs (Get (Ctx ctx name, All)) = do
     vsmAddGlobalRef name ctx
-    let var = find (\ v -> varName v == name) gvs
-    case var of
-        Just (Var _ t) -> return $ Just t
-        Nothing -> case findConstType name of
-            Nothing -> vsmAddErr (ctx,"variable " ++ name ++ " not found") >> return Nothing
-            Just t -> return $ Just t
+    case find (\ v -> varName v == name) gvs of
+        Just (Var _ t) -> typeval t
+        Nothing -> maybe (err ctx ("variable " ++ name ++ " not found"))
+            typeval $ findConstType name
 compileSimple _ (Get (Ctx ctx name,_)) = do
     vsmAddGlobalRef name ctx
-    vsmAddErr (ctx, "can't access vector/rotation component in global variable initialization") >> return Nothing
-compileSimple _ (ListExpr []) = return $ Just LLList
-compileSimple vars (ListExpr (e:es)) = do
-    mt <- compileCtxSimple vars e
-    case mt of
-        Nothing -> return Nothing
-        Just t -> do
+    err ctx "can't access vector/rotation component in global variable initialization"
+compileSimple _ (ListExpr []) = typeval LLList
+compileSimple vars (ListExpr (e:es)) =
+    maybe notype list =<< compileCtxSimple vars e
+    where list t = do
             when (t == LLList) (vsmAddErr (srcCtx e, "lists cannot contain other lists"))
             compileSimple vars (ListExpr es)
 compileSimple vars (VecExpr e1 e2 e3) = compileSimpleStructure vars LLVector [e1,e2,e3]
 compileSimple vars (RotExpr e1 e2 e3 e4) = compileSimpleStructure vars LLRot [e1,e2,e3,e4]
 compileSimple vars (Neg e) = do
-    mt <- compileCtxSimple vars e
-    case mt of
-        Nothing -> return Nothing
-        Just t -> 
-            if (t `notElem` [LLFloat,LLInteger]) 
-                then vsmAddErr (srcCtx e, "operator only applicable to integers and floats in this context") >> return Nothing
-                else return (Just t)
-compileSimple _ e = return Nothing
+    maybe notype neg =<< compileCtxSimple vars e
+    where neg t | scalar t = typeval t
+                | otherwise = err (srcCtx e) "operator only applicable to integers and floats in this context"
+compileSimple _ e = notype
 
 compileSimpleStructure :: [Var] -> LSLType -> [CtxExpr] -> VState (Maybe LSLType)
-compileSimpleStructure _ t [] = return (Just t)
-compileSimpleStructure vars t (e:es) = do
-    mt <- compileCtxSimple vars e
-    case mt of
-        Nothing -> return Nothing
-        Just t' ->
-            if (t' `notElem` [LLFloat,LLInteger])
-                then vsmAddErr (srcCtx e, "literal of type " ++ lslTypeString t' ++  " is not a valid element of " ++ lslTypeString t) 
-                     >> return Nothing
-                else compileSimpleStructure vars t es
+compileSimpleStructure _ t [] = typeval t
+compileSimpleStructure vars t (e:es) =
+    maybe notype f =<< compileCtxSimple vars e
+    where f t' | scalar t' = compileSimpleStructure vars t es
+               | otherwise = err (srcCtx e) ("literal of type " ++ 
+                    lslTypeString t' ++  " is not a valid element of " ++ 
+                    lslTypeString t)
 
 compileStatement :: Ctx Statement -> VState Bool
 compileStatement  (Ctx ctx (Decl var@(Var name t) expr)) = do
     vsmAddLocal ctx var
-    case expr of
-       Nothing -> return ()
-       Just expr' -> do mt' <- compileCtxExpr expr'
-                        case mt' of
-                            Nothing -> return ()
-                            Just t' -> when (not $ matchTypes t t') $ vsmAddErr (srcCtx expr', "type of expression in declaration of " ++ name ++ " does not match " ++ lslTypeString t)
+    whenJust expr $ \ expr' -> do
+        mt' <- compileCtxExpr expr'
+        whenJust mt' $ \ t' ->
+            unless (matchTypes t t') $
+                vsmAddErr (srcCtx expr',"type of expression in declaration of "
+                    ++ name ++ " does not match " ++ lslTypeString t)
     get'vsBranchReturns
 compileStatement  (Ctx ctx (While expr statement)) = do
     t <- compileCtxExpr expr
     vsmInBranch $ compileStatement statement
     get'vsBranchReturns
-compileStatement (Ctx ctx(DoWhile statement expr)) =
-    do t <- compileCtxExpr expr
-       vsmInBranch $ compileStatement statement
-       get'vsBranchReturns
-compileStatement (Ctx ctx (For mexpr1 mexpr2 mexpr3 statement)) =
-    do  compileExpressions mexpr1
-        compileExpressions mexpr3
-        t <- compileMExpression mexpr2
-        vsmInBranch $ compileStatement statement
-        get'vsBranchReturns
-compileStatement (Ctx ctx (If expr thenStmt elseStmt)) =
-    do t <- compileCtxExpr expr
-       ret1 <- vsmInBranch $ compileStatement thenStmt
-       ret2 <- vsmInBranch $ compileStatement elseStmt
-       returns <- get'vsBranchReturns
-       put'vsBranchReturns (returns || (ret1 && ret2))
-       get'vsBranchReturns
+compileStatement (Ctx ctx(DoWhile statement expr)) = do
+    t <- compileCtxExpr expr
+    vsmInBranch $ compileStatement statement
+    get'vsBranchReturns
+compileStatement (Ctx ctx (For mexpr1 mexpr2 mexpr3 statement)) = do
+    compileExpressions mexpr1
+    compileExpressions mexpr3
+    t <- compileMExpression mexpr2
+    vsmInBranch $ compileStatement statement
+    get'vsBranchReturns
+compileStatement (Ctx ctx (If expr thenStmt elseStmt)) = do
+    t <- compileCtxExpr expr
+    ret1 <- vsmInBranch $ compileStatement thenStmt
+    ret2 <- vsmInBranch $ compileStatement elseStmt
+    returns <- get'vsBranchReturns
+    put'vsBranchReturns (returns || (ret1 && ret2))
+    get'vsBranchReturns
 compileStatement (Ctx ctx NullStmt) = get'vsBranchReturns
-compileStatement (Ctx ctx (Return Nothing)) = 
-    do  (rtype,_) <- get'vsEntryPointInfo
-        when (rtype /= LLVoid) (vsmAddErr (ctx,"function must return a value"))
-        put'vsBranchReturns True
-        return True
-compileStatement (Ctx ctx (Return (Just expr))) = 
-    do  t <- compileCtxExpr expr
-        case t of
-            Nothing -> return ()
-            Just t' -> do
-                (rtype,_) <- get'vsEntryPointInfo
-                case (t',rtype) of
-                   (LLString,LLKey) -> return ()
-                   (LLKey,LLString) -> return ()
-                   (LLInteger,LLFloat) -> return ()
-                   (x,y) | x == y -> return ()
-                         | otherwise -> (vsmAddErr (ctx,"inappropriate return type for function/handler"))
-        put'vsBranchReturns True
-        return True
+compileStatement (Ctx ctx (Return Nothing)) = do
+    (rtype,_) <- get'vsEntryPointInfo
+    when (rtype /= LLVoid) (vsmAddErr (ctx,"function must return a value"))
+    put'vsBranchReturns True
+    return True
+compileStatement (Ctx ctx (Return (Just expr))) = do
+    t <- compileCtxExpr expr
+    whenJust t $ \ t' -> do
+        (rtype,_) <- get'vsEntryPointInfo
+        case (t',rtype) of
+           (LLString,LLKey) -> return ()
+           (LLKey,LLString) -> return ()
+           (LLInteger,LLFloat) -> return ()
+           (x,y) | x == y -> return ()
+                 | otherwise -> (vsmAddErr (ctx,"inappropriate return type for function/handler"))
+    put'vsBranchReturns True
+    return True
 compileStatement (Ctx ctx (StateChange name)) = do
     (_,scallow) <- get'vsEntryPointInfo
     snames <- get'vsStateNames
@@ -755,19 +736,19 @@ compileStatement (Ctx ctx (StateChange name)) = do
 compileStatement (Ctx ctx (Do expr)) = compileCtxExpr expr >> get'vsBranchReturns
 compileStatement (Ctx ctx (Compound stmts)) = compileStatements stmts
 compileStatement (Ctx ctx (Label _)) = put'vsBranchReturns False >> return False
-compileStatement (Ctx ctx (Jump s)) = 
-    do labels <- get'vsLabels
-       when (s `notElem` concat labels) $ vsmAddErr (ctx, "no such label to jump to: " ++ s)
-       get'vsBranchReturns
+compileStatement (Ctx ctx (Jump s)) = do
+    labels <- get'vsLabels
+    when (s `notElem` concat labels) $ vsmAddErr (ctx, "no such label to jump to: " ++ s)
+    get'vsBranchReturns
 
 
 compileStatements :: [CtxStmt] -> VState Bool
-compileStatements stmts =
-    do let newLabels = map (\ (Label s) -> s) $ filter isLabel (ctxItems stmts)
-       vsmWithNewScope $ do
-           mapM_ vsmAddLabel newLabels
-           mapM_ compileStatement stmts
-           get'vsBranchReturns
+compileStatements stmts = do 
+    let newLabels = map (\ (Label s) -> s) $ filter isLabel (ctxItems stmts)
+    vsmWithNewScope $ do
+        mapM_ vsmAddLabel newLabels
+        mapM_ compileStatement stmts
+        get'vsBranchReturns
 
 compileParams :: [CtxVar] -> VState ()
 compileParams vs = mapM_ ( \(Ctx ctx v) -> vsmAddLocal ctx v) vs
@@ -789,27 +770,30 @@ compileCtxExpr (Ctx ctx (Cast t expr)) =
    do mt <- compileCtxExpr expr
       case mt of
           Nothing -> return ()
-          Just t' -> when (not $ isCastValid t' t) $ vsmAddErr (ctx,"cannot cast a value of type " ++ lslTypeString t' ++ " to type " ++ lslTypeString t)
-      return (Just t)
+          Just t' -> unless (isCastValid t' t) $ 
+              vsmAddErr (ctx,"cannot cast a value of type " ++ lslTypeString t'
+                  ++ " to type " ++ lslTypeString t)
+      typeval t
 compileCtxExpr (Ctx ctx0 (Get ((Ctx ctx name),component))) = do
    vsmAddRef name ctx
    vars <- get'vsGVs
    locals <- get'vsLocalVars
    let varList = (concat locals ++ vars)
    case (findType name varList `mplus` findConstType name,component) of
-       (Nothing,_) -> vsmAddErr (ctx, "undefined variable or constant: " ++ name) >> return Nothing
-       (Just LLRot,All) -> return $ Just LLRot
-       (Just LLRot,_) -> return $ Just LLFloat
-       (Just LLVector,All) -> return $ Just LLVector
-       (Just LLVector,S) -> vsmAddErr (ctx0,"s is not a valid component of a vector") >> (return $ Just LLFloat)
-       (Just LLVector,_) -> return $ Just LLFloat
-       (Just t,All) -> return $ Just t
-       (Just t,_) -> vsmAddErr (ctx,"only vectors and rotations have components") >> return Nothing
+       (Nothing,_) -> err ctx  ("undefined variable or constant: " ++ name)
+       (Just LLRot,All) -> typeval LLRot
+       (Just LLRot,_) -> typeval LLFloat
+       (Just LLVector,All) -> typeval LLVector
+       (Just LLVector,S) -> 
+           vsmAddErr (ctx0,"s is not a valid component of a vector") >> typeval LLFloat
+       (Just LLVector,_) -> typeval LLFloat
+       (Just t,All) -> typeval t
+       (Just t,_) -> err ctx "only vectors and rotations have components"
 compileCtxExpr (Ctx ctx (Call name exprs)) = compileCall name exprs
 compileCtxExpr (Ctx ctx (Not expr)) =
     do mt <- compileCtxExpr expr
        (mt `whenIsJust` (/=LLInteger)) $ vsmAddErr (ctx, "operator not applicable to non-integer type")
-       return $ Just LLInteger
+       typeval LLInteger
 compileCtxExpr (Ctx ctx (Neg expr))  =
     do mt <- compileCtxExpr expr
        (mt `whenIsJust` (`elem` [LLList,LLString,LLKey])) $ vsmAddErr (ctx, "operator not applicable to this type")
@@ -819,101 +803,80 @@ compileCtxExpr (Ctx ctx (Inv expr)) =
        (mt `whenIsJust` (/=LLInteger)) $ vsmAddErr (srcCtx expr, "operator not applicable to non-integer type")
        return mt
 compileCtxExpr (Ctx ctx plus@(Add expr1 expr2)) =
-    do  (mt1,mt2) <- compileEach (expr1,expr2)
-        case (mt1,mt2) of
-            (Nothing,Just t2) -> return (Just t2)
-            (Just t1,Nothing) -> return (Just t1)
-            (Nothing,Nothing) -> return Nothing
-            (Just LLInteger,Just LLInteger) -> return $ Just LLInteger
-            (Just LLInteger,Just LLFloat) -> return $ Just LLFloat
-            (Just LLFloat,Just LLInteger) -> return $ Just LLFloat
-            (Just LLFloat,Just LLFloat) -> return $ Just LLFloat
-            (Just LLVector,Just LLVector) -> return $ Just LLVector
-            (Just LLRot,Just LLRot) -> return $ Just LLRot
-            (Just LLString,Just LLString) -> return $ Just LLString
-            (Just LLList,Just LLList) -> return $ Just LLList
-            (Just t,Just LLList) -> return $ Just LLList
-            (Just LLList,Just t) -> return $ Just LLList
-            (Just t0,Just t1) -> reportIncompatibleOperands ctx t0 t1 >> return Nothing
+    do  mtypes <- compileEach (expr1,expr2)
+        chkMTypes mtypes $ \ types -> case types of
+            (LLInteger,LLInteger) -> typeval LLInteger
+            (LLInteger,LLFloat) -> typeval LLFloat
+            (LLFloat,LLInteger) -> typeval LLFloat
+            (LLFloat,LLFloat) -> typeval LLFloat
+            (LLVector,LLVector) -> typeval LLVector
+            (LLRot,LLRot) -> typeval LLRot
+            (LLString,LLString) -> typeval LLString
+            (LLList,LLList) -> typeval LLList
+            (t,LLList) -> typeval LLList
+            (LLList,t) -> typeval LLList
+            (t0,t1) -> reportIncompatibleOperands ctx t0 t1 >> notype
 compileCtxExpr (Ctx ctx minus@(Sub expr1 expr2)) =
-    do  (mt1,mt2) <- compileEach (expr1,expr2)
-        case (mt1,mt2) of
-            (Nothing,Just t2) -> return (Just t2)
-            (Just t1,Nothing) -> return (Just t1)
-            (Nothing,Nothing) -> return Nothing
-            (Just LLInteger,Just LLInteger) -> return $ Just LLInteger
-            (Just LLInteger,Just LLFloat) -> return $ Just LLFloat
-            (Just LLFloat,Just LLInteger) -> return $ Just LLFloat
-            (Just LLFloat,Just LLFloat) -> return $ Just LLFloat
-            (Just LLVector,Just LLVector) -> return $ Just LLVector
-            (Just LLRot,Just LLRot) -> return $ Just LLRot
-            (Just t0,Just t1) -> reportIncompatibleOperands ctx t0 t1 >> return Nothing
+    do  mtypes <- compileEach (expr1,expr2)
+        chkMTypes mtypes $ \ types -> case types of
+            (LLInteger,LLInteger) -> typeval LLInteger
+            (LLInteger,LLFloat) -> typeval LLFloat
+            (LLFloat,LLInteger) -> typeval LLFloat
+            (LLFloat,LLFloat) -> typeval LLFloat
+            (LLVector,LLVector) -> typeval LLVector
+            (LLRot,LLRot) -> typeval LLRot
+            (t0,t1) -> reportIncompatibleOperands ctx t0 t1 >> notype
 compileCtxExpr (Ctx ctx expr@(Mul expr1 expr2)) =
-    do  (mt1,mt2) <- compileEach (expr1,expr2)
-        case (mt1,mt2) of
-            (Nothing,Just t2) -> return (Just t2)
-            (Just t1,Nothing) -> return (Just t1)
-            (Nothing,Nothing) -> return Nothing
-            (Just LLInteger,Just LLInteger) -> return $ Just LLInteger
-            (Just LLInteger,Just LLFloat) -> return $ Just LLFloat
-            (Just LLFloat,Just LLInteger) -> return $ Just LLFloat
-            (Just LLFloat,Just LLFloat) -> return $ Just LLFloat
-            (Just LLVector,Just LLInteger) -> return $ Just LLVector
-            (Just LLVector,Just LLFloat) -> return $ Just LLVector
-            (Just LLFloat,Just LLVector) -> return $ Just LLVector
-            (Just LLInteger,Just LLVector) -> return $ Just LLVector
-            (Just LLVector,Just LLVector) -> return $ Just LLFloat
-            (Just LLVector,Just LLRot) -> return $ Just LLVector
-            (Just LLRot,Just LLRot) -> return $ Just LLRot
-            (Just t0,Just t1) -> reportIncompatibleOperands ctx t0 t1 >> return Nothing
+    do  mtypes <- compileEach (expr1,expr2)
+        chkMTypes mtypes $ \ types -> case types of
+            (LLInteger,LLInteger) -> typeval LLInteger
+            (LLInteger,LLFloat) -> typeval LLFloat
+            (LLFloat,LLInteger) -> typeval LLFloat
+            (LLFloat,LLFloat) -> typeval LLFloat
+            (LLVector,LLInteger) -> typeval LLVector
+            (LLVector,LLFloat) -> typeval LLVector
+            (LLFloat,LLVector) -> typeval LLVector
+            (LLInteger,LLVector) -> typeval LLVector
+            (LLVector,LLVector) -> typeval LLFloat
+            (LLVector,LLRot) -> typeval LLVector
+            (LLRot,LLRot) -> typeval LLRot
+            (t0,t1) -> reportIncompatibleOperands ctx t0 t1 >> notype
 compileCtxExpr (Ctx ctx expr@(Div expr1 expr2)) =
-    do  (mt1,mt2) <- compileEach (expr1,expr2)
-        case (mt1,mt2) of
-            (Nothing,Just t2) -> return (Just t2)
-            (Just t1,Nothing) -> return (Just t1)
-            (Nothing,Nothing) -> return Nothing
-            (Just LLInteger,Just LLInteger) -> return $ Just LLInteger
-            (Just LLInteger,Just LLFloat) -> return $ Just LLFloat
-            (Just LLFloat,Just LLInteger) -> return $ Just LLFloat
-            (Just LLFloat,Just LLFloat) -> return $ Just LLFloat
-            (Just LLVector,Just LLInteger) -> return $ Just LLVector
-            (Just LLVector,Just LLFloat) -> return $ Just LLVector
-            (Just LLVector,Just LLRot) -> return $ Just LLVector
-            (Just LLRot,Just LLRot) -> return $ Just LLRot
-            (Just t0,Just t1) -> reportIncompatibleOperands ctx t0 t1 >> return Nothing
+    do  mtypes <- compileEach (expr1,expr2)
+        chkMTypes mtypes $ \ types -> case types of
+            (LLInteger,LLInteger) -> typeval LLInteger
+            (LLInteger,LLFloat) -> typeval LLFloat
+            (LLFloat,LLInteger) -> typeval LLFloat
+            (LLFloat,LLFloat) -> typeval LLFloat
+            (LLVector,LLInteger) -> typeval LLVector
+            (LLVector,LLFloat) -> typeval LLVector
+            (LLVector,LLRot) -> typeval LLVector
+            (LLRot,LLRot) -> typeval LLRot
+            (t0,t1) -> reportIncompatibleOperands ctx t0 t1 >> notype
 compileCtxExpr (Ctx ctx expr@(Mod expr1 expr2)) =
-    do (mt1,mt2) <- compileEach (expr1,expr2)
-       case (mt1,mt2) of
-           (Nothing,Just t2) -> return (Just t2)
-           (Just t1,Nothing) -> return (Just t1)
-           (Nothing,Nothing) -> return Nothing
-           (Just LLInteger,Just LLInteger) -> return $ Just LLInteger
-           (Just LLVector,Just LLVector) -> return $ Just LLVector
-           (Just t1,Just t2) -> reportIncompatibleOperands ctx t1 t2 >> return Nothing
+    do mtypes <- compileEach (expr1,expr2)
+       chkMTypes mtypes $ \ types -> case types of
+           (LLInteger,LLInteger) -> typeval LLInteger
+           (LLVector,LLVector) -> typeval LLVector
+           (t1,t2) -> reportIncompatibleOperands ctx t1 t2 >> notype
 compileCtxExpr (Ctx ctx e@(Equal expr1 expr2)) =
-    do (mt1,mt2) <- compileEach (expr1,expr2)
-       case (mt1,mt2) of
-           (Nothing,Just t2) -> return (Just t2)
-           (Just t1,Nothing) -> return (Just t1)
-           (Nothing,Nothing) -> return Nothing
-           (Just LLInteger,Just LLFloat) -> return $ Just LLInteger
-           (Just LLFloat,Just LLInteger) -> return $ Just LLInteger
-           (Just LLString,Just LLKey) -> return $ Just LLInteger
-           (Just LLKey,Just LLString) -> return $ Just LLInteger
-           (Just t1,Just t2) | (t1 == t2) -> return $ Just LLInteger
-                             | otherwise  -> reportIncompatibleOperands ctx t1 t2 >> return Nothing
+    do mtypes <- compileEach (expr1,expr2)
+       chkMTypes mtypes $ \ types -> case types of
+           (LLInteger,LLFloat) -> typeval LLInteger
+           (LLFloat,LLInteger) -> typeval LLInteger
+           (LLString,LLKey) -> typeval LLInteger
+           (LLKey,LLString) -> typeval LLInteger
+           (t1,t2) | (t1 == t2) -> typeval LLInteger
+                   | otherwise  -> reportIncompatibleOperands ctx t1 t2 >> notype
 compileCtxExpr (Ctx ctx e@(NotEqual expr1 expr2)) =
-    do (mt1,mt2) <- compileEach (expr1,expr2)
-       case (mt1,mt2) of
-           (Nothing,Just t2) -> return (Just t2)
-           (Just t1,Nothing) -> return (Just t1)
-           (Nothing,Nothing) -> return Nothing
-           (Just LLInteger,Just LLFloat) -> return $ Just LLInteger
-           (Just LLFloat,Just LLInteger) -> return $ Just LLInteger
-           (Just LLString,Just LLKey) -> return $ Just LLInteger
-           (Just LLKey,Just LLString) -> return $ Just LLInteger
-           (Just t1,Just t2) | (t1 == t2) -> return $ Just LLInteger
-                             | otherwise  -> reportIncompatibleOperands ctx t1 t2 >> return Nothing
+    do mtypes <- compileEach (expr1,expr2)
+       chkMTypes mtypes $ \ types -> case types of
+           (LLInteger,LLFloat) -> typeval LLInteger
+           (LLFloat,LLInteger) -> typeval LLInteger
+           (LLString,LLKey) -> typeval LLInteger
+           (LLKey,LLString) -> typeval LLInteger
+           (t1,t2) | (t1 == t2) -> typeval LLInteger
+                   | otherwise  -> reportIncompatibleOperands ctx t1 t2 >> notype
 compileCtxExpr (Ctx ctx e@(BAnd expr1 expr2)) = compileBothInteger ctx (expr1,expr2)
 compileCtxExpr (Ctx ctx e@(BOr expr1 expr2)) = compileBothInteger ctx (expr1,expr2)
 compileCtxExpr (Ctx ctx e@(Xor expr1 expr2)) = compileBothInteger ctx (expr1,expr2)
@@ -925,178 +888,144 @@ compileCtxExpr (Ctx ctx e@(Le expr1 expr2)) = compileRelExpr ctx (expr1,expr2)
 compileCtxExpr (Ctx ctx e@(Lt expr1 expr2)) = compileRelExpr ctx (expr1, expr2)
 compileCtxExpr (Ctx ctx e@(And expr1 expr2)) = compileBothInteger ctx (expr1, expr2)
 compileCtxExpr (Ctx ctx e@(Or expr1 expr2)) = compileBothInteger ctx (expr1, expr2)
-compileCtxExpr (Ctx ctx e@(IncBy (name,All) expr)) =
-    do  reportErrorIfNoModify name
-        (mt1,mt2) <- compileNameExpr (name,expr)
-        case (mt1,mt2) of
-            (Nothing,Nothing) -> return Nothing
-            (Just t1,Nothing) -> return $ Just t1
-            (Nothing,Just t2) -> return $ Just t2
-            (Just LLInteger,Just LLInteger) -> return $ Just  LLInteger
-            (Just LLFloat,Just LLInteger) -> return $ Just  LLFloat
-            (Just LLFloat,Just LLFloat) -> return $ Just  LLFloat
-            (Just LLVector,Just LLVector) -> return $ Just  LLVector
-            (Just LLRot,Just LLRot) -> return $ Just  LLRot
-            (Just LLString,Just LLString) -> return $ Just  LLString
-            (Just LLList,Just LLList) -> return $ Just  LLList
-            (Just LLList,Just t) -> return $ Just  LLList
-            (Just t1,Just t2) -> reportIncompatibleOperands ctx t1 t2 >> return Nothing
-compileCtxExpr (Ctx ctx e@(IncBy (name,_) expr) ) =
-    do  reportErrorIfNoModify name
-        (mt1,mt2) <- compileNameExpr (name,expr)
-        case (mt1,mt2) of
-            (Nothing,Nothing) -> return Nothing
-            (Just t1,Nothing) -> return $ Just t1
-            (Nothing,Just t2) -> return $ Just t2
-            (Just t1,Just t2) | t1 `elem` [LLVector,LLRot] && t2 `elem` [LLFloat,LLInteger] -> return $ Just  LLFloat
-                          | otherwise -> reportIncompatibleOperands ctx t1 t2 >> return Nothing
-compileCtxExpr (Ctx ctx e@(DecBy (name,All) expr)) =
-    do  reportErrorIfNoModify name
-        (mt1,mt2) <- compileNameExpr (name,expr)
-        case (mt1,mt2) of
-            (Nothing,Nothing) -> return Nothing
-            (Just t1,Nothing) -> return $ Just t1
-            (Nothing,Just t2) -> return $ Just t2
-            (Just LLInteger,Just LLInteger) -> return $ Just  LLInteger
-            (Just LLFloat,Just LLInteger) -> return $ Just  LLFloat
-            (Just LLFloat,Just LLFloat) -> return $ Just  LLFloat
-            (Just LLVector,Just LLVector) -> return $ Just  LLVector
-            (Just LLRot,Just LLRot) -> return $ Just  LLRot
-            (Just t1,Just t2) -> reportIncompatibleOperands ctx t1 t2 >> return Nothing
-compileCtxExpr (Ctx ctx e@(DecBy (name,_) expr)) =
-    do  reportErrorIfNoModify name
-        (mt1,mt2) <- compileNameExpr (name,expr)
-        case (mt1,mt2) of
-            (Nothing,Nothing) -> return Nothing
-            (Just t1,Nothing) -> return $ Just t1
-            (Nothing,Just t2) -> return $ Just t2
-            (Just t1,Just t2) | t1 `elem` [LLVector,LLRot] && t2 `elem` [LLFloat,LLInteger] -> return $ Just  LLFloat
-                              | otherwise -> reportIncompatibleOperands ctx t1 t2 >> return Nothing
-compileCtxExpr (Ctx ctx e@(MulBy (name,All) expr)) =
-    do  reportErrorIfNoModify name
-        (mt1,mt2) <- compileNameExpr (name,expr)
-        case (mt1,mt2) of
-            (Nothing,Nothing) -> return Nothing
-            (Just t1,Nothing) -> return $ Just t1
-            (Nothing,Just t2) -> return $ Just t2
-            (Just LLInteger,Just LLInteger) -> return $ Just  LLInteger
-            (Just LLFloat,Just LLInteger) -> return $ Just  LLFloat
-            (Just LLFloat,Just LLFloat) -> return $ Just  LLFloat
-            (Just LLVector,Just LLInteger) -> return $ Just  LLVector
-            (Just LLVector,Just LLFloat) -> return $ Just  LLVector
-            (Just LLVector,Just LLVector) -> return $ Just  LLVector -- note: LSL compiles this, but it results in runtime error!
-            (Just LLVector,Just LLRot) -> return $ Just  LLVector
-            (Just LLRot,Just LLRot) -> return $ Just  LLRot
-            (Just t1,Just t2) -> reportIncompatibleOperands ctx t1 t2 >> return Nothing
-compileCtxExpr (Ctx ctx e@(MulBy (name,_) expr)) =
-    do  reportErrorIfNoModify name
-        (mt1,mt2) <- compileNameExpr (name,expr)
-        case (mt1,mt2) of
-            (Nothing,Nothing) -> return Nothing
-            (Just t1,Nothing) -> return $ Just t1
-            (Nothing,Just t2) -> return $ Just t2
-            (Just t1,Just t2) | t1 `elem` [LLVector,LLRot] && t2 `elem` [LLFloat,LLInteger] -> return $ Just  LLFloat
-                              | otherwise -> reportIncompatibleOperands ctx t1 t2 >> return Nothing
-compileCtxExpr (Ctx ctx e@(DivBy (name,All) expr)) =
-    do  reportErrorIfNoModify name
-        (mt1,mt2) <- compileNameExpr (name,expr)
-        case (mt1,mt2) of
-            (Nothing,Nothing) -> return Nothing
-            (Just t1,Nothing) -> return $ Just t1
-            (Nothing,Just t2) -> return $ Just t2
-            (Just LLInteger,Just LLInteger) -> return $ Just  LLInteger
-            (Just LLFloat,Just LLInteger) -> return $ Just  LLFloat
-            (Just LLFloat,Just LLFloat) -> return $ Just  LLFloat
-            (Just LLVector,Just LLInteger) -> return $ Just  LLVector
-            (Just LLVector,Just LLFloat) -> return $ Just  LLVector
-            (Just LLVector,Just LLRot) -> return $ Just  LLVector
-            (Just LLRot,Just LLRot) -> return $ Just  LLRot
-            (Just t1,Just t2) -> reportIncompatibleOperands ctx t1 t2 >> return Nothing
-compileCtxExpr (Ctx ctx e@(DivBy (name,_) expr)) =
-    do  reportErrorIfNoModify name
-        (mt1,mt2) <- compileNameExpr (name,expr)
-        case (mt1,mt2) of
-            (Nothing,Nothing) -> return Nothing
-            (Just t1,Nothing) -> return $ Just t1
-            (Nothing,Just t2) -> return $ Just t2
-            (Just t1,Just t2) | t1 `elem` [LLVector,LLRot] && t2 `elem` [LLFloat,LLInteger] -> return $ Just  LLFloat
-                              | otherwise -> reportIncompatibleOperands ctx t1 t2 >> return Nothing
-compileCtxExpr (Ctx ctx e@(ModBy (name,All) expr)) =
-    do  reportErrorIfNoModify name
-        (mt1,mt2) <- compileNameExpr (name,expr)
-        case (mt1,mt2) of
-            (Nothing,Nothing) -> return Nothing
-            (Just t1,Nothing) -> return $ Just t1
-            (Nothing,Just t2) -> return $ Just t2
-            (Just LLInteger,Just LLInteger) -> return $ Just  LLInteger
-            (Just LLVector,Just LLVector) -> return $ Just  LLVector
-            (Just t1,Just t2) -> reportIncompatibleOperands ctx t1 t2 >> return Nothing
-compileCtxExpr (Ctx ctx e@(ModBy (name,_) expr)) =
-    do  reportErrorIfNoModify name
-        (mt1,mt2) <- compileNameExpr (name,expr)
-        case (mt1,mt2) of
-            (Nothing,Nothing) -> return Nothing
-            (Just t1,Nothing) -> return $ Just t1
-            (Nothing,Just t2) -> return $ Just t2
-            (Just t1,Just t2) -> reportIncompatibleOperands ctx t1 t2 >> return Nothing
+compileCtxExpr (Ctx ctx e@(IncBy (name,All) expr)) = do
+    reportErrorIfNoModify name
+    mtypes <- compileNameExpr (name,expr)
+    chkMTypes mtypes $ \ types -> case types of
+        (LLInteger,LLInteger) -> typeval  LLInteger
+        (LLFloat,LLInteger) -> typeval  LLFloat
+        (LLFloat,LLFloat) -> typeval  LLFloat
+        (LLVector,LLVector) -> typeval  LLVector
+        (LLRot,LLRot) -> typeval  LLRot
+        (LLString,LLString) -> typeval  LLString
+        (LLList,LLList) -> typeval  LLList
+        (LLList,t) -> typeval  LLList
+        (t1,t2) -> reportIncompatibleOperands ctx t1 t2 >> notype
+compileCtxExpr (Ctx ctx e@(IncBy (name,_) expr) ) = do
+    reportErrorIfNoModify name
+    mtypes <- compileNameExpr (name,expr)
+    chkMTypes mtypes $ \ types -> case types of
+        (t1,t2) | structure t1 && scalar t2 -> typeval LLFloat
+                | otherwise -> reportIncompatibleOperands ctx t1 t2 >> notype
+compileCtxExpr (Ctx ctx e@(DecBy (name,All) expr)) = do
+    reportErrorIfNoModify name
+    mtypes <- compileNameExpr (name,expr)
+    chkMTypes mtypes $ \ types -> case types of
+        (LLInteger,LLInteger) -> typeval  LLInteger
+        (LLFloat,LLInteger) -> typeval  LLFloat
+        (LLFloat,LLFloat) -> typeval  LLFloat
+        (LLVector,LLVector) -> typeval  LLVector
+        (LLRot,LLRot) -> typeval  LLRot
+        (t1,t2) -> reportIncompatibleOperands ctx t1 t2 >> notype
+compileCtxExpr (Ctx ctx e@(DecBy (name,_) expr)) = do
+    reportErrorIfNoModify name
+    mtypes <- compileNameExpr (name,expr)
+    chkMTypes mtypes $ \ types -> case types of
+        (t1,t2) | structure t1 && scalar t2 -> typeval  LLFloat
+                | otherwise -> reportIncompatibleOperands ctx t1 t2 >> notype
+compileCtxExpr (Ctx ctx e@(MulBy (name,All) expr)) = do
+    reportErrorIfNoModify name
+    mtypes <- compileNameExpr (name,expr)
+    chkMTypes mtypes $ \ types -> case types of
+        (LLInteger,LLInteger) -> typeval  LLInteger
+        (LLFloat,LLInteger) -> typeval  LLFloat
+        (LLFloat,LLFloat) -> typeval  LLFloat
+        (LLVector,LLInteger) -> typeval  LLVector
+        (LLVector,LLFloat) -> typeval  LLVector
+        (LLVector,LLVector) -> typeval  LLVector -- note: LSL compiles this, but it results in runtime error!
+        (LLVector,LLRot) -> typeval  LLVector
+        (LLRot,LLRot) -> typeval  LLRot
+        (t1,t2) -> reportIncompatibleOperands ctx t1 t2 >> notype
+compileCtxExpr (Ctx ctx e@(MulBy (name,_) expr)) = do
+    reportErrorIfNoModify name
+    mtypes <- compileNameExpr (name,expr)
+    chkMTypes mtypes $ \ types -> case types of
+        (t1,t2) | structure t1 && scalar t2 -> typeval  LLFloat
+                | otherwise -> reportIncompatibleOperands ctx t1 t2 >> notype
+compileCtxExpr (Ctx ctx e@(DivBy (name,All) expr)) = do
+    reportErrorIfNoModify name
+    mtypes <- compileNameExpr (name,expr)
+    chkMTypes mtypes $ \ types -> case types of
+        (LLInteger,LLInteger) -> typeval  LLInteger
+        (LLFloat,LLInteger) -> typeval  LLFloat
+        (LLFloat,LLFloat) -> typeval  LLFloat
+        (LLVector,LLInteger) -> typeval  LLVector
+        (LLVector,LLFloat) -> typeval  LLVector
+        (LLVector,LLRot) -> typeval  LLVector
+        (LLRot,LLRot) -> typeval  LLRot
+        (t1,t2) -> reportIncompatibleOperands ctx t1 t2 >> notype
+compileCtxExpr (Ctx ctx e@(DivBy (name,_) expr)) = do
+    reportErrorIfNoModify name
+    mtypes <- compileNameExpr (name,expr)
+    chkMTypes mtypes $ \ types -> case types of
+        (t1,t2) | structure t1 && scalar t2 -> typeval  LLFloat
+                | otherwise -> reportIncompatibleOperands ctx t1 t2 >> notype
+compileCtxExpr (Ctx ctx e@(ModBy (name,All) expr)) = do
+    reportErrorIfNoModify name
+    mtypes <- compileNameExpr (name,expr)
+    chkMTypes mtypes $ \ types -> case types of
+        (LLInteger,LLInteger) -> typeval  LLInteger
+        (LLVector,LLVector) -> typeval  LLVector
+        (t1,t2) -> reportIncompatibleOperands ctx t1 t2 >> notype
+compileCtxExpr (Ctx ctx e@(ModBy (name,_) expr)) = do
+    reportErrorIfNoModify name
+    mtypes <- compileNameExpr (name,expr)
+    chkMTypes mtypes $ \ (t1,t2) -> 
+        reportIncompatibleOperands ctx t1 t2 >> notype
 compileCtxExpr (Ctx ctx e@(PostInc var)) = compileIncDecOp var "++"
 compileCtxExpr (Ctx ctx e@(PostDec var)) = compileIncDecOp var "--"
 compileCtxExpr (Ctx ctx e@(PreInc var)) = compileIncDecOp var "++"
 compileCtxExpr (Ctx ctx e@(PreDec var)) = compileIncDecOp var "++"
-compileCtxExpr (Ctx ctx expr0@(Set (name,All) expr)) =
-    do  reportErrorIfNoModify name
-        (mt1,mt2) <- compileNameExpr (name,expr)
-        case (mt1,mt2) of
-            (Nothing,Nothing) -> return Nothing
-            (Just t1,Nothing) -> return $ Just t1
-            (Nothing,Just t2) -> return $ Just t2
-            (Just LLFloat,Just LLInteger) -> return $ Just  LLFloat
-            (Just LLKey,Just LLString) -> return $ Just  LLKey
-            (Just LLString,Just LLKey) -> return $ Just  LLString
-            (Just t1,Just t2) | t1 == t2 -> return $ Just  t1
-                    | otherwise -> reportIncompatibleOperands ctx t1 t2 >> return Nothing
-compileCtxExpr (Ctx ctx expr0@(Set (name,S) expr)) =
-    do  reportErrorIfNoModify name
-        (mt1,mt2) <- compileNameExpr (name,expr)
-        case (mt1,mt2) of
-            (Nothing,Nothing) -> return Nothing
-            (Just t1,Nothing) -> return $ Just t1
-            (Nothing,Just t2) -> return $ Just t2
-            (Just LLRot,Just LLFloat) -> return $ Just  LLFloat
-            (Just LLRot,Just LLInteger) -> return $ Just  LLFloat
-            (Just t1,Just t2) -> reportIncompatibleOperands ctx t1 t2 >> return Nothing
-compileCtxExpr (Ctx ctx expr0@(Set (name,_) expr)) =
-    do  reportErrorIfNoModify name
-        (mt1,mt2) <- compileNameExpr (name,expr)
-        case (mt1,mt2) of
-            (Nothing,Nothing) -> return Nothing
-            (Just t1,Nothing) -> return $ Just t1
-            (Nothing,Just t2) -> return $ Just t2
-            (Just LLVector,Just LLFloat) -> return $ Just  LLFloat
-            (Just LLVector,Just LLInteger) -> return $ Just  LLFloat
-            (Just LLRot,Just LLFloat) -> return $ Just  LLFloat
-            (Just LLRot,Just LLInteger) -> return $ Just  LLFloat
-            (Just t1,Just t2) -> reportIncompatibleOperands ctx t1 t2 >> return Nothing
-compileCtxExpr (Ctx ctx (IntLit i)) = return $ Just  LLInteger
-compileCtxExpr (Ctx ctx (FloatLit _)) = return $ Just  LLFloat
-compileCtxExpr (Ctx ctx (StringLit _)) = return $ Just  LLString
-compileCtxExpr (Ctx ctx (KeyLit _)) = return $ Just  LLKey
+compileCtxExpr (Ctx ctx expr0@(Set (name,All) expr)) = do
+    reportErrorIfNoModify name
+    mtypes <- compileNameExpr (name,expr)
+    chkMTypes mtypes $ \ types -> case types of
+        (LLFloat,LLInteger) -> typeval  LLFloat
+        (LLKey,LLString) -> typeval  LLKey
+        (LLString,LLKey) -> typeval  LLString
+        (t1,t2) | t1 == t2 -> typeval  t1
+                | otherwise -> reportIncompatibleOperands ctx t1 t2 >> notype
+compileCtxExpr (Ctx ctx expr0@(Set (name,S) expr)) = do
+    reportErrorIfNoModify name
+    mtypes <- compileNameExpr (name,expr)
+    chkMTypes mtypes $ \ types -> case types of
+        (LLRot,LLFloat) -> typeval  LLFloat
+        (LLRot,LLInteger) -> typeval  LLFloat
+        (t1,t2) -> reportIncompatibleOperands ctx t1 t2 >> notype
+compileCtxExpr (Ctx ctx expr0@(Set (name,_) expr)) = do
+    reportErrorIfNoModify name
+    mtypes <- compileNameExpr (name,expr)
+    chkMTypes mtypes $ \ types -> case types of
+        (LLVector,LLFloat) -> typeval  LLFloat
+        (LLVector,LLInteger) -> typeval  LLFloat
+        (LLRot,LLFloat) -> typeval  LLFloat
+        (LLRot,LLInteger) -> typeval  LLFloat
+        (t1,t2) -> reportIncompatibleOperands ctx t1 t2 >> notype
+compileCtxExpr (Ctx ctx (IntLit i)) = typeval  LLInteger
+compileCtxExpr (Ctx ctx (FloatLit _)) = typeval  LLFloat
+compileCtxExpr (Ctx ctx (StringLit _)) = typeval  LLString
+compileCtxExpr (Ctx ctx (KeyLit _)) = typeval  LLKey
 compileCtxExpr (Ctx ctx (ListExpr es)) = do
     mapM compileListExprElement es
-    return $ Just  LLList
+    typeval  LLList
 compileCtxExpr (Ctx ctx (VecExpr xExpr yExpr zExpr)) = 
     do  xt <- compileCtxExpr xExpr
         yt <- compileCtxExpr yExpr
         zt <- compileCtxExpr zExpr
         when (not (all (`elem` [LLInteger,LLFloat]) [c | Just c <- [xt,yt,zt]])) $ vsmAddErr (ctx, "invalid components for vector")
-        return $ Just  LLVector
+        typeval  LLVector
 compileCtxExpr (Ctx ctx (RotExpr xExpr yExpr zExpr sExpr)) = 
     do  xt <- compileCtxExpr xExpr
         yt <- compileCtxExpr yExpr
         zt <- compileCtxExpr zExpr
         st <- compileCtxExpr sExpr
         when (not (all (`elem` [LLInteger,LLFloat]) [ c | Just c <- [xt,yt,zt,st]])) $ vsmAddErr (ctx, "invalid components for rotation")
-        return $ Just LLRot
+        typeval LLRot
+        
+chkMTypes (Nothing,Nothing) _ = notype
+chkMTypes (Nothing,Just t) _ = typeval t
+chkMTypes (Just t,Nothing) _ = typeval t
+chkMTypes (Just t1,Just t2) chkTypes = chkTypes (t1,t2)
 
 reportErrorIfNoModify (Ctx ctx name) = 
     when (isConstant name) $ vsmAddErr (ctx, "cannot modify " ++ name ++ " because it is a constant")
@@ -1105,14 +1034,14 @@ reportIncompatibleOperands ctx t0 t1 =
     vsmAddErr (ctx,"the types of the operands aren't compatible (" ++ lslTypeString t0 ++ " vs. " ++ lslTypeString t1 ++ ")")
     
 compileExpressions es = mapM_ compileCtxExpr es
-compileMExpression Nothing = return (Just LLVoid)
+compileMExpression Nothing = typeval LLVoid
 compileMExpression (Just expr) = compileCtxExpr expr
 
 compileCall (Ctx ctx fname) exprs = do
     vsmAddRef fname ctx
     funcs <- get'vsGFs
     case findFuncDec fname funcs of
-        Nothing -> vsmAddErr (ctx,fname ++ ": no such function in scope") >> return Nothing
+        Nothing -> vsmAddErr (ctx,fname ++ ": no such function in scope") >> notype
         Just (FuncDec _ t params) ->
             let vArg :: Int -> [Var] -> [Ctx Expr] -> VState ()
                 vArg _ [] [] = return ()
@@ -1124,7 +1053,7 @@ compileCall (Ctx ctx fname) exprs = do
                          Nothing -> return ()
                          Just t' -> when (not (matchTypes t t')) $ vsmAddErr (ctx, "argument " ++ (show n) ++ " in call to function (" ++ fname ++ ") is of wrong type:" ++ (lslTypeString t') ++ ", should be " ++ (lslTypeString t))
                      vArg (n+1) ts args
-            in vArg 1 (ctxItems params) exprs >> return (Just t)
+            in vArg 1 (ctxItems params) exprs >> typeval t
             
 compileEach :: (Ctx Expr,Ctx Expr) -> VState (Maybe LSLType, Maybe LSLType)
 compileEach (expr1,expr2) = do
@@ -1134,19 +1063,19 @@ compileEach (expr1,expr2) = do
 compileBothInteger ctx (expr1,expr2) = do
     (mt1,mt2) <- compileEach (expr1,expr2)
     case (mt1,mt2) of
-        (Just LLInteger,Just LLInteger) -> return $ Just LLInteger
-        (Just _, Just _) -> vsmAddErr (ctx,"operands are of incompatible type") >> return Nothing
-        _ -> return Nothing
+        (Just LLInteger,Just LLInteger) -> typeval LLInteger
+        (Just _, Just _) -> vsmAddErr (ctx,"operands are of incompatible type") >> notype
+        _ -> notype
 compileRelExpr ctx (expr1,expr2) = do
     do (mt1,mt2) <- compileEach (expr1,expr2)
        case (mt1,mt2) of
-           (Nothing,_) -> return Nothing
-           (_,Nothing) -> return Nothing
-           (Just LLInteger,Just LLInteger) -> return $ Just LLInteger
-           (Just LLInteger,Just LLFloat) -> return $ Just LLInteger
-           (Just LLFloat,Just LLInteger) -> return $ Just LLInteger
-           (Just LLFloat,Just LLFloat) -> return $ Just LLInteger
-           (Just t0,Just t1) -> vsmAddErr (ctx,"operands are of incompatible types") >> return Nothing
+           (Nothing,_) -> notype
+           (_,Nothing) -> notype
+           (Just LLInteger,Just LLInteger) -> typeval LLInteger
+           (Just LLInteger,Just LLFloat) -> typeval LLInteger
+           (Just LLFloat,Just LLInteger) -> typeval LLInteger
+           (Just LLFloat,Just LLFloat) -> typeval LLInteger
+           (Just t0,Just t1) -> vsmAddErr (ctx,"operands are of incompatible types") >> notype
 compileNameExpr (Ctx ctx name,expr) = do
     vsmAddRef name ctx
     locals <- get'vsLocalVars
@@ -1162,15 +1091,15 @@ compileIncDecOp (n@(Ctx ctx name),c) op = do
     locals <- get'vsLocalVars
     vars <- get'vsGVs
     case (findType name (concat locals ++ vars),c) of
-        (Nothing,_) ->  vsmAddErr (ctx, "variable " ++ name ++ " not found") >> return Nothing
-        (Just LLInteger,All) -> return $ Just LLInteger
-        (Just LLFloat,All) -> return $ Just LLFloat
-        (Just LLRot,S) -> return $ Just LLFloat
-        (Just LLVector,S) -> vsmAddErr (ctx, "s is not a valid component of " ++ name) >> return Nothing
-        (Just t,All) -> vsmAddErr (ctx, name ++ " is not a valid operand for " ++ op) >> return Nothing
-        (Just LLVector,_) -> return $ Just LLFloat
-        (Just LLRot,_) -> return $ Just LLFloat
-        _ -> vsmAddErr (ctx, name ++ " is not a valid operand for " ++ op) >> return Nothing
+        (Nothing,_) ->  vsmAddErr (ctx, "variable " ++ name ++ " not found") >> notype
+        (Just LLInteger,All) -> typeval LLInteger
+        (Just LLFloat,All) -> typeval LLFloat
+        (Just LLRot,S) -> typeval LLFloat
+        (Just LLVector,S) -> vsmAddErr (ctx, "s is not a valid component of " ++ name) >> notype
+        (Just t,All) -> vsmAddErr (ctx, name ++ " is not a valid operand for " ++ op) >> notype
+        (Just LLVector,_) -> typeval LLFloat
+        (Just LLRot,_) -> typeval LLFloat
+        _ -> vsmAddErr (ctx, name ++ " is not a valid operand for " ++ op) >> notype
 
 compileListExprElement e@(Ctx ctx _) = do
     mt <- compileCtxExpr e
@@ -1214,22 +1143,25 @@ compileModule m@(LModule globs freevars) = do
 moduleDependencies lib chain m =
     let f (GI s _ _) = Just (ctxItem s)
         f _          = Nothing
-    in  do  (LModule globs _) <- lookupM m lib
-            case filtMap f globs of
-                [] -> return []
-                list -> if any (`elem` list) (m:chain) then throwStrError "circular dependency"
-                        else
-                            do deps <- fmap concat (
-                                   let chain' = (m:chain) in
-                                       mapM (moduleDependencies lib chain') list)
-                               return $ nub (list ++ deps)
+    in do
+        (LModule globs _) <- lookupM m lib
+        case filtMap f globs of
+            [] -> return []
+            list -> if any (`elem` list) (m:chain) 
+                then throwStrError "circular dependency"
+                else do 
+                    deps <- fmap concat (
+                        let chain' = (m:chain) in
+                                mapM (moduleDependencies lib chain') list)
+                    return $ nub (list ++ deps)
                                 
 -- sort modules by dependency: for each module in the list, after sorting that module
 -- will depend only on modules preceding it in the list.  This of course implies that
 -- there can be no circular dependencies in the modules.
 sortModules :: [(String,(LModule,[String]))] -> [(String,LModule)]
 sortModules modules =
-    let cmp (name,(_,deplist)) (name',(_,deplist')) = compare (length deplist, name) (length deplist', name')
+    let cmp (name,(_,deplist)) (name',(_,deplist')) = 
+            compare (length deplist, name) (length deplist', name')
         sort1 [] = []
         sort1 list =
            let sorted = sortBy cmp list
@@ -1338,3 +1270,6 @@ rewriteStatement n bindings s = (n, bindings, s)
 rewriteCtxExprs bindings ctxExprs = map (rewriteCtxExpr bindings) ctxExprs
 
 rewriteMExpression bindings = fmap (rewriteCtxExpr bindings)
+
+scalar = (`elem` [LLFloat,LLInteger])
+structure = (`elem` [LLRot,LLVector])
