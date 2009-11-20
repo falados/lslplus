@@ -24,6 +24,7 @@ module Language.Lsl.Syntax (
     Library,
     AugmentedLibrary,
     CodeErr,
+    CodeErrs(..),
     CtxVar,
     CtxName,
     CtxExpr,
@@ -66,7 +67,8 @@ import qualified Data.Map as M
 import Data.Maybe(isJust,isNothing)
 import Language.Lsl.Internal.Util(ctx,findM,lookupM,filtMap,throwStrError)
 import Control.Monad(when,foldM,MonadPlus(..))
-import Control.Monad.Error(MonadError(..),Error(..))
+import Control.Monad.Error(MonadError(..))
+import Control.Monad.Error.Class(Error(..))
 import qualified Control.Monad.State as S(State)
 import Control.Monad.State hiding(State)
 
@@ -241,22 +243,23 @@ findFunc name = ctx ("finding function " ++ name) . findM (\ (Func fd _) -> ctxI
 lookupModule :: String -> Library -> Validity LModule
 lookupModule name lib =
     case lookup name lib of
-        Nothing -> throwError [(Nothing, "unknown module")]
-        Just (Left ((_,s):_)) -> throwError [(Nothing, "invalid library (" ++ s ++ ")")]
+        Nothing -> throwError $ CodeErrs [(Nothing, "unknown module")]
+        Just (Left (CodeErrs ((_,s):_))) -> throwError $ CodeErrs [(Nothing, "invalid library (" ++ s ++ ")")]
         Just (Right m) -> return m
 
 -- A description of an error and where to find it in the source.
 type CodeErr = (Maybe SourceContext,String)
+newtype CodeErrs = CodeErrs { codeErrs :: [CodeErr] } deriving (Show)
 
 ctxFromCodeErr = fst
 msgFromCodeErr = snd
 
 -- | An error monad for representing validation errors with respect to LSL code.
-type Validity a = Either [CodeErr] a
+type Validity a = Either CodeErrs a
 
-instance Error [CodeErr] where
-    noMsg = [(Nothing,"")]
-    strMsg s = [(Nothing,s)]
+instance Error CodeErrs where
+    noMsg = CodeErrs [(Nothing,"")]
+    strMsg s = CodeErrs [(Nothing,s)]
     
 --------------------
 matchTypes LLFloat LLInteger = True
@@ -283,8 +286,8 @@ data ValidationState = ValidationState {
         vsStates :: ![Ctx State],
         vsGlobals :: ![Global],
         vsFuncs :: ![Ctx Func],
-        vsErr :: ![CodeErr],
-        vsWarn :: ![CodeErr],
+        vsErr :: !CodeErrs,
+        vsWarn :: !CodeErrs,
         vsNamesUsed :: [String],
         vsGVs :: ![Var],
         vsGFs :: ![FuncDec],
@@ -307,8 +310,8 @@ emptyValidationState = ValidationState {
     vsStates = [], 
     vsGlobals = [], 
     vsFuncs = [],
-    vsErr = [], 
-    vsWarn = [], 
+    vsErr = CodeErrs [], 
+    vsWarn = CodeErrs [], 
     vsNamesUsed = [], 
     vsGVs = [], 
     vsGFs = [], 
@@ -411,11 +414,11 @@ vsmWithModule mname action = get'vsModules >>= put'vsModules . (mname:) >> actio
 vsmAddErr :: CodeErr -> VState ()
 vsmAddErr err = do
     ctx <- get'vsContext >>= return . safeHead
-    errs <- get'vsErr
-    put'vsErr ((maybe (ctxFromCodeErr err) id ctx, msgFromCodeErr err) : errs)
+    CodeErrs errs <- get'vsErr
+    put'vsErr $ CodeErrs ((maybe (ctxFromCodeErr err) id ctx, msgFromCodeErr err) : errs)
 
-vsmAddErrs :: [CodeErr] -> VState ()
-vsmAddErrs = mapM_ vsmAddErr
+vsmAddErrs :: CodeErrs -> VState ()
+vsmAddErrs = mapM_ vsmAddErr . codeErrs
 
 vsmAddLabel :: String -> VState ()
 vsmAddLabel label = do
@@ -495,15 +498,15 @@ compileLSLScript (LSLScript comment globs states) = do
     mapM_ compileState states
     err <- get'vsErr
     case err of
-        [] -> do
+        CodeErrs [] -> do
            globals <- get'vsGlobals
            funcs <- get'vsFuncs
            states <- get'vsStates
            -- for now, error on label warnings since we have no warnings
            return $ case warnLabelsStates states ++ warnLabelsMany funcs of
                [] -> Right $ CompiledLSLScript comment (reverse globals) (reverse funcs) (reverse states)
-               errs -> Left errs
-        _ -> return $ Left $ reverse err
+               errs -> Left $ CodeErrs errs
+        _ -> return . Left . CodeErrs . reverse $ codeErrs err
 
 preprocessStates states = let snames = map (\ (Ctx _ (State cn _)) -> ctxItem cn) states in put'vsStateNames snames
 
@@ -557,7 +560,7 @@ compileGlob (GI (Ctx ctx name) bindings prefix) =
         when (not (imp `elem` imports)) $ do
             library <- get'vsLib
             case lookupModule name library of
-                Left errs -> vsmAddErrs (map (\ (_,err) -> (ctx, "module " ++ name ++ ": " ++ err)) errs)
+                Left (CodeErrs errs) -> vsmAddErrs $ CodeErrs (map (\ (_,err) -> (ctx, "module " ++ name ++ ": " ++ err)) errs)
                 Right (LModule globs freevars) -> do
                    vars <- get'vsGVs
                    case validBindings vars freevars bindings of
@@ -593,7 +596,7 @@ rewriteGlob' prefix renames vars (GV (Ctx ctx (Var name t)) mexpr) =
 rewriteGlob' prefix0 renames vars (GI (Ctx ctx mName) bindings prefix) = 
     do lib <- get'vsLib
        case lookupModule mName lib of
-           Left errs -> vsmAddErrs (map (\ (_,err) -> (ctx, err)) errs)
+           Left (CodeErrs errs) -> vsmAddErrs $ CodeErrs (map (\ (_,err) -> (ctx, err)) errs)
            Right (LModule globs freevars) -> do
                case validBindings vars freevars bindings of
                   Left err -> vsmAddErr (ctx, err)
@@ -1133,7 +1136,7 @@ compileModule m@(LModule globs freevars) = do
     mapM_ compileGlob globs
     errs <- get'vsErr
     case errs of
-        [] -> do
+        CodeErrs [] -> do
             globals <- get'vsGlobals
             funcs <- get'vsFuncs
             return $ Right (globals,funcs)

@@ -12,7 +12,8 @@ module Language.Lsl.UnitTestEnv(
     TestResult) where
 
 import Control.Monad(liftM2)
-import Control.Monad.State(MonadState(..),State(..),StateT(..),evalState)
+import Control.Monad.State(MonadState(..),State(..),StateT(..),evalState,
+    runState)
 import Control.Monad.Error(ErrorT(..))
 import Data.List(find,intersperse)
 import Data.Maybe(isJust)
@@ -50,7 +51,6 @@ data SimpleWorld a = SimpleWorld {
     }
 
 type SimpleWorldM a = ErrorT String (State (SimpleWorld a))
-simpleWorldM = ErrorT . State
 getTick :: SimpleWorldM a Int
 getTick = get >>= return . tick
 getMaxTick :: SimpleWorldM a Int

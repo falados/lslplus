@@ -21,7 +21,7 @@ import Language.Lsl.Render(renderCompiledScript)
 import Language.Lsl.Syntax(AugmentedLibrary(..),CompiledLSLScript(..),Ctx(..),
     Func(..),Global(..),GlobDef(..),Handler(..),LModule(..),SourceContext(..),
     State(..),Validity,Var(..),TextLocation(..),funcName,funcParms,funcType,
-    libFromAugLib)
+    libFromAugLib,CodeErrs(..))
 import Language.Lsl.Internal.Type(lslTypeString)
 import System.Directory(doesFileExist,removeFile)
 import System.FilePath(replaceExtension)
@@ -67,7 +67,7 @@ formatScriptCompilationSummary (name,result) =
     emit "item" 
         ([emit "name" [showString name]] ++ 
         case result of
-            Left errs -> [emit "status" [emit "ok" [showString "false"], emit "errs" (map formatErr errs)]]
+            Left (CodeErrs errs) -> [emit "status" [emit "ok" [showString "false"], emit "errs" (map formatErr errs)]]
             Right (CompiledLSLScript _ globals funcs states) ->
                 [emit "status" [emit "ok" [showString "true"]],
                 emit "entryPoints" (map emitFunc funcs ++ concatMap stateEntryPointEmitters states),
@@ -77,7 +77,7 @@ formatModuleCompilationSummary (name,result) =
     emit "item"
         ([emit "name" [showString name]] ++
         case result of
-            Left errs -> [emit "status" [emit "ok" [showString "false"], emit "errs" (map formatErr errs)]]
+            Left (CodeErrs errs) -> [emit "status" [emit "ok" [showString "false"], emit "errs" (map formatErr errs)]]
             Right (LModule globdefs freevars,(globals,_)) ->
                 [emit "status" [emit "ok" [showString "true"]],
                 emit "entryPoints" (map emitFunc (funcs globdefs)),

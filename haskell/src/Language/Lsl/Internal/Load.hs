@@ -7,7 +7,8 @@ import Control.Exception(SomeException(..),tryJust)
 import Control.Monad.Error(liftIO)
 import Control.Monad.Trans(MonadIO(..))
 import Language.Lsl.Internal.BuiltInModules(avEventGen)
-import Language.Lsl.Syntax(SourceContext(..),compileLSLScript',compileLibrary,Library,CompiledLSLScript,Validity)
+import Language.Lsl.Syntax(SourceContext(..),compileLSLScript',compileLibrary,
+    Library,CompiledLSLScript,Validity,CodeErrs(..))
 import Language.Lsl.Parse(parseModule, parseScript)
 
 parseFiles p files = mapM (parseFile p) files
@@ -23,7 +24,7 @@ loadModules files =
     do parseResults <- parseFiles parseModule files
        let (bad,ok) = splitResults parseResults
        let augLib = compileLibrary (avEventGen:ok)
-       return (augLib ++ (map (\ (n,err) -> (n,Left [err])) bad))
+       return (augLib ++ (map (\ (n,err) -> (n,Left $ CodeErrs [err])) bad))
 
 -- loadModules' files =
 --     do parseResults <- parseFiles parseModule files
@@ -36,7 +37,7 @@ loadScript ::  Library -> (t,String) -> IO (t,Validity CompiledLSLScript)
 loadScript lib sinfo = 
      parseFile parseScript sinfo
      >>= \ r -> case r of
-         (t,Left e) -> return (t,Left [e])
+         (t,Left e) -> return (t,Left $ CodeErrs [e])
          (t,Right script) -> return (t, compileLSLScript' lib script)
 loadScripts library = mapM (loadScript library)
 

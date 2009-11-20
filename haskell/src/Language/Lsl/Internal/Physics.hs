@@ -35,22 +35,22 @@ otherMassSimple = sphMassSimple
 -- perimeter of an ellipse = pi * (a + b) * (1 + 3 * h / (10 + sqrt (4 - 3 * h))) where h = (a - b)^2 / (a + b)^2
 
 primMassApprox :: Prim -> Float
-primMassApprox (Prim { primScale = scale, primTypeInfo = primType }) = primMassApprox' scale primType
+primMassApprox (Prim { _primScale = scale, _primTypeInfo = primType }) = primMassApprox' scale primType
 
 primMassApprox' :: (Float,Float,Float) -> PrimType -> Float
 primMassApprox' scale primType =
     case primType of
-       PrimTypeUnknown -> otherMassSimple scale 1 1 1
-       PrimType { primTypeCode = code } ->
+       -- PrimTypeUnknown -> otherMassSimple scale 1 1 1
+       PrimType { _primTypeCode = code } ->
            case code of
               c | c == cPrimTypeBox -> boxMassSimple scale c1 c2 h
                 | c == cPrimTypeCylinder -> cylMassSimple scale c1 c2 h
                 | c == cPrimTypeSphere -> sphMassSimple scale c1 c2 h
                 | c == cPrimTypeSculpt -> otherMassSimple scale 1 1 1
                 | otherwise -> otherMassSimple scale c1 c2 h
-           where c1 = let (x,y,_) = primCut primType in y - x
-                 c2 = let (x,y,_) = primAdvancedCut primType in y - x
-                 h = 1 - primHollow primType
+           where c1 = let (x,y,_) = _primCut primType in y - x
+                 c2 = let (x,y,_) = _primAdvancedCut primType in y - x
+                 h = 1 - _primHollow primType
 
 gravC = -9.80665 :: Float
 gravA = (0,0,gravC) :: (Float,Float,Float)

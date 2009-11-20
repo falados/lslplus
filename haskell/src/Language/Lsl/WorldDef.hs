@@ -75,6 +75,7 @@ import qualified Data.Map as M
 import qualified Data.IntMap as IM
 import Data.Maybe(isNothing)
 
+import Language.Lsl.Syntax(CodeErrs(CodeErrs))
 import Language.Lsl.Internal.DOMProcessing(req,opt,def,val,text,elist,
     liste,choicet,MonadXMLAccept(..),AcceptT(..),
     xmlAcceptT)
@@ -104,37 +105,37 @@ data WebHandling =
    | WebHandlingByInternet { webHandlingTimeout :: Float } deriving (Show)
                              
 data LSLObject = LSLObject { 
-    primKeys :: [String], 
-    objectDynamics :: !ObjectDynamics } deriving (Show)
+    _primKeys :: [String], 
+    _dynamics :: !ObjectDynamics } deriving (Show)
 
 data ObjectDynamics = ObjectDynamics {
-    objectPosition :: (Float,Float,Float),
-    objectRotation :: (Float,Float,Float,Float),
-    objectVelocity :: (Float,Float,Float),
-    objectForce :: ((Float,Float,Float),Bool),
-    objectBuoyancy :: Float,
-    objectImpulse :: (((Float,Float,Float),Bool),Int),
-    objectTorque :: ((Float,Float,Float),Bool),
-    objectRotationalImpulse :: (((Float,Float,Float),Bool),Int),
-    objectOmega :: (Float,Float,Float),
-    objectPositionTarget :: !(Maybe PositionTarget),
-    objectRotationTarget :: !(Maybe RotationTarget),
-    objectVolumeDetect :: Bool
+    _objectPosition :: (Float,Float,Float),
+    _objectRotation :: (Float,Float,Float,Float),
+    _objectVelocity :: (Float,Float,Float),
+    _objectForce :: ((Float,Float,Float),Bool),
+    _objectBuoyancy :: Float,
+    _objectImpulse :: (((Float,Float,Float),Bool),Int),
+    _objectTorque :: ((Float,Float,Float),Bool),
+    _objectRotationalImpulse :: (((Float,Float,Float),Bool),Int),
+    _objectOmega :: (Float,Float,Float),
+    _objectPositionTarget :: !(Maybe PositionTarget),
+    _objectRotationTarget :: !(Maybe RotationTarget),
+    _objectVolumeDetect :: Bool
     } deriving (Show)
                       
 defaultDynamics = ObjectDynamics { 
-    objectPosition = (0,0,0),
-    objectRotation = (0,0,0,1),
-    objectVelocity = (0,0,0), 
-    objectForce = ((0,0,0),False),
-    objectBuoyancy = 0,
-    objectImpulse = (((0,0,0),False),0),
-    objectTorque = ((0,0,0),False),
-    objectRotationalImpulse = (((0,0,0),False),0),
-    objectOmega = (0,0,0),
-    objectPositionTarget = Nothing,
-    objectRotationTarget = Nothing,
-    objectVolumeDetect = False }
+    _objectPosition = (0,0,0),
+    _objectRotation = (0,0,0,1),
+    _objectVelocity = (0,0,0), 
+    _objectForce = ((0,0,0),False),
+    _objectBuoyancy = 0,
+    _objectImpulse = (((0,0,0),False),0),
+    _objectTorque = ((0,0,0),False),
+    _objectRotationalImpulse = (((0,0,0),False),0),
+    _objectOmega = (0,0,0),
+    _objectPositionTarget = Nothing,
+    _objectRotationTarget = Nothing,
+    _objectVolumeDetect = False }
 data PositionTarget = 
       Repel { 
         positionTargetTau :: Float, 
@@ -156,23 +157,23 @@ data RotationTarget = RotationTarget {
     rotationTargetTau :: Float } deriving (Show)
                                        
 data Avatar = Avatar { 
-    avatarKey :: String,
-    avatarName :: String,
-    avatarActiveGroup :: Maybe String,
-    avatarRegion :: (Int,Int),
-    avatarPosition :: (Float,Float,Float),
-    avatarRotation :: (Float,Float,Float,Float),
-    avatarHeight :: Float,
-    avatarState :: Int,
-    avatarInventory :: [InventoryItem],
-    avatarCameraPosition :: (Float,Float,Float),
-    avatarCameraRotation :: (Float,Float,Float,Float),
-    avatarCameraControlParams :: CameraParams,
-    avatarActiveAnimations :: [(Maybe Int,String)],
-    avatarAttachments :: IM.IntMap String,
-    avatarEventHandler :: !(Maybe (String,[(String,LSLValue Float)])),
-    avatarControls :: !Int,
-    avatarControlListener :: !(Maybe AvatarControlListener) } deriving (Show)
+    _avatarKey :: String,
+    _avatarName :: String,
+    _avatarActiveGroup :: Maybe String,
+    _avatarRegion :: (Int,Int),
+    _avatarPosition :: (Float,Float,Float),
+    _avatarRotation :: (Float,Float,Float,Float),
+    _avatarHeight :: Float,
+    _avatarState :: Int,
+    _avatarInventory :: [InventoryItem],
+    _avatarCameraPosition :: (Float,Float,Float),
+    _avatarCameraRotation :: (Float,Float,Float,Float),
+    _avatarCameraControlParams :: CameraParams,
+    _avatarActiveAnimations :: [(Maybe Int,String)],
+    _avatarAttachments :: IM.IntMap String,
+    _avatarEventHandler :: !(Maybe (String,[(String,LSLValue Float)])),
+    _avatarControls :: !Int,
+    _avatarControlListener :: !(Maybe AvatarControlListener) } deriving (Show)
 
 data AvatarControlListener = AvatarControlListener { 
     avatarControlListenerMask :: !Int,
@@ -210,23 +211,23 @@ defaultCamera = CameraParams {
     cameraPositionThreshold = 1 }
                                
 defaultAvatar key = Avatar {
-        avatarKey = key,
-        avatarName = "Default Avatar",
-        avatarActiveGroup = Nothing,
-        avatarRegion = (0,0),
-        avatarPosition = (128.0,128.0,0.0),
-        avatarRotation = (0.0, 0.0, 0.0, 1.0),
-        avatarHeight = 2,
-        avatarState = 0,
-        avatarInventory = [],
-        avatarCameraPosition = (128.0,128.0,0.0),
-        avatarCameraRotation = (0,0,0,1),
-        avatarCameraControlParams = defaultCamera,
-        avatarActiveAnimations = [],
-        avatarAttachments = IM.empty,
-        avatarEventHandler = Nothing,
-        avatarControls = 0,
-        avatarControlListener = Nothing }
+        _avatarKey = key,
+        _avatarName = "Default Avatar",
+        _avatarActiveGroup = Nothing,
+        _avatarRegion = (0,0),
+        _avatarPosition = (128.0,128.0,0.0),
+        _avatarRotation = (0.0, 0.0, 0.0, 1.0),
+        _avatarHeight = 2,
+        _avatarState = 0,
+        _avatarInventory = [],
+        _avatarCameraPosition = (128.0,128.0,0.0),
+        _avatarCameraRotation = (0,0,0,1),
+        _avatarCameraControlParams = defaultCamera,
+        _avatarActiveAnimations = [],
+        _avatarAttachments = IM.empty,
+        _avatarEventHandler = Nothing,
+        _avatarControls = 0,
+        _avatarControlListener = Nothing }
                        
 -- these are bit INDEXES not MASKS (0 == least significant bit)
 primPhantomBit :: Int
@@ -310,95 +311,94 @@ defaultInventoryPermissions :: (Int,Int,Int,Int,Int)
 defaultInventoryPermissions = (0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff)
 
 data Prim = Prim {
-    primName :: String,
-    primKey :: String,
-    primParent :: Maybe String,
-    primDescription :: String,
-    primInventory :: [InventoryItem],
-    primOwner :: String,
-    primGroup :: Maybe String,
-    primCreator :: String,
-    primPosition :: (Float, Float, Float),
-    primRotation :: (Float, Float, Float, Float),
-    primScale :: (Float, Float, Float),
-    primFaces :: [PrimFace],
-    primFlexibility :: Maybe Flexibility,
-    primMaterial :: Int,
-    primStatus :: Int,
-    primVehicleFlags :: Int,
-    primLight :: Maybe LightInfo,
-    primTempOnRez :: Bool,
-    primTypeInfo :: PrimType,
-    primPermissions :: [Int],
-    primAllowInventoryDrop :: Bool,
-    primSitTarget :: Maybe ((Float,Float,Float),(Float,Float,Float,Float)),
-    primSittingAvatar :: Maybe String,
-    primPendingEmails :: [Email],
-    primPassTouches :: Bool,
-    primPassCollisions :: Bool,
-    primPayInfo :: (Int,Int,Int,Int,Int),
-    primAttachment :: Maybe Attachment,
-    primRemoteScriptAccessPin :: Int } deriving (Show)
+    _primName :: String,
+    _primKey :: String,
+    _primParent :: Maybe String,
+    _primDescription :: String,
+    _primInventory :: [InventoryItem],
+    _primOwner :: String,
+    _primGroup :: Maybe String,
+    _primCreator :: String,
+    _primPosition :: (Float, Float, Float),
+    _primRotation :: (Float, Float, Float, Float),
+    _primScale :: (Float, Float, Float),
+    _primFaces :: [PrimFace],
+    _primFlexibility :: Maybe Flexibility,
+    _primMaterial :: Int,
+    _primStatus :: Int,
+    _primVehicleFlags :: Int,
+    _primLight :: Maybe LightInfo,
+    _primTempOnRez :: Bool,
+    _primTypeInfo :: PrimType,
+    _primPermissions :: [Int],
+    _primAllowInventoryDrop :: Bool,
+    _primSitTarget :: Maybe ((Float,Float,Float),(Float,Float,Float,Float)),
+    _primSittingAvatar :: Maybe String,
+    _primPendingEmails :: [Email],
+    _primPassTouches :: Bool,
+    _primPassCollisions :: Bool,
+    _primPayInfo :: (Int,Int,Int,Int,Int),
+    _primAttachment :: Maybe Attachment,
+    _primRemoteScriptAccessPin :: Int } deriving (Show)
 
 data PrimType = 
-      PrimTypeUnknown
-    | PrimType {
-       primVersion :: Int, -- 1 or 9
-       primTypeCode :: Int,
-       primHoleshape :: Int,
-       primCut :: (Float,Float,Float),
-       primTwist :: (Float,Float,Float),
-       primHolesize :: (Float,Float,Float),
-       primTopshear :: (Float, Float, Float),
-       primHollow :: Float,
-       primTaper :: (Float,Float,Float),
-       primAdvancedCut :: (Float,Float,Float),
-       primRadiusOffset :: Float,
-       primRevolutions :: Float,
-       primSkew :: Float,
-       primSculptTexture :: Maybe String,
-       primSculptType :: Int
+    PrimType {
+       _primVersion :: Int, -- 1 or 9
+       _primTypeCode :: Int,
+       _primHoleshape :: Int,
+       _primCut :: (Float,Float,Float),
+       _primTwist :: (Float,Float,Float),
+       _primHolesize :: (Float,Float,Float),
+       _primTopshear :: (Float, Float, Float),
+       _primHollow :: Float,
+       _primTaper :: (Float,Float,Float),
+       _primAdvancedCut :: (Float,Float,Float),
+       _primRadiusOffset :: Float,
+       _primRevolutions :: Float,
+       _primSkew :: Float,
+       _primSculptTexture :: Maybe String,
+       _primSculptType :: Int
     } deriving (Show)
                    
 basicBox = PrimType 9 0 0 (0,1,0) (0,0,0) (0,0,0) (0,0,0) 0 (0,0,0) (0,1,0) 0 0 0 Nothing 0
 
 data Attachment = Attachment { 
-    attachmentKey :: String, 
-    attachmentPoint :: Int } deriving (Show)
+    _attachmentKey :: String, 
+    _attachmentPoint :: Int } deriving (Show)
 
 data LightInfo = LightInfo {
-    lightColor :: (Float,Float,Float),
-    lightIntensity :: Float,
-    lightRadius :: Float,
-    lightFalloff :: Float
+    _lightColor :: (Float,Float,Float),
+    _lightIntensity :: Float,
+    _lightRadius :: Float,
+    _lightFalloff :: Float
     } deriving (Show)
     
 data Flexibility = Flexibility {
-    flexSoftness :: Int,
-    flexGravity :: Float,
-    flexFriction :: Float,
-    flexWind :: Float,
-    flexTension :: Float,
-    flexForce :: (Float,Float,Float)
+    _flexSoftness :: Int,
+    _flexGravity :: Float,
+    _flexFriction :: Float,
+    _flexWind :: Float,
+    _flexTension :: Float,
+    _flexForce :: (Float,Float,Float)
     } deriving (Show)
     
 data PrimFace = PrimFace {
-    faceAlpha :: Float,
-    faceColor :: (Float,Float,Float),
-    faceShininess :: Int,
-    faceBumpiness :: Int,
-    faceFullbright :: Bool,
-    faceTextureMode :: Int,
-    faceTextureInfo :: TextureInfo 
+    _faceAlpha :: Float,
+    _faceColor :: (Float,Float,Float),
+    _faceShininess :: Int,
+    _faceBumpiness :: Int,
+    _faceFullbright :: Bool,
+    _faceTextureMode :: Int,
+    _faceTextureInfo :: TextureInfo 
     } deriving (Show)
 
 defaultFace = PrimFace 1.0 (1.0,1.0,1.0) 0 0 False 0 defaultTextureInfo
                
 data TextureInfo = TextureInfo {
-    textureKey :: String,
-    textureRepeats :: (Float,Float,Float),
-    textureOffsets :: (Float,Float,Float),
-    textureRotation :: Float
+    _textureKey :: String,
+    _textureRepeats :: (Float,Float,Float),
+    _textureOffsets :: (Float,Float,Float),
+    _textureRotation :: Float
     } deriving (Show)
 
 defaultTextureInfo = TextureInfo "" (1.0,1.0,0.0) (0.0,0.0,0.0) 0.0
@@ -410,35 +410,35 @@ data Email = Email {
     emailTime :: Int } deriving (Show)
                                       
 emptyPrim name key = Prim { 
-    primName = name,
-    primKey = key,
-    primParent = Nothing,
-    primDescription = "",
-    primInventory = [],
-    primOwner = "",
-    primGroup = Nothing,
-    primCreator = "",
-    primPosition = (0.0,0.0,0.0),
-    primRotation = (0.0,0.0,0.0,1.0),
-    primScale = (1.0,1.0,1.0),
-    primFaces = replicate 6 defaultFace,
-    primFlexibility = Nothing,
-    primMaterial = 0,
-    primStatus = 0x0e,
-    primVehicleFlags = 0,
-    primLight = Nothing,
-    primTempOnRez = False,
-    primTypeInfo = basicBox,
-    primPermissions = [0],            
-    primAllowInventoryDrop = False,
-    primSitTarget = Nothing,
-    primSittingAvatar = Nothing,
-    primPendingEmails = [],
-    primPassTouches = False,
-    primPassCollisions = False,
-    primPayInfo = ( -2, -2, -2, -2, -2),
-    primAttachment = Nothing,
-    primRemoteScriptAccessPin = 0 }
+    _primName = name,
+    _primKey = key,
+    _primParent = Nothing,
+    _primDescription = "",
+    _primInventory = [],
+    _primOwner = "",
+    _primGroup = Nothing,
+    _primCreator = "",
+    _primPosition = (0.0,0.0,0.0),
+    _primRotation = (0.0,0.0,0.0,1.0),
+    _primScale = (1.0,1.0,1.0),
+    _primFaces = replicate 6 defaultFace,
+    _primFlexibility = Nothing,
+    _primMaterial = 0,
+    _primStatus = 0x0e,
+    _primVehicleFlags = 0,
+    _primLight = Nothing,
+    _primTempOnRez = False,
+    _primTypeInfo = basicBox,
+    _primPermissions = [0],            
+    _primAllowInventoryDrop = False,
+    _primSitTarget = Nothing,
+    _primSittingAvatar = Nothing,
+    _primPendingEmails = [],
+    _primPassTouches = False,
+    _primPassCollisions = False,
+    _primPayInfo = ( -2, -2, -2, -2, -2),
+    _primAttachment = Nothing,
+    _primRemoteScriptAccessPin = 0 }
 
 data Region = Region {
     regionName :: String,
@@ -468,41 +468,41 @@ defaultRegions owner =
     )]
 
 data Script = Script { 
-    scriptImage :: !(ScriptImage Float),
-    scriptActive :: Bool,
-    scriptPermissions :: M.Map String Int,
-    scriptLastPerm :: Maybe String,
-    scriptStartTick :: Int,
-    scriptLastResetTick :: Int,
-    scriptEventQueue :: [Event Float],
-    scriptStartParameter :: Int,
-    scriptCollisionFilter :: !(String,String,Bool),
-    scriptTargetIndex :: !Int,
-    scriptPositionTargets :: !(IM.IntMap ((Float,Float,Float), Float)),
-    scriptRotationTargets :: !(IM.IntMap ((Float,Float,Float,Float), Float)),
-    scriptControls :: ![String] } deriving (Show)
+    _scriptImage :: !(ScriptImage Float),
+    _scriptActive :: Bool,
+    _scriptPermissions :: M.Map String Int,
+    _scriptLastPerm :: Maybe String,
+    _scriptStartTick :: Int,
+    _scriptLastResetTick :: Int,
+    _scriptEventQueue :: [Event Float],
+    _scriptStartParameter :: Int,
+    _scriptCollisionFilter :: !(String,String,Bool),
+    _scriptTargetIndex :: !Int,
+    _scriptPositionTargets :: !(IM.IntMap ((Float,Float,Float), Float)),
+    _scriptRotationTargets :: !(IM.IntMap ((Float,Float,Float,Float), Float)),
+    _scriptControls :: ![String] } deriving (Show)
 
 mkScript img = Script { 
-    scriptImage = img,
-    scriptActive = True,
-    scriptPermissions = M.empty,
-    scriptLastPerm = Nothing,
-    scriptStartTick = 0,
-    scriptLastResetTick = 0,
-    scriptEventQueue = [Event "state_entry" [] M.empty],
-    scriptStartParameter = 0,
-    scriptCollisionFilter = ("",nullKey,True),
-    scriptTargetIndex = 0,
-    scriptPositionTargets = IM.empty,
-    scriptRotationTargets = IM.empty,
-    scriptControls = [] }
+    _scriptImage = img,
+    _scriptActive = True,
+    _scriptPermissions = M.empty,
+    _scriptLastPerm = Nothing,
+    _scriptStartTick = 0,
+    _scriptLastResetTick = 0,
+    _scriptEventQueue = [Event "state_entry" [] M.empty],
+    _scriptStartParameter = 0,
+    _scriptCollisionFilter = ("",nullKey,True),
+    _scriptTargetIndex = 0,
+    _scriptPositionTargets = IM.empty,
+    _scriptRotationTargets = IM.empty,
+    _scriptControls = [] }
                         
 worldFromFullWorldDef worldBuilder fwd lib scripts = do
     let primMap = mkPrimMap (fullWorldDefPrims fwd)
     -- prove all the prims in all the objects exists
     primMap' <- checkObjects primMap (fullWorldDefObjects fwd)
-    let filt prim = filter isInvScriptItem $ primInventory prim
-    let item2Script prim item = ((primKey prim, inventoryItemName item),
+    let filt prim = filter isInvScriptItem $ _primInventory prim
+    let item2Script prim item = ((_primKey prim, inventoryItemName item),
             invScriptLibId $ inventoryItemData item)
     let activeScripts = concatMap 
             (\ prim -> map (item2Script prim) $ filt prim) $ M.elems primMap'
@@ -526,23 +526,23 @@ fctx :: MonadError String m => String -> Either String a -> m a
 fctx s (Left s') = throwError s
 fctx _ (Right v) = return v
 
-mkPrimMap prims = M.fromList [(primKey p, p) | p <- prims]
+mkPrimMap prims = M.fromList [(_primKey p, p) | p <- prims]
 
 mkObjectMap objects = 
-    M.fromList [ (p, o) | o@(LSLObject { primKeys = (p:_) }) <- objects ]
-mkAvatarLookup avatars = [ (avatarKey a,a) | a <- avatars]
+    M.fromList [ (p, o) | o@(LSLObject { _primKeys = (p:_) }) <- objects ]
+mkAvatarLookup avatars = [ (_avatarKey a,a) | a <- avatars]
 
 checkObject primMap o = 
-    foldM checkPrim primMap (primKeys o)
+    foldM checkPrim primMap (_primKeys o)
     where 
-        root = head (primKeys o)
+        root = head (_primKeys o)
         checkPrim m k = 
             case M.lookup k m of
                 Nothing -> fail ("prim " ++ k ++ " not found in definition")
                 Just prim -> 
                     return (if (k == root) 
                         then m
-                        else M.insert k (prim { primParent = Just root }) m)
+                        else M.insert k (prim { _primParent = Just root }) m)
 
 checkObjects primMap os = foldM checkObject primMap os
 
@@ -556,10 +556,10 @@ activateScript scripts primMap (k@(primKey,invName),(scriptID)) = do
              Just v -> v
     prim <- (lift . fctx ("looking up prim " ++ primKey ++ " failed")) 
         (mlookup primKey primMap)
-    when (isNothing (findByInvName invName (primInventory prim))) $ 
+    when (isNothing (findByInvName invName (_primInventory prim))) $ 
         fail (invName ++ " doesn't exist in prim " ++ primKey)
     case script of
-        Left ((_,s):_) -> 
+        Left (CodeErrs ((_,s):_)) -> 
             tell [("script \"" ++ invName ++ "\" in prim " ++ primKey ++ 
                   " failed to activate because of error: " ++ s)] 
             >> return Nothing
@@ -581,7 +581,7 @@ objects = liste "object" object
 object = do
     keys <- mapM findRealKey =<< req "primKeys" (liste "string" text)
     position <- dvec0 "position"
-    LSLObject <$> pure keys <*> pure defaultDynamics { objectPosition = position }
+    LSLObject <$> pure keys <*> pure defaultDynamics { _objectPosition = position }
     
 vec = (,,) <$> req "x" val <*> req "y" val <*> req "z" val
 region = (,) <$> req "x" val <*> req "y" val
@@ -675,10 +675,10 @@ avatar = do
         <*> opt "avatarEventHandler" text
     key <- newKey (Just name)
     return $ (defaultAvatar key) {
-        avatarName = name, 
-        avatarPosition = (x,y,z),
-        avatarCameraPosition = (x,y,z), 
-        avatarEventHandler = fmap (flip (,) []) handlerName }
+        _avatarName = name, 
+        _avatarPosition = (x,y,z),
+        _avatarCameraPosition = (x,y,z), 
+        _avatarEventHandler = fmap (flip (,) []) handlerName }
     
 findRealKey k = fst <$> get' >>= mlookup k
 newKey xref = do

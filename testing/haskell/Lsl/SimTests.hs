@@ -35,39 +35,45 @@ n1 = mkKey 7
 initialKey = mkKey 10
 
 prim1 = (emptyPrim "prim" pk1) 
-    { primOwner = av, primInventory = [scriptInventoryItem "script" s1 "script",
+    { _primOwner = av, _primInventory = [scriptInventoryItem "script" s1 "script",
                                        InventoryItem {
                                                       inventoryItemIdentification = InventoryItemIdentification ("notecard", n1),
                                                       inventoryItemInfo = InventoryInfo av defaultInventoryPermissions,
                                                       inventoryItemData = InvNotecard ["hello world", "how are you?"]
                                        }
-                                      ], primPosition = (0,0,0),
-      primName = "test name", primDescription = "test description",
-      primPermissions = [0x0008e000, 0x0008e000, 0x0008c000, 0x00080000, 0x00082000] }
+                                      ], 
+      _primPosition = (0,0,0),
+      _primName = "test name", _primDescription = "test description",
+      _primPermissions = [0x0008e000, 0x0008e000, 0x0008c000, 0x00080000, 0x00082000] }
 
 prim2 = (emptyPrim "prim2" pk2)
-    { primOwner = av, primInventory = [scriptInventoryItem "script" s2 "script2"], primPosition = (0.5, 0.5, 0),
-      primName = "test name 2", primDescription = "test description 2",
-      primPermissions = [0x0008e000, 0x0008e000, 0x0008c000, 0x00080000, 0x00082000] }
+    { _primOwner = av, 
+      _primInventory = [scriptInventoryItem "script" s2 "script2"], 
+      _primPosition = (0.5, 0.5, 0),
+      _primName = "test name 2", 
+      _primDescription = "test description 2",
+      _primPermissions = [0x0008e000, 0x0008e000, 0x0008c000, 0x00080000, 0x00082000] }
 
-primHigh = prim1 { primStatus = 0x1 .|. (primStatus prim1) }
+primHigh = prim1 { _primStatus = 0x1 .|. (_primStatus prim1) }
 
-emptyPrim2 = prim2 { primInventory = [] }
+emptyPrim2 = prim2 { _primInventory = [] }
 
 rezTestPrim0 = (emptyPrim "prim" pk1) 
-    { primOwner = av, primInventory = [scriptInventoryItem "script" s1 "script",
+    { _primOwner = av, 
+      _primInventory = [scriptInventoryItem "script" s1 "script",
                                        InventoryItem {
                                                       inventoryItemIdentification = InventoryItemIdentification ("Object", pk2),
                                                       inventoryItemInfo = InventoryInfo av defaultInventoryPermissions,
                                                       inventoryItemData = InvObject [rezTestPrim1]
                                        }
-                                      ], primPosition = (0,0,0),
-      primName = "test name", primDescription = "test description",
-      primPermissions = [0x0008e000, 0x0008e000, 0x0008c000, 0x00080000, 0x00082000] }
+                                      ], 
+      _primPosition = (0,0,0),
+      _primName = "test name", _primDescription = "test description",
+      _primPermissions = [0x0008e000, 0x0008e000, 0x0008c000, 0x00080000, 0x00082000] }
       
 rezTestPrim1 = (emptyPrim "invPim" pk2)
-    { primOwner = av, primInventory = [scriptInventoryItem "script" s2 "script2"], primPosition = (0,0,0),
-      primPermissions = [0x0008e000, 0x0008e000, 0x0008c000, 0x00080000, 0x00082000] }
+    { _primOwner = av, _primInventory = [scriptInventoryItem "script" s2 "script2"], _primPosition = (0,0,0),
+      _primPermissions = [0x0008e000, 0x0008e000, 0x0008c000, 0x00080000, 0x00082000] }
     
 webhandler = [$lslm|
     $module 
@@ -87,19 +93,19 @@ abstractWorld = FullWorldDef {
     fullWorldDefWebHandling = WebHandlingByDoingNothing,
     fullWorldDefObjects = undefined,
     fullWorldDefPrims = undefined,
-    fullWorldDefAvatars = [(defaultAvatar av) { avatarEventHandler = Just ("avEventHandler",[])}],
+    fullWorldDefAvatars = [(defaultAvatar av) { _avatarEventHandler = Just ("avEventHandler",[])}],
     fullWorldDefRegions = defaultRegions av,
     fullWorldDefInitialKeyIndex = 10,
     fullWorldDefEventHandler = Nothing
     }
     
-simpleWorld = abstractWorld { fullWorldDefObjects = [LSLObject [pk1] defaultDynamics { objectPosition = (128,128,0) }], fullWorldDefPrims = [prim1] }
+simpleWorld = abstractWorld { fullWorldDefObjects = [LSLObject [pk1] defaultDynamics { _objectPosition = (128,128,0) }], fullWorldDefPrims = [prim1] }
     
-lessSimpleWorld = abstractWorld { fullWorldDefObjects = [LSLObject [pk1,pk2] defaultDynamics { objectPosition = (128,128,0) }], fullWorldDefPrims = [prim1,prim2] }
+lessSimpleWorld = abstractWorld { fullWorldDefObjects = [LSLObject [pk1,pk2] defaultDynamics { _objectPosition = (128,128,0) }], fullWorldDefPrims = [prim1,prim2] }
 
-physicsWorld1 = abstractWorld { fullWorldDefObjects = [LSLObject [pk1] defaultDynamics { objectPosition = (128,128,0) }], fullWorldDefPrims = [primHigh] }
-physicsWorld2 = abstractWorld { fullWorldDefObjects = [LSLObject [pk1] defaultDynamics { objectPosition = (128,128,5) }], fullWorldDefPrims = [primHigh] }
-collisionWorld1 = abstractWorld { fullWorldDefObjects = [LSLObject [pk1] defaultDynamics { objectPosition = (128,128,0) }, LSLObject [pk2] defaultDynamics { objectPosition = (128.5,128.5,0) }], fullWorldDefPrims = [primHigh,prim2 { primPosition = (0,0,0)}] }
+physicsWorld1 = abstractWorld { fullWorldDefObjects = [LSLObject [pk1] defaultDynamics { _objectPosition = (128,128,0) }], fullWorldDefPrims = [primHigh] }
+physicsWorld2 = abstractWorld { fullWorldDefObjects = [LSLObject [pk1] defaultDynamics { _objectPosition = (128,128,5) }], fullWorldDefPrims = [primHigh] }
+collisionWorld1 = abstractWorld { fullWorldDefObjects = [LSLObject [pk1] defaultDynamics { _objectPosition = (128,128,0) }, LSLObject [pk2] defaultDynamics { _objectPosition = (128.5,128.5,0) }], fullWorldDefPrims = [primHigh,prim2 { _primPosition = (0,0,0)}] }
 
 rezTestWorld = abstractWorld {
    fullWorldDefMaxTime = 300, fullWorldDefSliceSize = 300,
@@ -1193,6 +1199,47 @@ cryptoTest = mkTest "Crypto Test" $ ((chatRun [[$lsl|
         }
     }|]] ["Enc: YWJjZGVm"]) { tLib = library })
 
+wallclockTest = mkTest "Wallclock Test" $ ((chatRun [[$lsl|
+    default {
+        state_entry() {
+           llSay(0,"time is " + (string)llGetWallclock());
+        }
+    }|]] ["time is 3208"]) { tLib = library })
+
+stringTest1 = mkTest "String Test 1" $ ((chatRun [[$lsl|
+    default {
+        state_entry() {
+            integer i = (integer) "-10";
+            llSay(0,(string)i);
+        }
+    }
+    |]]["-10"]) { tLib = library })
+    
+stringTest2 = mkTest "String Test 2" $ ((chatRun [[$lsl|
+    default {
+        state_entry() {
+            integer i = (integer) "+10";
+            llSay(0,(string)i);
+        }
+    }
+    |]]["10"]) { tLib = library })
+stringTest3 = mkTest "String Test 3" $ ((chatRun [[$lsl|
+    default {
+        state_entry() {
+            float i = (float) "+10";
+            llSay(0,(string)i);
+        }
+    }
+    |]]["10.000000"]) { tLib = library })
+stringTest4 = mkTest "String Test 4" $ ((chatRun [[$lsl|
+    default {
+        state_entry() {
+            float i = (float) "-10.5";
+            llSay(0,(string)i);
+        }
+    }
+    |]]["-10.500000"]) { tLib = library })
+    
 tests = TestList [
         helloWorldTest,
         forLoopTest,
@@ -1259,7 +1306,12 @@ tests = TestList [
         loadURLScriptTest,
         jumpTests,
         castTest,
-        cryptoTest
+        cryptoTest,
+        wallclockTest,
+        stringTest1,
+        stringTest2,
+        stringTest3,
+        stringTest4
     ]
     
 ----------------------------------------------------------------------------------------------------------------------

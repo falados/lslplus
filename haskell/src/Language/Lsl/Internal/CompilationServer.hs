@@ -97,9 +97,9 @@ validationSummary :: (AugmentedLibrary,[(String,Validity CompiledLSLScript)]) ->
 validationSummary (ms,ss) = (msum,ssum)
     where msum = map mkMSum ms
           ssum = map mkSSum ss
-          mkMSum (nm, Left errs) = CompilationStatus nm $ Left (map toErrInfo errs)
+          mkMSum (nm, Left err) = CompilationStatus nm $ Left (map toErrInfo $ codeErrs err)
           mkMSum (nm, Right (lmodule,_)) = CompilationStatus nm $ Right (moduleSummary lmodule)
-          mkSSum (nm, Left errs) = CompilationStatus nm $ Left (map toErrInfo errs)
+          mkSSum (nm, Left err) = CompilationStatus nm $ Left (map toErrInfo $ codeErrs err)
           mkSSum (nm, Right cscript) = CompilationStatus nm $ Right (scriptSummary cscript)
 
 data Tup3 a b c = Tup3 a b c
@@ -187,13 +187,13 @@ handleCommand cs (CheckModule (CodeElement name text)) =
         errs' = map parseErrorToErrInfo errs ++ case lookup name lib1 of
                     Nothing -> []
                     Just (Right _) -> []
-                    Just (Left errs) -> map toErrInfo errs
+                    Just (Left err) -> map toErrInfo $ codeErrs err
     in return (cs,xmlSerialize Nothing (ModuleResponse (simplifyModule m,errs')) "")
 handleCommand cs (CheckScript (CodeElement name text)) =
     let (s, errs) = alternateScriptParser name text
         lib = libFromAugLib $ M.toList (modules cs)
         errs' = map parseErrorToErrInfo errs ++ case compileLSLScript' lib s of
-            Left errs -> map toErrInfo errs
+            Left err -> map toErrInfo $ codeErrs err
             _ -> []
     in return (cs,xmlSerialize Nothing (ScriptResponse (simplifyScript s,errs')) "")
 

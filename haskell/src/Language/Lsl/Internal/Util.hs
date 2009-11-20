@@ -34,13 +34,13 @@ module Language.Lsl.Internal.Util (
     flip3,
     rotL,
     rotR,
-    optional,
     required,
     whenJust
     ) where
 
 import Control.Monad(liftM,when,MonadPlus(..))
-import Control.Monad.Error(MonadError(..),Error(..))
+import Control.Monad.Error(MonadError(..))
+import Control.Monad.Error.Class(Error(..))
 import Data.Char
 import Data.List(find,elemIndex,isPrefixOf,tails)
 import qualified Data.ByteString.Lazy.Char8 as B
@@ -61,7 +61,6 @@ import Network.URI(escapeURIString,isUnescapedInURI,unEscapeString)
 infixl 0 <||>
 infixl 0 <??>
 
-optional a = liftM Just a <||> return Nothing
 rotR f x y z = f y z x
 rotL f x y z = f z x y
 flip3 f x y z = f z y x
