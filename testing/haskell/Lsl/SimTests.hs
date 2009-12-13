@@ -9,6 +9,7 @@ import Control.Monad.Error
 import Control.Monad.Identity
 import Debug.Trace
 import Language.Lsl.Internal.BuiltInModules(avEventGen)
+import Language.Lsl.Internal.Constants
 import Language.Lsl.Internal.Key
 import Language.Lsl.Internal.Log
 import Language.Lsl.Syntax
@@ -39,6 +40,20 @@ prim1 = (emptyPrim "prim" pk1)
                                        InventoryItem {
                                                       inventoryItemIdentification = InventoryItemIdentification ("notecard", n1),
                                                       inventoryItemInfo = InventoryInfo av defaultInventoryPermissions,
+                                                      inventoryItemData = InvNotecard ["hello world", "how are you?"]
+                                       }
+                                      ], 
+      _primPosition = (0,0,0),
+      _primName = "test name", _primDescription = "test description",
+      _primPermissions = [0x0008e000, 0x0008e000, 0x0008c000, 0x00080000, 0x00082000] }
+
+prim1A = (emptyPrim "prim" pk1) 
+    { _primOwner = av, _primInventory = [scriptInventoryItem "script" s1 "script",
+                                       InventoryItem {
+                                                      inventoryItemIdentification = InventoryItemIdentification ("notecard", n1),
+                                                      inventoryItemInfo = 
+                                                          InventoryInfo av defaultInventoryPermissions
+                                                              { permMaskOwner = complement cPermCopy },
                                                       inventoryItemData = InvNotecard ["hello world", "how are you?"]
                                        }
                                       ], 
@@ -106,6 +121,7 @@ lessSimpleWorld = abstractWorld { fullWorldDefObjects = [LSLObject [pk1,pk2] def
 physicsWorld1 = abstractWorld { fullWorldDefObjects = [LSLObject [pk1] defaultDynamics { _objectPosition = (128,128,0) }], fullWorldDefPrims = [primHigh] }
 physicsWorld2 = abstractWorld { fullWorldDefObjects = [LSLObject [pk1] defaultDynamics { _objectPosition = (128,128,5) }], fullWorldDefPrims = [primHigh] }
 collisionWorld1 = abstractWorld { fullWorldDefObjects = [LSLObject [pk1] defaultDynamics { _objectPosition = (128,128,0) }, LSLObject [pk2] defaultDynamics { _objectPosition = (128.5,128.5,0) }], fullWorldDefPrims = [primHigh,prim2 { _primPosition = (0,0,0)}] }
+anotherWorld = abstractWorld { fullWorldDefObjects = [LSLObject [pk1] defaultDynamics { _objectPosition = (128,128,0) }, LSLObject [pk2] defaultDynamics { _objectPosition = (128.5,128.5,0) }], fullWorldDefPrims = [prim1A,prim2] }
 
 rezTestWorld = abstractWorld {
    fullWorldDefMaxTime = 300, fullWorldDefSliceSize = 300,
@@ -118,14 +134,16 @@ runRezTestWorld s0 s1 = return $ simStep (Left(rezTestWorld,[("script",compileLS
                                                              ("script2",compileLSLScript' [] s1)],[])) (SimContinue [] [])
                                                              
 data TestRun = TestRun { tWorld :: FullWorldDef,
-                           tScripts :: [LSLScript],
-                           tLib :: [(String,Validity LModule)],
-                           tAssertion :: [LogMessage] -> IO () }
+                         tScripts :: [LSLScript],
+                         tLib :: [(String,Validity LModule)],
+                         tAssertion :: [LogMessage] -> IO () }
 
 chatRun :: [LSLScript] -> [String] -> TestRun
 chatRun scripts msgs = TestRun simpleWorld scripts [] (assertAllChatInLog msgs)
 logRun scripts msgs = TestRun simpleWorld scripts [] (\ log -> mapM_ (flip assertInLog log) msgs)
 logRunStrict scripts msgs = TestRun simpleWorld scripts [] (assertLogIs msgs)
+logRun2 scripts msgs = TestRun lessSimpleWorld scripts [] (\ log -> mapM_ (flip assertInLog log) msgs)
+logRun3 scripts msgs = TestRun anotherWorld scripts [] (\ log -> mapM_ (flip assertInLog log) msgs)
 mkTest :: String -> TestRun -> Test
 mkTest tname trun = TestLabel tname $ TestCase $ do
         (SimEnded "ended" log _, _)<- return $ simStep (Left (tWorld trun,labelScripts $ map (compileLSLScript' []) (tScripts trun), tLib trun))
@@ -1239,7 +1257,67 @@ stringTest4 = mkTest "String Test 4" $ ((chatRun [[$lsl|
         }
     }
     |]]["-10.500000"]) { tLib = library })
-    
+
+giveTest1 = mkTest "Give Test 1" ((logRun2 [scr1,scr2] ["Owner Say: notecard"]) { tLib = library })
+    where scr1 = [$lsl|
+              default {
+                  state_entry() {
+                      llGiveInventoryList($string:pk2,"new",["notecard"]);
+                  }
+              }
+              |]
+          scr2 = [$lsl|
+              default {
+                  changed(integer change) {
+                      integer num = llGetInventoryNumber(INVENTORY_ALL);
+                      integer i = 0;
+                      for (;i < num; i++) {
+                          llOwnerSay(llGetInventoryName(INVENTORY_ALL,i));
+                      }
+                  }
+              }
+              |]
+
+giveTest2 = mkTest "Give Test 2" ((logRun2 [scr1,scr2] ["Owner Say: script 1"]) { tLib = library })
+    where scr1 = [$lsl|
+              default {
+                  state_entry() {
+                      llGiveInventoryList($string:pk2,"new",["script"]);
+                  }
+              }
+              |]
+          scr2 = [$lsl|
+              default {
+                  changed(integer change) {
+                      integer num = llGetInventoryNumber(INVENTORY_ALL);
+                      integer i = 0;
+                      for (;i < num; i++) {
+                          llOwnerSay(llGetInventoryName(INVENTORY_ALL,i));
+                      }
+                  }
+              }
+              |]
+
+giveTest3 = mkTest "Give Test 3" ((logRun3 [scr1,scr2] ["chan = 2147483647, message = inventory item notecard not copyable"]) { tLib = library })
+    where scr1 = [$lsl|
+              default {
+                  state_entry() {
+                      llGiveInventoryList($string:pk2,"new",["notecard"]);
+                  }
+              }
+              |]
+          scr2 = [$lsl|
+              default {
+                  changed(integer change) {
+                      integer num = llGetInventoryNumber(INVENTORY_ALL);
+                      integer i = 0;
+                      for (;i < num; i++) {
+                          llOwnerSay(llGetInventoryName(INVENTORY_ALL,i));
+                      }
+                  }
+              }
+              |]
+
 tests = TestList [
         helloWorldTest,
         forLoopTest,
@@ -1311,7 +1389,10 @@ tests = TestList [
         stringTest1,
         stringTest2,
         stringTest3,
-        stringTest4
+        stringTest4,
+        giveTest1,
+        giveTest2,
+        giveTest3
     ]
     
 ----------------------------------------------------------------------------------------------------------------------

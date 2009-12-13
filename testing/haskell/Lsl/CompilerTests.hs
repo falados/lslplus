@@ -24,10 +24,10 @@ basedir = getEnv "LSLPLUS_TEST_DATA"
 
 assertValid :: String -> Validity a -> IO ()
 assertValid msg (Right _) = return ()
-assertValid msg (Left ((err,msg1):_)) = assertFailure (msg ++ " -- " ++ msg1 ++ " (" ++ show err ++ ")")
+assertValid msg (Left (CodeErrs ((err,msg1):_))) = assertFailure (msg ++ " -- " ++ msg1 ++ " (" ++ show err ++ ")")
 
 assertInvalid msg (Right _) = assertFailure msg
-assertInvalid msg (Left ((_,s):_)) = 
+assertInvalid msg (Left (CodeErrs ((_,s):_))) = 
     if isInfixOf "file does not exist" s then assertFailure "file does not exist!" else return ()
 
 prePrep = do
@@ -52,7 +52,7 @@ prepSingleModule s = do
     Just m <- return $ lookup s lib
     return m
 
-liftValidity = either (Left . (:[]) . ((,)Nothing)) (Right . id)
+liftValidity = either (Left . CodeErrs . (:[]) . ((,)Nothing)) (Right . id)
 
 checkScriptStr' :: String -> Validity CompiledLSLScript
 checkScriptStr' s = do
@@ -317,3 +317,11 @@ integer bar(integer x) {
 iteger test;|]
 
 
+eqNotScript = [$here|
+    default {
+        state_entry() {
+            integer x = 0;
+            x =!0;
+            llOwnerSay((string)x);
+        }
+    }|]
