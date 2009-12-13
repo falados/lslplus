@@ -9,12 +9,14 @@ import lslplus.gentree.Node;
 import lslplus.gentree.NodeFactory;
 import lslplus.gentree.NodeStatus;
 import lslplus.sim.SimProject.AvatarNode;
+import lslplus.sim.SimProject.HexIntNode;
 import lslplus.sim.SimProject.AvatarReferenceNode;
 import lslplus.sim.SimProject.FixedFormatNode;
 import lslplus.sim.SimProject.HasDerivedValue;
 import lslplus.sim.SimProject.PrimNode;
 import lslplus.sim.SimProject.StringNode;
 import lslplus.sim.SimWorldDef.InventoryItem;
+import lslplus.sim.SimWorldDef.ItemPermissions;
 import lslplus.sim.SimWorldDef.LVector;
 import lslplus.sim.SimWorldDef.Prim;
 import lslplus.sim.SimWorldDef.Region;
@@ -24,11 +26,61 @@ public class SimProjectNodes {
 
     public static class InventoryPropertiesNode extends FixedFormatNode {
 
-        public InventoryPropertiesNode(Node parent, String creator) {
+        private static final String BASEP = "basep"; //$NON-NLS-1$
+		private static final String OWNERP = "ownerp"; //$NON-NLS-1$
+		private static final String GROUPP = "groupp"; //$NON-NLS-1$
+		private static final String NEXTP = "nextp"; //$NON-NLS-1$
+		private static final String EVERYBODYP = "everybodyp"; //$NON-NLS-1$
+		public InventoryPropertiesNode(Node parent, String creator) {
             super(parent, "properties", null); //$NON-NLS-1$
             addChild(new AvatarReferenceNode(this, "creator", creator)); //$NON-NLS-1$
+            addBasep();
+            addOwnerp();
+            addGroupp();
+            addEverybodyp();
+            addNextp();
         }
 
+		private void addNextp() {
+			addChild(new HexIntNode(this,NEXTP, 0x7fffffff, "Next Owner Permissions"));
+		}
+
+		private void addEverybodyp() {
+			addChild(new HexIntNode(this,EVERYBODYP, 0x7fffffff, "Everybody Permissions"));
+		}
+
+		private void addGroupp() {
+			addChild(new HexIntNode(this,GROUPP, 0x7fffffff, "Group Permissions"));
+		}
+
+		private void addOwnerp() {
+			addChild(new HexIntNode(this,OWNERP, 0x7fffffff, "Owner Permissions"));
+		}
+
+		private void addBasep() {
+			addChild(new HexIntNode(this,BASEP, 0x7fffffff, "Base Permissions"));
+		}
+		
+		@Override
+		protected void onFix() {
+			super.onFix();
+			
+			if (this.findChildByName(BASEP) == null) addBasep();
+			if (this.findChildByName(OWNERP) == null) addOwnerp();
+			if (this.findChildByName(GROUPP) == null) addGroupp();
+			if (this.findChildByName(EVERYBODYP) == null) addEverybodyp();
+			if (this.findChildByName(NEXTP) == null) addNextp();
+		}
+		
+        public static SimWorldDef.ItemPermissions mkPerms(Map<String,Object> data) {
+        	int base = (Integer) data.get(BASEP);
+        	int ownerp = (Integer) data.get(OWNERP);
+        	int groupp = (Integer) data.get(GROUPP);
+        	int everybodyp = (Integer) data.get(EVERYBODYP);
+        	int nextp = (Integer) data.get(NEXTP);
+        	return new SimWorldDef.ItemPermissions(base,ownerp,groupp,everybodyp,nextp);
+        }
+        
         public String getNameDisplay() { return "Properties"; } //$NON-NLS-1$ TODO
         public Map<String,Object> getData() {
             HashMap<String,Object> map = new HashMap<String,Object>();
@@ -47,8 +99,9 @@ public class SimProjectNodes {
             
             return map;
         }
-        
+
     }
+
     public static abstract class InventoryNode extends Node {
         private static final NodeStatus SCRIPT_NAME_IN_USE = 
         	new NodeStatus(false, "Script name already in use"); //$NON-NLS-1$ TODO
@@ -157,13 +210,14 @@ public class SimProjectNodes {
         public InventoryItem getInventoryItem() {
             Map<String,Object> props = getProperties();
             String creator = (String) props.get("creator"); //$NON-NLS-1$
+            ItemPermissions perms = InventoryPropertiesNode.mkPerms(props);
             List<Node> lineNodes = findChildrenByType(NotecardLineNode.class);
             String[] lines = new String[lineNodes.size()];
             int j = 0;
             for (Iterator<Node> i = lineNodes.iterator(); i.hasNext(); ) {
                 lines[j++] = ((NotecardLineNode)i.next()).getValueString();  
             }
-            return new SimWorldDef.Notecard(getName(), creator, lines);
+            return new SimWorldDef.Notecard(getName(), creator, lines, perms);
         }
     }
     
@@ -193,7 +247,8 @@ public class SimProjectNodes {
         public InventoryItem getInventoryItem() {
             Map<String,Object> props = getProperties();
             String creator = (String) props.get("creator"); //$NON-NLS-1$
-            return new SimWorldDef.Texture(getName(), creator);
+            ItemPermissions perms = InventoryPropertiesNode.mkPerms(props);
+            return new SimWorldDef.Texture(getName(), creator, perms);
         }
     }
     
@@ -223,7 +278,8 @@ public class SimProjectNodes {
         public InventoryItem getInventoryItem() {
             Map<String,Object> props = getProperties();
             String creator = (String) props.get("creator"); //$NON-NLS-1$
-            return new SimWorldDef.BodyPart(getName(), creator);
+            ItemPermissions perms = InventoryPropertiesNode.mkPerms(props);
+            return new SimWorldDef.BodyPart(getName(), creator, perms);
         }
     }
     
@@ -253,7 +309,8 @@ public class SimProjectNodes {
         public InventoryItem getInventoryItem() {
             Map<String,Object> props = getProperties();
             String creator = (String) props.get("creator"); //$NON-NLS-1$
-            return new SimWorldDef.Gesture(getName(), creator);
+            ItemPermissions perms = InventoryPropertiesNode.mkPerms(props);
+            return new SimWorldDef.Gesture(getName(), creator, perms);
         }
     }
     
@@ -283,7 +340,8 @@ public class SimProjectNodes {
         public InventoryItem getInventoryItem() {
             Map<String,Object> props = getProperties();
             String creator = (String) props.get("creator"); //$NON-NLS-1$
-            return new SimWorldDef.Clothing(getName(), creator);
+            ItemPermissions perms = InventoryPropertiesNode.mkPerms(props);
+            return new SimWorldDef.Clothing(getName(), creator, perms);
         }
     }
 
@@ -316,7 +374,9 @@ public class SimProjectNodes {
             Map<String,Object> props = getProperties();
             String creator = (String) props.get("creator"); //$NON-NLS-1$
             Float duration = (Float) props.get("duration"); //$NON-NLS-1$
-            return new SimWorldDef.Sound(getName(), creator, duration.floatValue());
+            ItemPermissions perms = InventoryPropertiesNode.mkPerms(props);
+            return new SimWorldDef.Sound(getName(), creator, duration.floatValue(),
+            		perms);
         }
     }
     
@@ -349,7 +409,9 @@ public class SimProjectNodes {
             Map<String,Object> props = getProperties();
             String creator = (String) props.get("creator"); //$NON-NLS-1$
             Float duration = (Float) props.get("duration"); //$NON-NLS-1$
-            return new SimWorldDef.Animation(getName(), creator, duration.floatValue());
+            ItemPermissions perms = InventoryPropertiesNode.mkPerms(props);
+            return new SimWorldDef.Animation(getName(), creator, duration.floatValue(),
+            		perms);
         }
     }
     
@@ -381,7 +443,8 @@ public class SimProjectNodes {
             Region region = (Region) props.get("region"); //$NON-NLS-1$
             LVector position = (LVector) props.get("position"); //$NON-NLS-1$
             String creator = (String) props.get("creator"); //$NON-NLS-1$
-            return new Landmark(getName(), creator, region, position);
+            ItemPermissions perms = InventoryPropertiesNode.mkPerms(props);
+            return new Landmark(getName(), creator, region, position, perms);
         }
 
         public NodeFactory[] legalChildNodes() {
@@ -425,7 +488,8 @@ public class SimProjectNodes {
             
             Map<String,Object> props = getProperties();
             String creator = (String) props.get("creator"); //$NON-NLS-1$
-            return new SimWorldDef.InventoryObject(getName(),creator,prims);
+            ItemPermissions perms = InventoryPropertiesNode.mkPerms(props);
+            return new SimWorldDef.InventoryObject(getName(),creator,prims,perms);
         }
 
         public NodeFactory[] legalChildNodes() {

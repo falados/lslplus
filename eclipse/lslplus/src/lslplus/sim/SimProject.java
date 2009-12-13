@@ -29,6 +29,7 @@ import lslplus.sim.SimWorldDef.Prim;
 import lslplus.sim.SimWorldDef.Region;
 import lslplus.sim.SimWorldDef.ScriptInfo;
 import lslplus.sim.SimWorldDef.SimObject;
+import lslplus.util.Util;
 
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IResource;
@@ -51,6 +52,11 @@ public class SimProject {
         ID_TO_DISPLAY.put("prim-properties", "Prim properties"); //$NON-NLS-1$ //$NON-NLS-2$ TODO
         ID_TO_DISPLAY.put("avatar-properties", "Avatar properties"); //$NON-NLS-1$ //$NON-NLS-2$ TODO
         ID_TO_DISPLAY.put(OBJECT_PROPERTIES, "Object properties"); //$NON-NLS-1$ TODO
+        ID_TO_DISPLAY.put("basep", "base permissions"); //$NON-NLS-1$ //$NON-NLS-2$ TODO
+        ID_TO_DISPLAY.put("ownerp", "owner permissions"); //$NON-NLS-1$ //$NON-NLS-2$ TODO
+        ID_TO_DISPLAY.put("groupp", "group permissions"); //$NON-NLS-1$ //$NON-NLS-2$ TODO
+        ID_TO_DISPLAY.put("everyonep", "everyone permissions"); //$NON-NLS-1$ //$NON-NLS-2$ TODO
+        ID_TO_DISPLAY.put("nextp", "next owner permissions"); //$NON-NLS-1$ //$NON-NLS-2$ TODO
     }
     
     public static interface HasDerivedValue {
@@ -1099,6 +1105,73 @@ public class SimProject {
                 int i = Integer.parseInt(s);
                 setValue(new Integer(i));
             } catch (NumberFormatException e) {
+                // ignore
+            }
+        }
+
+        public boolean isDeletable() {
+            return false;
+        }
+        
+    }
+
+    public static class HexIntNode extends Node {
+		private String displayName;
+        private static final NodeFactory[] LEGAL_CHILD_NODES = new NodeFactory[0];
+        public HexIntNode(Node parent, String name, int value) {
+            this(parent, name, value, name);
+            displayName = name;
+        }
+        
+        public HexIntNode(Node parent, String name, int value, String displayName) {
+            super(parent, name, new Integer(value));
+            this.displayName = displayName;
+        }
+        
+        @Override
+        public String getNameDisplay() {
+        	return displayName;
+        }
+
+        public NodeFactory[] legalChildNodes() {
+            return LEGAL_CHILD_NODES;
+        }
+
+        public NodeStatus checkNameString(String name) {
+             return NodeStatus.OK;
+        }
+
+        public NodeStatus checkValueString(String s) {
+            try {
+            	Integer.decode(s);
+                
+                return NodeStatus.OK;
+            } catch (NumberFormatException e) {
+            	Util.error(e,"que pasa?");
+                return SimProject.BAD_FORMAT;
+            }
+        }
+
+        public String getValueString() {
+        	Integer i = (Integer) getValue();
+        	
+            return "0x" + Integer.toHexString(i); //$NON-NLS-1$
+        }
+
+        public boolean isNameChangeable() {
+            return false;
+        }
+
+        public boolean isValueChangeable() {
+            return true;
+        }
+
+        public void onUpdate(String s) {
+            try {
+                Integer i = Integer.decode(s);
+                setValue(i);
+            } catch (NumberFormatException e) {
+            	Util.error(e, "que?");
                 // ignore
             }
         }

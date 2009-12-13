@@ -46,42 +46,62 @@ public class SimWorldDef {
 		private String name;
         @SuppressWarnings("unused")
 		private String creator;
+        @SuppressWarnings("unused")
+        private ItemPermissions perms;
         public InventoryItem(String name, String creator) {
+        	this(name,creator,new 
+        			ItemPermissions(0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff));
+        }
+        
+        public InventoryItem(String name, String creator, ItemPermissions perms) {
             this.name = name;
             this.creator = creator;
+            this.perms = perms;
         }
+    }
+    
+    public static class ItemPermissions {
+    	@SuppressWarnings("unused")
+    	private int base,owner,group,everyone,next;
+    	public ItemPermissions(int p0, int p1, int p2, int p3, int p4) {
+    		this.base = p0;
+    		this.owner = p1;
+    		this.group = p2;
+    		this.everyone = p3;
+    		this.next = p4;
+    	}
     }
     
     public static class Notecard extends InventoryItem {
         @SuppressWarnings("unused")
         private String[] lines;
-        public Notecard(String name, String creator, String[] lines) {
-            super(name,creator);
+        public Notecard(String name, String creator, String[] lines, ItemPermissions perms) {
+            super(name,creator, perms);
             this.lines = lines;
         }
     }
     
     public static class Texture extends InventoryItem {
-        public Texture(String name, String creator) {
-            super(name, creator);
+        public Texture(String name, String creator, ItemPermissions perms) {
+            super(name, creator, perms);
         }
     }
     
     public static class Clothing extends InventoryItem {
-        public Clothing(String name, String creator) {
-            super(name, creator);
+        public Clothing(String name, String creator, ItemPermissions perms) {
+            super(name, creator, perms);
         }
     }
     
     public static class BodyPart extends InventoryItem {
-        public BodyPart(String name, String creator) {
-            super(name, creator);
+        public BodyPart(String name, String creator, ItemPermissions perms) {
+            super(name, creator, perms);
         }
     }
     
     public static class Gesture extends InventoryItem {
-        public Gesture(String name, String creator) {
-            super(name, creator);
+        public Gesture(String name, String creator, ItemPermissions perms) {
+            super(name, creator, perms);
         }
     }
     
@@ -89,8 +109,8 @@ public class SimWorldDef {
         @SuppressWarnings("unused")
         private float duration;
 
-        public Animation(String name, String creator, float duration) {
-            super(name, creator);
+        public Animation(String name, String creator, float duration, ItemPermissions perms) {
+            super(name, creator, perms);
             this.duration = duration;
         }
     }
@@ -98,8 +118,8 @@ public class SimWorldDef {
         @SuppressWarnings("unused")
         private float duration;
 
-        public Sound(String name, String creator, float duration) {
-            super(name, creator);
+        public Sound(String name, String creator, float duration, ItemPermissions perms) {
+            super(name, creator, perms);
             this.duration = duration;
         }
     }
@@ -109,8 +129,9 @@ public class SimWorldDef {
         private Region region;
         @SuppressWarnings("unused")
         private LVector position;
-        public Landmark(String name, String creator, Region region, LVector position) {
-            super(name,creator);
+        public Landmark(String name, String creator, Region region, 
+        		LVector position, ItemPermissions perms) {
+            super(name,creator, perms);
             this.position = position;
             this.region = region;
         }
@@ -119,8 +140,8 @@ public class SimWorldDef {
     public static class InventoryObject extends InventoryItem {
         @SuppressWarnings("unused")
         private Prim[] prims;
-        public InventoryObject(String name, String creator, Prim[] prims) {
-            super(name,creator);
+        public InventoryObject(String name, String creator, Prim[] prims, ItemPermissions perms) {
+            super(name,creator, perms);
             this.prims = prims;
         }
     }
@@ -239,6 +260,7 @@ public class SimWorldDef {
         xstream.alias("rotation", LRotation.class); //$NON-NLS-1$
         xstream.alias("region", Region.class); //$NON-NLS-1$
         xstream.alias("inventoryItem", InventoryItem.class); //$NON-NLS-1$
+        xstream.alias("itemPermissions", ItemPermissions.class); //$NON-NLS-1$
         xstream.aliasType("notecardItem", Notecard.class); //$NON-NLS-1$
         xstream.aliasType("bodyPartItem", BodyPart.class); //$NON-NLS-1$
         xstream.aliasType("textureItem", Texture.class); //$NON-NLS-1$
