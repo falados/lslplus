@@ -22,7 +22,8 @@ module Language.Lsl.Internal.SimLL(
     putChat,
     resetScript,
     sayRange,
-    unimplementedFuncs
+    unimplementedFuncs,
+    loadScript
     ) where
 
 
@@ -30,7 +31,7 @@ import Prelude hiding ((.),id)
 import Control.Category
 import Control.Applicative
 import Control.Monad(
-    MonadPlus(..),foldM,forM_,liftM,liftM2,unless,when)
+    MonadPlus(..),foldM,forM_,forM,liftM,liftM2,unless,when,filterM)
 import Control.Monad.Error(MonadError(..))
 import Data.List(find,foldl',isSuffixOf)
 import Data.Bits((.&.),(.|.),bit,clearBit,complement,setBit,shiftL,testBit)
@@ -48,7 +49,8 @@ import Language.Lsl.Internal.CodeHelper(renderCall)
 import Language.Lsl.Internal.Constants
 import Language.Lsl.Internal.Evaluation(ScriptInfo(..),Event(..),
     EvalResult(..))
-import Language.Lsl.Internal.Exec(ExecutionState(..),ScriptImage(..),hardReset)
+import Language.Lsl.Internal.Exec(ExecutionState(..),ScriptImage(..),hardReset,
+    initLSLScript)
 import Language.Lsl.Internal.FuncSigs(funcSigs)
 import Language.Lsl.Internal.InternalLLFuncs(internalLLFuncs)
 import Language.Lsl.Internal.Key(nullKey)
@@ -57,11 +59,11 @@ import Language.Lsl.Internal.Physics(calcAccel,primMassApprox)
 import Language.Lsl.Syntax(Ctx(..),FuncDec(..),predefFuncs)
 import Language.Lsl.Internal.Type(LSLValue(..),LSLType(..),defaultValue,
     lslBool,lslValString,rVal2Rot,rot2RVal,typeOfLSLValue,vVal2Vec,vec2VVal,
-    onI,onS)
+    onI,onS,toSVal)
 import Language.Lsl.Internal.Util(add3d,diff3d,fac,findM,fromInt,
     generatePermutation,lookupByIndex,mag3d,mlookup,norm3d,
     quaternionMultiply,rot3d,rotationBetween,scale3d,tuplify,
-    (<||>),(<??>),rotL,whenJust)
+    (<||>),(<??>),rotL,whenJust,filtMapM)
 import Language.Lsl.WorldDef(Attachment(..),AvatarControlListener(..),
     Email(..),Flexibility(..),InventoryInfo(..),InventoryItem(..),
     InventoryItemData(..),InventoryItemIdentification(..),LightInfo(..),
@@ -70,7 +72,8 @@ import Language.Lsl.WorldDef(Attachment(..),AvatarControlListener(..),
     findByInvKey,findByInvName,inventoryInfoPermValue,inventoryItemName,
     isInvAnimationItem,isInvBodyPartItem,isInvClothingItem,isInvGestureItem,
     isInvNotecardItem,isInvObjectItem,isInvScriptItem,isInvSoundItem,
-    isInvTextureItem,primPhantomBit,primPhysicsBit)
+    isInvTextureItem,primPhantomBit,primPhysicsBit,ItemPermissions(..),
+    mkScript)
 import Language.Lsl.Internal.WorldState
 
 import System.Time(ClockTime(..),CalendarTime(..),TimeDiff(..),addToClockTime,
@@ -265,47 +268,82 @@ llGetInventoryType info@(ScriptInfo _ _ _ pk _) [SVal name] =
 
 llRemoveInventory info@(ScriptInfo _ _ _ pk _) [SVal name] = do
     inv <- getPrimInventory pk
-    maybe (sayErr pk ("Missing inventory item '" ++ name ++ "'"))
+    maybe (sayErr info ("Missing inventory item '" ++ name ++ "'"))
         (const $ let inv' = [ item | item <- inv, name /= inventoryItemName item] in
             setPrimInventory pk inv')
             (findByInvName name inv)
     continueV
 
-llGiveInventory info@(ScriptInfo _ _ _ pk _) [KVal k, SVal inv] = void $ do
+loadScript key name script active = do
+    (t:*scripts) <- getM (tick.*wscripts)
+    case lookup script scripts of
+        Just (Right code) -> do
+            let image = mkScript $ initLSLScript code
+            lm (key,name).worldScripts =:
+                if active
+                    then setI (scriptStartTick.*scriptLastResetTick) (t:*t) image
+                    else setI scriptActive False image
+        _ -> return ()
+                
+giveInventory info@(ScriptInfo _ _ _ pk _) k folder itemNames = void $ do
+    let hasPerm p item = 0 /= p .&. (permMaskOwner . inventoryInfoPerms . inventoryItemInfo $ item)
     inventory <- getM $ primInventory.wprim pk
-    item <- maybe (throwError ("inventory item " ++ inv ++ "not found")) 
-        return (findByInvName inv inventory)
     prim <- optional $ getM $ wprim k
-    case prim of
+    srcOwner <- getM $ primOwner.wprim pk
+    items <- flip filtMapM itemNames $ (\ nm -> 
+        case findByInvName nm inventory of
+            Nothing -> sayErr info ("inventory item " ++ nm ++ " not found") >>
+                return Nothing
+            Just item -> if hasPerm cPermCopy item 
+                then return (Just item)
+                else sayErr info ("inventory item " ++ nm ++ " not copyable") >>
+                        return Nothing)
+    unless (null items) $ case prim of
+        Nothing -> do
+            items' <- checkXfers srcOwner k items
+            av <- (getM $ wav k) <||> throwError ("no object or avatar found with key " ++ k)
+            putWorldEvent 0 (GiveAvatarInventoryEvent k "" items') >>
+               slog info ("llGiveInventory: avatar " ++ k ++ " given option of accepting inventory")
         Just p -> do
             owner:*group <- getM $ (primOwner.*primGroup).wprim pk
+            items' <- checkXfers srcOwner owner items
             let [ownerP,groupP,everybodyP] = 
-                    drop 1 $ take 4 (getI primPermissions p) ++ repeat 0
+                    drop 1 $ take 4 (getI primPermissions p ++ repeat 0)
             let hasModifyPerm = (cPermModify .&. everybodyP /= 0) ||
                     (cPermModify .&. groupP /= 0 && not (isNothing group) && group == getI primGroup p) ||
-                    (cPermModify .&. ownerP /= 0 && owner == getI primOwner p)
+                    (cPermModify .&. ownerP /= 0 && owner == srcOwner)
             if hasModifyPerm || getI primAllowInventoryDrop p
                 then do
                     let newOwner = getI primOwner p
                     let newGroup = getI primGroup p
-                    item' <- copyInventoryItem newOwner newGroup item
+                    items' <- forM items $ copyInventoryItem newOwner newGroup
                     let inventory' = getI primInventory p
-                    let findAName i base = let name = base ++  " " ++ show i in
-                            if isNothing (findByInvName name inventory') 
-                                then name else findAName (i + 1) base
-                    primInventory.wprim k =: (case findByInvName inv inventory' of
-                        Nothing -> item' : inventory'
-                        Just _ -> changeName item' newName : inventory'
-                            where newName = findAName 1 inv)
-                    -- TODO: are scripts handled right?
+                    let addItem inv itm = case findByInvName (inventoryItemName itm) inv of
+                            Nothing -> do
+                                loadScript' itm k
+                                return $ itm : inv
+                            Just _ -> do
+                                let itm' = changeName itm newName
+                                loadScript' itm' k
+                                return $ itm' : inv
+                                where newName = findANewName 1 (inventoryItemName itm)
+                                      findANewName i base =
+                                          maybe name (const $ findANewName (i + 1) base) $ 
+                                              findByInvName name inv
+                                          where name = base ++ " " ++ show i
+                    newInv <- foldM addItem inventory' items'
+                    primInventory.wprim k =: newInv
                     pushDeferredScriptEventToPrim
                         (Event "changed" [if hasModifyPerm then llcChangedInventory else llcChangedAllowedDrop] M.empty) k 0
                 else throwError "can't modify/drop inventory on target"
-        Nothing -> do
-            av <- (getM $ wav k) <||> throwError ("no object or avatar found with key " ++ k)
-            putWorldEvent 0 (GiveAvatarInventoryEvent k item) >>
-               slog info ("llGiveInventory: avatar " ++ k ++ " given option of accepting inventory")
     where
+        checkXfers src dst items =  flip filterM items $ \ item ->
+            let perms = (permMaskOwner . inventoryInfoPerms .
+                    inventoryItemInfo $ item) in checkXfer src dst perms
+        checkXfer src dst perms | src == dst = return True
+                                | cPermTransfer .&. perms /= 0 = return True
+                                | otherwise = let err = "item not transferrable" in
+                                    sayErr info err >> return False
         changeName (InventoryItem (InventoryItemIdentification (name,key)) info dat) newName =
             InventoryItem (InventoryItemIdentification (newName,key)) info dat
         copyLink newOwner newGroup prim = do
@@ -332,11 +370,19 @@ llGiveInventory info@(ScriptInfo _ _ _ pk _) [KVal k, SVal inv] = void $ do
                       return $ InventoryItem 
                           (InventoryItemIdentification 
                               (inventoryItemName item, k)) info dat
+        loadScript' itm@(InventoryItem 
+            { inventoryItemData = InvScript { invScriptLibId = script } }) k =
+                loadScript k (inventoryItemName itm) script False
+        loadScript' _ _ = return ()
+                
+llGiveInventory info [KVal k, SVal s] = giveInventory info k "" [s]
+
+llGiveInventoryList info [KVal k, SVal f, LVal l] = giveInventory info k f [ s | SVal s <- map toSVal l]
 
 llSetRemoteScriptAccessPin (ScriptInfo _ _ _ pk _) [IVal pin] =
     void $ primRemoteScriptAccessPin.wprim pk =: pin
-llRemoteLoadScript (ScriptInfo _ _ _ pk _) [KVal _,SVal _, IVal _, IVal _] =
-    void $ sayErr pk  "Deprecated.  Please use llRemoteLoadScriptPin instead."
+llRemoteLoadScript info [KVal _,SVal _, IVal _, IVal _] =
+    void $ sayErr info  "Deprecated.  Please use llRemoteLoadScriptPin instead."
        
 llRezObject = rezObject False 
 llRezAtRoot = rezObject True
@@ -359,7 +405,7 @@ rezObject atRoot info@(ScriptInfo _ _ _ pk _)
     
 isCopyable item = (cPermCopy .&. perm /= 0) && 
        (not (isInvObjectItem item) || all primCopyable links)
-    where (_,perm,_,_,_) = inventoryInfoPerms $ inventoryItemInfo item
+    where perm = permMaskOwner $ inventoryInfoPerms $ inventoryItemInfo item
           InvObject links = inventoryItemData item
           primCopyable = all isCopyable . (getI primInventory)
                 
@@ -485,7 +531,7 @@ llRegionSay info params@[IVal chan, SVal message] =
        
 chat range info@(ScriptInfo oid pid sid pkey event) 
         [IVal chan, SVal message] = void $ do
-    slog info $ concat ["chan = ", show chan, ", message = ", message]
+    slogChat info chan message
     putChat range pkey chan message
 
 putChat range k chan message = do
@@ -502,7 +548,12 @@ putChat range k chan message = do
                     Chat chan (getI avatarName avatar) k message (getI avatarRegion avatar, getI avatarPosition avatar) range
                 Nothing -> logAMessage LogWarn "sim" ("Trying to chat from unknown object/avatar with key " ++ k)
 
-sayErr k msg = putChat sayRange k cDebugChannel msg
+slogChat info chan msg =
+    slog info $ concat ["chan = ", show chan, ", message = ", msg]
+
+sayErr info@(ScriptInfo oid _ _ pk _) msg = do
+    slogChat info cDebugChannel msg
+    putChat sayRange pk cDebugChannel msg
 
 registerListener listener = do
     id <- nextListenerId `modM` (+1)
@@ -1763,10 +1814,10 @@ llGetNumberOfNotecardLines (ScriptInfo _ _ sn pk _) [SVal name] =
                 pushDataserverEvent pk sn key (show $ length $ invNotecardLines $ inventoryItemData notecard)
                 continueK key
     
-llGetNotecardLine (ScriptInfo _ _ sn pk _) [SVal name, IVal lineNumber] =
+llGetNotecardLine info@(ScriptInfo _ _ sn pk _) [SVal name, IVal lineNumber] =
     do  notecards <- getPrimNotecards pk
         case find ((name==) . inventoryItemName) notecards of
-            Nothing -> sayErr pk ("Couldn't find notecard " ++ name) >> continueK nullKey
+            Nothing -> sayErr info ("Couldn't find notecard " ++ name) >> continueK nullKey
             Just notecard -> do
                 key <- newKey
                 pushDataserverEvent pk sn key $ maybe cEOF (take 255) $
@@ -2064,7 +2115,7 @@ llDialog info@(ScriptInfo _ _ _ pk _) [KVal ak, SVal message, LVal buttons, IVal
         putWorldEvent 0 
             (AvatarInputEvent ak (AvatarDialog message buttons' channel pk))
         continueV
-    where doErr msg = sayErr pk ("llDialog: " ++ msg) >> throwError msg
+    where doErr msg = sayErr info ("llDialog: " ++ msg) >> throwError msg
 -------------------------------------------------------------------------------    
 -- old (deprecated) functions for visual effects
 
@@ -2159,6 +2210,10 @@ llMapDestination info [SVal simName, (VVal x y z), (VVal _ _ _)] = do
           mevent = scriptInfoCurrentEvent info
           putIt ak = putWorldEvent 0 (AvatarInputEvent ak (AvatarMapDestination simName (x,y,z)))
 --------------------------------------------------------------------------------
+llTargetOmega info [VVal x y z,FVal spinrate, FVal gain] = void $
+    slog info $ "spinrate set to: " ++ show spinrate ++ " with gain: " ++ show gain ++
+        " around axis: " ++ show (x,y,z)
+--------------------------------------------------------------------------------
 continueWith val = return (EvalIncomplete,val)
 continueVec = continueWith . vec2VVal
 continueF = continueWith . FVal
@@ -2214,6 +2269,7 @@ defaultPredefs = M.fromList $ map (\(x,y) -> (x, defaultPredef x y)) [
         ("llDetectedVel", llDetectedVel),
         ("llDialog", llDialog),
         ("llDie",llDie),
+        ("llEdgeOfWorld", const . const $ continueI 0),
         ("llEjectFromLand",llEjectFromLand),
         ("llEmail",llEmail),
         ("llFrand",llFrand),
@@ -2296,6 +2352,7 @@ defaultPredefs = M.fromList $ map (\(x,y) -> (x, defaultPredef x y)) [
         ("llGetWallclock",llGetWallclock),
         ("llGetVel",llGetVel),
         ("llGiveInventory", llGiveInventory),
+        ("llGiveInventoryList", llGiveInventoryList),
         ("llGiveMoney",llGiveMoney),
         ("llGround", llGround),
         ("llGroundContour", llGroundContour),
@@ -2412,6 +2469,7 @@ defaultPredefs = M.fromList $ map (\(x,y) -> (x, defaultPredef x y)) [
         ("llTakeCamera",llTakeCamera),
         ("llTakeControls",llTakeControls),
         ("llTarget",llTarget),
+        ("llTargetOmega",llTargetOmega),
         ("llTargetRemove",llTargetRemove),
         ("llTeleportAgentHome",llTeleportAgentHome),
         ("llTriggerSound",llTriggerSound),

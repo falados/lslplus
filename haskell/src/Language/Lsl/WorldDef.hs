@@ -28,6 +28,7 @@ module Language.Lsl.WorldDef(
     CameraParams(..),
     Email(..),
     WebHandling(..),
+    ItemPermissions(..),
     -- imported types
     LSLValue(..),
     Event(..),
@@ -283,12 +284,20 @@ newtype InventoryItemIdentification = InventoryItemIdentification {
     inventoryItemNameKey :: (String,String) } deriving (Show)
 data InventoryInfo  = InventoryInfo {
     inventoryInfoCreator :: String,
-    inventoryInfoPerms :: (Int,Int,Int,Int,Int) } deriving (Show)
+    inventoryInfoPerms :: ItemPermissions } deriving (Show)
 data InventoryItem = InventoryItem {
     inventoryItemIdentification :: InventoryItemIdentification,
     inventoryItemInfo :: InventoryInfo,
     inventoryItemData :: InventoryItemData } deriving (Show)
-                                     
+ 
+data ItemPermissions = ItemPermissions {
+        permMaskBase :: Int,
+        permMaskOwner :: Int,
+        permMaskGroup :: Int,
+        permMaskEveryone :: Int,
+        permMaskNext :: Int
+    } deriving Show
+    
 inventoryItemName = fst . inventoryItemNameKey . inventoryItemIdentification
 invnetoryItemKey = snd . inventoryItemNameKey . inventoryItemIdentification
 inventoryItemNames = map inventoryItemName
@@ -300,15 +309,16 @@ findByInvKey key = find ((== key) . invnetoryItemKey)
 
 sortByInvName = sortBy (\ i i' -> compare (inventoryItemName i) (inventoryItemName i'))
 
-inventoryInfoPermValue 0 (i,_,_,_,_) = return i
-inventoryInfoPermValue 1 (_,i,_,_,_) = return i
-inventoryInfoPermValue 2 (_,_,i,_,_) = return i
-inventoryInfoPermValue 3 (_,_,_,i,_) = return i
-inventoryInfoPermValue 4 (_,_,_,_,i) = return i
-inventoryInfoPermValue i _ = throwError ("no such perm mask - " ++ show i)
+inventoryInfoPermValue 0 = return . permMaskBase
+inventoryInfoPermValue 1 = return . permMaskOwner
+inventoryInfoPermValue 2 = return . permMaskGroup
+inventoryInfoPermValue 3 = return . permMaskEveryone
+inventoryInfoPermValue 4 = return . permMaskNext
+inventoryInfoPermValue i = 
+    const (throwError ("no such perm mask - " ++ show i))
 
-defaultInventoryPermissions :: (Int,Int,Int,Int,Int)
-defaultInventoryPermissions = (0xffffffff,0xffffffff,0xffffffff,0xffffffff,0xffffffff)
+defaultInventoryPermissions = 
+    ItemPermissions 0xffffffff 0xffffffff 0xffffffff 0xffffffff 0xffffffff
 
 data Prim = Prim {
     _primName :: String,
@@ -602,7 +612,9 @@ prim = do
         <*> opt "flexibility" flexibility <*> dval "material" 0
         <*> dval "status" 0x0e <*> pure 0 <*> opt "light" lightInfo 
         <*> dval "tempOnRez" False <*> def "typeInfo" basicBox primType
-        <*> def "permissions" [0] (liste "int" val)
+        <*> def "permissions" 
+            [0x0008e000, 0x0008e000, 0x0008c000, 0x00080000, 0x00082000]
+                 (liste "int" val)
         <*> dval "dropAllowed" False <*> pure Nothing <*> pure Nothing 
         <*> pure [] <*> pure False <*> pure False <*> pure (-2,-2,-2,-2,-2)
         <*> pure Nothing <*> pure 0
@@ -633,10 +645,14 @@ inventoryItem f = do
     id <- curry InventoryItemIdentification <$> req "name" text 
         <*> newKey Nothing
     info <- InventoryInfo <$> req "creator" text 
-        <*> pure defaultInventoryPermissions
+        <*> def "perms" defaultInventoryPermissions itemPermissions -- pure defaultInventoryPermissions
     findRealKey $ inventoryInfoCreator info
     InventoryItem id info <$> f
 
+itemPermissions = ItemPermissions <$> req "base" val
+    <*> req "owner" val <*> req "group" val <*> req "everyone" val
+    <*> req "next" val
+    
 script = scriptInventoryItem <$> req "scriptName" text <*> newKey Nothing
     <*> req "scriptId" text
     

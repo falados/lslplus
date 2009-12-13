@@ -1,11 +1,11 @@
 {-# OPTIONS_GHC -XFlexibleContexts -XNoMonomorphismRestriction -XTemplateHaskell #-}
 module Language.Lsl.Internal.CompilationServer where
 
-import Control.Monad
-import Control.Monad.Instances
+--import Control.Monad
+--import Control.Monad.Instances
 import Control.Monad.Error
 
-import Data.Data
+--import Data.Data
 import Data.Either
 import Data.Generics
 import Data.Generics.Extras.Schemes
@@ -16,13 +16,11 @@ import Language.Lsl.Internal.Pragmas
 import Language.Lsl.Syntax
 import Language.Lsl.Parse
 import Language.Lsl.Internal.Util
-import Language.Lsl.Internal.DOMProcessing
-import Language.Lsl.Internal.DOMSourceDescriptor
 import qualified Language.Lsl.Internal.XmlCreate as E
-import Text.XML.HaXml.Parse hiding (fst3,snd3,thd3)
 import Language.Lsl.Internal.SerializationGenerator
 import Language.Lsl.Internal.DOMCombinators
-import Language.Lsl.Internal.SerializationInstances
+import Language.Lsl.Internal.SerializationInstances(
+    jrep'Maybe,jrep'Either,jrep'Tuple2,jrep'Tuple3)
 import System.Directory
 import System.FilePath(replaceExtension)
 

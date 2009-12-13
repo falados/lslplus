@@ -261,7 +261,7 @@ isFollowedBy p = lookAhead p >> return ()
 reservedOp' name = 
     lexeme $ try $
     do{ string name
-      ; ( (isFollowedBy (char '-')) <|> notFollowedBy (P.opLetter lslStyle)) <?> ("end of " ++ show name)
+      ; ( isFollowedBy (oneOf "-!~") <|> notFollowedBy (P.opLetter lslStyle)) <?> ("end of " ++ show name)
       }
 
 opmatch s f = (reservedOp s >> return f)

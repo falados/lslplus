@@ -1,5 +1,5 @@
 Name:           LslPlus
-version:        0.4.4
+version:        0.5.0
 Synopsis:	    An execution and testing framework for the Linden Scripting Language (LSL)
 Description:	
 	Provides a framework for executing Linden Scripting Language scripts offline,
@@ -11,23 +11,28 @@ Homepage:       http:/lslplus.sourceforge.net/
 License:        BSD3
 License-file:   LICENSE
 Category:	    Language
-Copyright:	    Copyright (c) Robert Greayer 2008.
+Copyright:	    Copyright (c) Robert Greayer 2008-2009.
 Author:         Robert Greayer <robgreayer@yahoo.com>
 Maintainer:	    Robert Greayer <robgreayer@yahoo.com>
 Stability:	    experimental
 Build-Type:     Simple
-Tested-With:	GHC ==6.10.1
+Tested-With:	GHC ==6.10.4
 Extra-source-files: NOTICE
 
 Executable LslPlus
-  Build-Depends:  base >= 4.0 && < 4.2, haskell98, filepath >= 1.1.0.0 && < 1.2, parsec >= 2.1.0.0 && < 3,
-                  HaXml >= 1.19 && < 1.20, directory > 1 && < 1.1, mtl >= 1.1 && < 1.2, array >= 0.2 && < 0.3,
-                  network >= 2.1 && < 2.3, random >= 1.0, containers >= 0.1 && < 0.3, old-time, utf8-string >= 0.3 && < 0.4,
-                  pureMD5 >= 0.2 && < 3, bytestring >= 0.9 && < 0.10, template-haskell >= 2.3.0.0 && < 2.4, syb >= 0.1.0.0 && < 0.2.0.0
+  Build-Depends:  base >= 4.0 && < 4.2, haskell98, 
+     filepath >= 1.1.0.0 && < 1.2, parsec >= 2.1.0.0 && < 3, 
+     HaXml >= 1.19 && < 1.20, directory > 1 && < 1.1, array >= 0.2 && < 0.3,
+     monads-fd > 0.0 && < 0.1, transformers >= 0.1 && < 0.2, 
+     network >= 2.1 && < 2.3, random >= 1.0, containers >= 0.1 && < 0.3,
+     old-time, utf8-string >= 0.3 && < 0.4, pureMD5 >= 0.2 && < 3, 
+     bytestring >= 0.9 && < 0.10, template-haskell >= 2.3.0.0 && < 2.4, 
+     syb >= 0.1.0.0 && < 0.2.0.0, fclabels > 0.4 && < 0.5
   Main-Is:        LslPlus.hs
   Hs-Source-Dirs: src
   Other-modules: 
     Data.Generics.Extras.Schemes
+    Data.Record.LabelExtras
     Language.Lsl.Internal.AccessGenerator
     Language.Lsl.Internal.Animation
     Language.Lsl.Internal.AvEvents
@@ -70,6 +75,7 @@ Executable LslPlus
     Language.Lsl.Internal.UnitTester
     Language.Lsl.Internal.Util
     Language.Lsl.Internal.WorldState
+    Language.Lsl.Internal.WorldStateTypes
     Language.Lsl.Internal.XmlCreate
     Language.Lsl.Parse
     Language.Lsl.QQ

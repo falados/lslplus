@@ -68,14 +68,14 @@ import Language.Lsl.Internal.Type(LSLValue(..),LSLType(..),isIVal,isLVal,
 import Language.Lsl.UnitTestEnv(simFunc,hasFunc)
 import Language.Lsl.Internal.SimLL
 import Language.Lsl.Internal.Util(add3d,angleBetween,diff3d,dist3d2,mag3d,
-    mlookup,neg3d,norm3d,quaternionToMatrix,rot3d,scale3d,(<||>))
+    mlookup,neg3d,norm3d,quaternionToMatrix,rot3d,scale3d,(<||>),filtMapM)
 import Language.Lsl.WorldDef(Attachment(..),Avatar(..),
     AvatarControlListener(..),InventoryInfo(..),InventoryItem(..),
     InventoryItemData(..),InventoryItemIdentification(..),LSLObject(..),
     ObjectDynamics(..),Prim(..),PositionTarget(..),RotationTarget(..),
     Script(..),WebHandling(..),defaultDynamics,emptyPrim,inventoryItemName,
     mkScript,isInvObjectItem,isInvScriptItem,primPhysicsBit,
-    scriptInventoryItem,worldFromFullWorldDef)
+    scriptInventoryItem,worldFromFullWorldDef,ItemPermissions(..))
 import Language.Lsl.Internal.WorldState
 
 import System.Random(mkStdGen)
@@ -197,9 +197,10 @@ processEvent (AddScript (name,script) key active) =
               Just (Right code) -> do
                   scriptKey <- newKey
                   updatePrim (\ p -> return $ addScript p (scriptInventoryItem name scriptKey script)) key
-                  let sstate = initLSLScript code
-                  lm (key,name).worldScripts =:
-                      setI (scriptStartTick.*scriptLastResetTick) (t:*t) (mkScript sstate)
+                  loadScript key name script active
+--                   let sstate = initLSLScript code
+--                   lm (key,name).worldScripts =:
+--                       setI (scriptStartTick.*scriptLastResetTick) (t:*t) (mkScript sstate)
        where addScript prim invScript = setI primInventory (invScript:getI primInventory prim) prim
 processEvent chat@(Chat chan name key msg location range) =
     do listeners <- getM wlisteners 
@@ -431,7 +432,8 @@ processEvent (DetachCompleteEvent oid ak) =
          when (null prims) $ throwError "object has no prims!"
          let root = head prims
          let object = InventoryItem (InventoryItemIdentification (getI primName root,getI primKey root)) 
-                                    (InventoryInfo (getI primCreator root) (0x0008e000,0x0008e000,0x0008e000,0x0008e000,0x0008e000))
+                                    (InventoryInfo (getI primCreator root) 
+                                        (ItemPermissions 0x0008e000 0x0008e000 0x0008e000 0x0008e000 0x0008e000))
                                     (InvObject prims)
          (avatarInventory.wav ak) `modM` (object:)
          modM_ wobjects (M.delete oid)
@@ -450,7 +452,8 @@ processEvent (DetachCompleteEvent oid ak) =
                let scriptData = inventoryItemData y
                setPrimInventory pk (((y { inventoryItemData = scriptData { invScriptState = Just img } }) : xs) ++ ys)
                worldScripts `modM` M.delete (pk,sn)
-processEvent (GiveAvatarInventoryEvent ak item) = logAMessage LogInfo "sim" "giving avatar inventory: not implemented"
+processEvent (GiveAvatarInventoryEvent ak folder items) = 
+    logAMessage LogInfo "sim" "giving avatar inventory: not implemented"
 processEvent (AvatarOutputEvent ak avEv) = processAvatarOutputEvent ak avEv
 processEvent (AvatarInputEvent ak avEv) = processAvatarInputEvent ak avEv
 processEvent _ = error "not implemented"
@@ -777,9 +780,18 @@ handleObjectCollisions prims = do
         worldCollisions =: curCollisions
     where send :: Monad m => String -> (String,[(Int,String)]) -> WorldE m ()
           send hn (pk,oinfo) =  collisionScripts >>= mapM_ (sendScript hn pk oinfo)
-              where collisionScripts =
-                        liftM (map inventoryItemName) (getPrimScripts pk) >>= 
-                            filterM (\ sn -> scriptHasActiveHandler pk sn hn)
+              where collisionScripts = filtMapM validScript =<< (getPrimScripts pk)
+--                          liftM (map inventoryItemName) (getPrimScripts pk) >>= 
+--                              filterM (\ sn -> scriptHasActiveHandler pk sn hn)
+                    validScript itm@(InventoryItem { inventoryItemData = InvScript { invScriptLibId = lnm }}) = do
+                        lib <- getM wscripts
+                        case lookup lnm lib of
+                           Just (Right _) -> do
+                               let sn = inventoryItemName itm
+                               p <- scriptHasActiveHandler pk sn hn
+                               return $ if p then Just sn else Nothing
+                           _ -> return Nothing
+                    validScript _ = return Nothing
           sendScript :: Monad m => String -> String -> [(Int,String)] -> String -> WorldE m ()
           sendScript hn pk oinfo sn = do
               filt <- getM $ scriptCollisionFilter.lscript pk sn

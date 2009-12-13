@@ -113,7 +113,8 @@ data WorldEventType =
             detachAvatar :: String }
         | GiveAvatarInventoryEvent { 
             giveAvatarInventoryKey :: String,
-            giveAvatarInventoryItem :: InventoryItem }
+            giveAvatarInventoryFolder :: String, -- null if none
+            giveAvatarInventoryItems :: [InventoryItem] }
         | AvatarOutputEvent {
             avatarOutputEventKey :: String,
             avatarOutputEventVal :: AvEvent.AvatarOutputEvent }
