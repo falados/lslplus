@@ -1,4 +1,4 @@
-update-sites/na-east http://superb-east.dl.sourceforge.net/sourceforge/lslplus @North America (East)
+update-sites/na-east http://voxel.dl.sourceforge.net/sourceforge/lslplus @North America (East)
 update-sites/na-west http://internap.dl.sourceforge.net/sourceforge/lslplus @North America (West)
 update-sites/europe-ch http://puzzle.dl.sourceforge.net/sourceforge/lslplus @Europe (Switzerland)
 update-sites/europe-de http://mesh.dl.sourceforge.net/sourceforge/lslplus @Europe (Germany)
