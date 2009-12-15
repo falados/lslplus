@@ -26,44 +26,43 @@ import System.FilePath
 
 import Test.HUnit hiding (State,Label)
 
-pk1 = mkKey 1
-av = mkKey 2
-pk2 = mkKey 3
-s1 = mkKey 5
-s2 = mkKey 6
-n1 = mkKey 7
+pk1 = unLslKey $ mkKey 1
+av = unLslKey $ mkKey 2
+pk2 = unLslKey $ mkKey 3
+s1 = unLslKey $ mkKey 5
+s2 = unLslKey $ mkKey 6
+n1 = unLslKey $ mkKey 7
 
 initialKey = mkKey 10
 
-prim1 = (emptyPrim "prim" pk1) 
-    { _primOwner = av, _primInventory = [scriptInventoryItem "script" s1 "script",
-                                       InventoryItem {
-                                                      inventoryItemIdentification = InventoryItemIdentification ("notecard", n1),
-                                                      inventoryItemInfo = InventoryInfo av defaultInventoryPermissions,
-                                                      inventoryItemData = InvNotecard ["hello world", "how are you?"]
-                                       }
-                                      ], 
+prim1 = (emptyPrim "prim" $ LSLKey pk1) {
+    _primOwner = LSLKey av, 
+    _primInventory = [
+        scriptInventoryItem "script" (LSLKey s1) "script",
+        InventoryItem {
+            inventoryItemIdentification = InventoryItemIdentification ("notecard", LSLKey n1),
+            inventoryItemInfo = InventoryInfo (LSLKey av) defaultInventoryPermissions,
+            inventoryItemData = InvNotecard ["hello world", "how are you?"]}], 
+    _primPosition = (0,0,0),
+    _primName = "test name", _primDescription = "test description",
+    _primPermissions = [0x0008e000, 0x0008e000, 0x0008c000, 0x00080000, 0x00082000] }
+
+prim1A = (emptyPrim "prim" $ LSLKey pk1) 
+    { _primOwner = LSLKey av,
+      _primInventory = [
+          scriptInventoryItem "script" (LSLKey s1) "script",
+          InventoryItem {
+              inventoryItemIdentification = InventoryItemIdentification ("notecard", LSLKey n1),
+              inventoryItemInfo = 
+                  InventoryInfo (LSLKey av) defaultInventoryPermissions { permMaskOwner = complement cPermCopy },
+              inventoryItemData = InvNotecard ["hello world", "how are you?"]}], 
       _primPosition = (0,0,0),
       _primName = "test name", _primDescription = "test description",
       _primPermissions = [0x0008e000, 0x0008e000, 0x0008c000, 0x00080000, 0x00082000] }
 
-prim1A = (emptyPrim "prim" pk1) 
-    { _primOwner = av, _primInventory = [scriptInventoryItem "script" s1 "script",
-                                       InventoryItem {
-                                                      inventoryItemIdentification = InventoryItemIdentification ("notecard", n1),
-                                                      inventoryItemInfo = 
-                                                          InventoryInfo av defaultInventoryPermissions
-                                                              { permMaskOwner = complement cPermCopy },
-                                                      inventoryItemData = InvNotecard ["hello world", "how are you?"]
-                                       }
-                                      ], 
-      _primPosition = (0,0,0),
-      _primName = "test name", _primDescription = "test description",
-      _primPermissions = [0x0008e000, 0x0008e000, 0x0008c000, 0x00080000, 0x00082000] }
-
-prim2 = (emptyPrim "prim2" pk2)
-    { _primOwner = av, 
-      _primInventory = [scriptInventoryItem "script" s2 "script2"], 
+prim2 = (emptyPrim "prim2" $ LSLKey pk2)
+    { _primOwner = LSLKey av, 
+      _primInventory = [scriptInventoryItem "script" (LSLKey s2) "script2"], 
       _primPosition = (0.5, 0.5, 0),
       _primName = "test name 2", 
       _primDescription = "test description 2",
@@ -73,21 +72,19 @@ primHigh = prim1 { _primStatus = 0x1 .|. (_primStatus prim1) }
 
 emptyPrim2 = prim2 { _primInventory = [] }
 
-rezTestPrim0 = (emptyPrim "prim" pk1) 
-    { _primOwner = av, 
-      _primInventory = [scriptInventoryItem "script" s1 "script",
-                                       InventoryItem {
-                                                      inventoryItemIdentification = InventoryItemIdentification ("Object", pk2),
-                                                      inventoryItemInfo = InventoryInfo av defaultInventoryPermissions,
-                                                      inventoryItemData = InvObject [rezTestPrim1]
-                                       }
-                                      ], 
+rezTestPrim0 = (emptyPrim "prim" $ LSLKey pk1) 
+    { _primOwner = LSLKey av, 
+      _primInventory = [scriptInventoryItem "script" (LSLKey s1) "script",
+                        InventoryItem {
+                            inventoryItemIdentification = InventoryItemIdentification ("Object", LSLKey pk2),
+                            inventoryItemInfo = InventoryInfo (LSLKey av) defaultInventoryPermissions,
+                            inventoryItemData = InvObject [rezTestPrim1]}], 
       _primPosition = (0,0,0),
       _primName = "test name", _primDescription = "test description",
       _primPermissions = [0x0008e000, 0x0008e000, 0x0008c000, 0x00080000, 0x00082000] }
       
-rezTestPrim1 = (emptyPrim "invPim" pk2)
-    { _primOwner = av, _primInventory = [scriptInventoryItem "script" s2 "script2"], _primPosition = (0,0,0),
+rezTestPrim1 = (emptyPrim "invPim" $ LSLKey pk2)
+    { _primOwner = LSLKey av, _primInventory = [scriptInventoryItem "script" (LSLKey s2) "script2"], _primPosition = (0,0,0),
       _primPermissions = [0x0008e000, 0x0008e000, 0x0008c000, 0x00080000, 0x00082000] }
     
 webhandler = [$lslm|
@@ -108,27 +105,45 @@ abstractWorld = FullWorldDef {
     fullWorldDefWebHandling = WebHandlingByDoingNothing,
     fullWorldDefObjects = undefined,
     fullWorldDefPrims = undefined,
-    fullWorldDefAvatars = [(defaultAvatar av) { _avatarEventHandler = Just ("avEventHandler",[])}],
-    fullWorldDefRegions = defaultRegions av,
+    fullWorldDefAvatars = [(defaultAvatar $ LSLKey av) { _avatarEventHandler = Just ("avEventHandler",[])}],
+    fullWorldDefRegions = defaultRegions $ LSLKey av,
     fullWorldDefInitialKeyIndex = 10,
     fullWorldDefEventHandler = Nothing
     }
     
-simpleWorld = abstractWorld { fullWorldDefObjects = [LSLObject [pk1] defaultDynamics { _objectPosition = (128,128,0) }], fullWorldDefPrims = [prim1] }
+simpleWorld = abstractWorld {
+    fullWorldDefObjects = [LSLObject [LSLKey pk1] defaultDynamics { _objectPosition = (128,128,0) }],
+    fullWorldDefPrims = [prim1] }
     
-lessSimpleWorld = abstractWorld { fullWorldDefObjects = [LSLObject [pk1,pk2] defaultDynamics { _objectPosition = (128,128,0) }], fullWorldDefPrims = [prim1,prim2] }
+lessSimpleWorld = abstractWorld {
+    fullWorldDefObjects = [LSLObject [LSLKey pk1,LSLKey pk2] defaultDynamics { _objectPosition = (128,128,0) }], 
+    fullWorldDefPrims = [prim1,prim2] }
 
-physicsWorld1 = abstractWorld { fullWorldDefObjects = [LSLObject [pk1] defaultDynamics { _objectPosition = (128,128,0) }], fullWorldDefPrims = [primHigh] }
-physicsWorld2 = abstractWorld { fullWorldDefObjects = [LSLObject [pk1] defaultDynamics { _objectPosition = (128,128,5) }], fullWorldDefPrims = [primHigh] }
-collisionWorld1 = abstractWorld { fullWorldDefObjects = [LSLObject [pk1] defaultDynamics { _objectPosition = (128,128,0) }, LSLObject [pk2] defaultDynamics { _objectPosition = (128.5,128.5,0) }], fullWorldDefPrims = [primHigh,prim2 { _primPosition = (0,0,0)}] }
-anotherWorld = abstractWorld { fullWorldDefObjects = [LSLObject [pk1] defaultDynamics { _objectPosition = (128,128,0) }, LSLObject [pk2] defaultDynamics { _objectPosition = (128.5,128.5,0) }], fullWorldDefPrims = [prim1A,prim2] }
+physicsWorld1 = abstractWorld { 
+    fullWorldDefObjects = [LSLObject [LSLKey pk1] defaultDynamics { _objectPosition = (128,128,0) }], 
+    fullWorldDefPrims = [primHigh] }
+physicsWorld2 = abstractWorld { 
+    fullWorldDefObjects = [LSLObject [LSLKey pk1] defaultDynamics { _objectPosition = (128,128,5) }], 
+    fullWorldDefPrims = [primHigh] }
+collisionWorld1 = abstractWorld { 
+    fullWorldDefObjects = [
+        LSLObject [LSLKey pk1] defaultDynamics { _objectPosition = (128,128,0) },
+        LSLObject [LSLKey pk2] defaultDynamics { _objectPosition = (128.5,128.5,0) }], 
+    fullWorldDefPrims = [primHigh,prim2 { _primPosition = (0,0,0)}] }
+anotherWorld = abstractWorld { 
+    fullWorldDefObjects = [
+        LSLObject [LSLKey pk1] defaultDynamics { _objectPosition = (128,128,0) }, 
+        LSLObject [LSLKey pk2] defaultDynamics { _objectPosition = (128.5,128.5,0) }],
+    fullWorldDefPrims = [prim1A,prim2] }
 
 rezTestWorld = abstractWorld {
    fullWorldDefMaxTime = 300, fullWorldDefSliceSize = 300,
-   fullWorldDefObjects = [LSLObject [pk1] defaultDynamics],
+   fullWorldDefObjects = [LSLObject [LSLKey pk1] defaultDynamics],
    fullWorldDefPrims = [rezTestPrim0] }
 
-sensorTestWorld = abstractWorld { fullWorldDefObjects = map (flip LSLObject defaultDynamics) [[pk1],[pk2]], fullWorldDefPrims = [prim1,emptyPrim2] }
+sensorTestWorld = abstractWorld { 
+    fullWorldDefObjects = map (flip LSLObject defaultDynamics) [[LSLKey pk1],[LSLKey pk2]],
+    fullWorldDefPrims = [prim1,emptyPrim2] }
     
 runRezTestWorld s0 s1 = return $ simStep (Left(rezTestWorld,[("script",compileLSLScript' [] s0),
                                                              ("script2",compileLSLScript' [] s1)],[])) (SimContinue [] [])
@@ -662,7 +677,7 @@ attachDetachScript = [$lsl|
     }|]
     
 attachDetachTest = mkTest "Attach/Detach Test" $ chatRun [attachDetachScript] 
-    ["perm = 32", "id = " ++ av, "attached = 1", "id = " ++ nullKey, "detached"]
+    ["perm = 32", "id = " ++ av, "attached = 1", "id = " ++ unLslKey nullKey, "detached"]
 
 massScript = [$lsl|
     default{
@@ -755,7 +770,7 @@ condRotScript2 = [$lsl|
 
 condTests = TestList [
         mkTest "Condition Test 1" $ chatRun [condKeyScript av] ["yes"],
-        mkTest "Condition Test 2" $ chatRun [condKeyScript nullKey] ["no"],
+        mkTest "Condition Test 2" $ chatRun [condKeyScript $ unLslKey nullKey] ["no"],
         mkTest "Condition Test 3" $ chatRun [condKeyScript "12312312-23123"] ["no"],
         mkTest "Condition Test 4" $ chatRun [condStringScript "hi"] ["yes"],
         mkTest "Condition Test 5" $ chatRun [condStringScript ""] ["no"],
@@ -1093,7 +1108,8 @@ wildRegressScript1 = [$lsl|
         }
     }|]
 
-wildRegressTest1 = mkTest "wild regress 1" $ ((chatRun [wildRegressScript1] ["request key: " ++ initialKey,"got data for " ++ initialKey]))
+wildRegressTest1 = mkTest "wild regress 1" $ ((chatRun [wildRegressScript1] 
+    ["request key: " ++ unLslKey initialKey,"got data for " ++ unLslKey initialKey]))
 negIndexScript = [$lsl|
     default {
         state_entry() {
