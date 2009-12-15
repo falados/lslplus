@@ -47,7 +47,7 @@ import Control.Monad.Error(MonadError)
 import Data.Data(Data,Typeable)
 import Data.List(intersperse)
 import Language.Lsl.Internal.NumberParsing(readInt,readHexFloat)
-import Language.Lsl.Internal.Key(nullKey)
+import Language.Lsl.Internal.Key(nullKey,LSLKey(..))
 import Language.Lsl.Internal.Util(lookupM,readM,cross,quaternionMultiply,quaternionToMatrix,fromInt)
 import Language.Lsl.Internal.DOMProcessing(req,choicet,text,elist,val)
      --(Element(..),ElemAcceptor(..),findValue,elementsOnly,simple,attrString,acceptList)
@@ -60,7 +60,7 @@ data LSLType = LLList | LLInteger | LLVector | LLFloat | LLString | LLRot | LLKe
 -- A value.  Values correspond to the built in types (LSLType) that LSL
 -- supports.  A value is an item that can be pushed onto the value stack.
 data LSLValue a = IVal Int | FVal a | SVal String | VVal a a a 
-               | RVal a a a a | LVal [LSLValue a] | KVal String
+               | RVal a a a a | LVal [LSLValue a] | KVal LSLKey
                | VoidVal deriving (Show,Eq,Ord)
 
 data Component = X | Y | Z | S | All deriving (Eq,Show, Typeable, Data)
@@ -122,7 +122,7 @@ typeOfLSLComponent v c = error ("value " ++ (show v) ++ " doesn't have a subcomp
 lslValString (IVal i) = (show i)
 lslValString (FVal f) = (printf "%.6f" ((realToFrac f) :: Double))
 lslValString (SVal s) = s
-lslValString (KVal k) = k
+lslValString (KVal k) = unLslKey k
 lslValString (VVal x y z) = concat ["<",comp2Str x,",",comp2Str y,",",comp2Str z,">"]
 lslValString (RVal x y z s) = concat ["<",comp2Str x,",",comp2Str y,",",comp2Str z,",",comp2Str s,">"]
 lslValString (LVal l) = concat ("[":(intersperse "," (map lslValString l) ++ ["]"]))
@@ -136,7 +136,7 @@ lslShowVal (SVal s) = ('\"':escape s) ++ "\""
           escape ('\t':cs) = '\\':'t':(escape cs) -- this one shouldn't happen (tabs should get converted to spaces)
           escape (c:cs) = c:(escape cs)
           escape [] = []
-lslShowVal (KVal k) = lslShowVal (SVal k)
+lslShowVal (KVal k) = lslShowVal (SVal $ unLslKey k)
 lslShowVal (LVal l) = concat ("[":(intersperse "," (map lslShowVal l))) ++ "]"
 lslShowVal VoidVal = "n/a"
 lslShowVal v = lslValString v
@@ -207,7 +207,7 @@ toSVal :: RealFloat a => LSLValue a -> LSLValue a
 toSVal (SVal s) = SVal s
 toSVal (FVal f) = SVal (printf "%.6f" (realToFrac f :: Double))
 toSVal (IVal i) = SVal (show i)
-toSVal (KVal k) = SVal k
+toSVal (KVal k) = SVal $ unLslKey k
 toSVal (VVal x y z) = SVal $ concat ["<",comp2Str x,",",comp2Str y,",",comp2Str z,">"]
 toSVal (RVal x y z s) = SVal $ concat ["<",comp2Str x,",",comp2Str y,",",comp2Str z,",",comp2Str s,">"]
 toSVal VoidVal = SVal "" -- perhaps should be error
@@ -220,7 +220,7 @@ comp2Str f = printf "%.5f" (realToFrac f :: Double)
 
 lslValueE = choicet [
     ("string",SVal <$> text),
-    ("key",KVal <$> text),
+    ("key",KVal . LSLKey <$> text),
     ("int",IVal <$> val),
     ("float",FVal <$> val),
     ("vector",VVal <$> req "x" val <*> req "y" val <*> req "z" val),
@@ -257,8 +257,8 @@ rVal2Rot (RVal x y z s) = (x,y,z,s)
 convertValues argTypes args = zipWith convertArg argTypes args
     where convertArg LLFloat (IVal i) = FVal $ fromInt i
           convertArg LLInteger (FVal f) = IVal $ floor f
-          convertArg LLKey (SVal s) = KVal s
-          convertArg LLString (KVal k) = SVal k
+          convertArg LLKey (SVal s) = KVal $ LSLKey s
+          convertArg LLString (KVal k) = SVal $ unLslKey k
           convertArg _ v = v
 
 lslBool b = if b then 1 else 0

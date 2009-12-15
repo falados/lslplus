@@ -2,6 +2,7 @@ module Language.Lsl.Internal.ExecInfo(emitExecutionInfo) where
 
 import Language.Lsl.Internal.Exec(ExecutionInfo(..),FrameInfo(..))
 import Language.Lsl.Syntax(SourceContext(..),TextLocation(..))
+import Language.Lsl.Internal.Key(LSLKey(..))
 import Language.Lsl.Internal.Type(LSLValue(..))
 import Language.Lsl.Internal.XmlCreate(emit,emitSimple)
 
@@ -35,7 +36,7 @@ emitVal' t s = emitSimple "val" [("class",t)] s
 emitVal (IVal i) = emitVal' "integer-value" (show i)
 emitVal (FVal f) = emitVal' "float-value" (show f)
 emitVal (SVal s) = emitVal' "string-value" s
-emitVal (KVal s) = emitVal' "key-value" s
+emitVal (KVal k) = emitVal' "key-value" (unLslKey k)
 emitVal (VVal x y z) = 
     emit "val" [("class","vector-value")] 
         [emitSimple "x" [] (show x),

@@ -92,7 +92,7 @@ import Data.Record.LabelExtras
 
 import Language.Lsl.Internal.Evaluation(Event(..))
 import Language.Lsl.Internal.Exec(hasActiveHandler)
-import Language.Lsl.Internal.Key(mkKey)
+import Language.Lsl.Internal.Key(mkKey,LSLKey(..),nullKey)
 import Language.Lsl.Internal.Log(LogMessage(..),LogLevel(..))
 import Language.Lsl.Internal.Type(LSLValue(..),vec2VVal)
 import Language.Lsl.Internal.Util(lookupByIndex)
@@ -150,18 +150,18 @@ getPrimLinkNum pk = do
 -- TODO: temp until introduce region into Prim definition
 getPrimRegion _ = return (0 :: Int, 0 :: Int)
 
-getPos pkey = runErrPrim pkey(VVal 0.0 0.0 0.0) 
+getPos pkey = runErrPrim pkey (VVal 0.0 0.0 0.0) 
     (vec2VVal <$> (getRootPrim pkey >>= getObjectPosition))
 
 runErrFace k i defaultVal = runAndLogIfErr 
-    ("face " ++ (show i) ++ " or prim " ++ k ++ " not found") defaultVal
+    ("face " ++ (show i) ++ " or prim " ++ unLslKey k ++ " not found") defaultVal
 
 getPrimFaceAlpha k i = getM (faceAlpha.lli i.primFaces.wprim k)
 getPrimFaceColor k i = getM (faceColor.lli i.primFaces.wprim k)
 getPrimFaceTextureInfo k i = getM (faceTextureInfo.lli i.primFaces.wprim k)
 
 runErrPrim k defaultVal = 
-    runAndLogIfErr ("prim " ++ k ++ " not found") defaultVal
+    runAndLogIfErr ("prim " ++ unLslKey k ++ " not found") defaultVal
 
 setPrimInventory k v = primInventory.wprim k =: v
 
@@ -229,7 +229,7 @@ logTrace source s = do
     tick <- getM tick
     msglog `modM_` (LogMessage tick LogTrace source s:)
               
-newKey :: Monad m => WorldE m  String
+newKey :: Monad m => WorldE m LSLKey
 newKey = mkKey <$> (worldKeyIndex `modM` (+1))
     
 findAsset _ = return Nothing
@@ -238,7 +238,7 @@ isSoundAsset _ = False
 
 findTextureAsset "" = mzero
 findTextureAsset _ = return $ 
-    InventoryItem (InventoryItemIdentification ("","")) undefined undefined
+    InventoryItem (InventoryItemIdentification ("",nullKey)) undefined undefined
 
 primHasActiveHandler pk handler = do
     scripts <- getPrimScripts pk

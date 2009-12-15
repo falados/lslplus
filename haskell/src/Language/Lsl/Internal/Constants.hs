@@ -2,6 +2,7 @@
 module Language.Lsl.Internal.Constants where
 
 import Data.Bits((.|.),shiftL)
+import Language.Lsl.Internal.Key(LSLKey(..))
 import Language.Lsl.Internal.Type(LSLValue(..),typeOfLSLValue)
 import Language.Lsl.Internal.Util(findM)
 
@@ -521,10 +522,10 @@ allConstants = [
     Constant "STRING_TRIM" (IVal 0x03),
     Constant "STRING_TRIM_HEAD" (IVal 0x01),
     Constant "STRING_TRIM_TAIL" (IVal 0x02),
-    Constant "TEXTURE_BLANK" (KVal "5748decc-f629-461c-9a36-a35a221fe21f"),
-    Constant "TEXTURE_DEFAULT" (KVal "8b5fec65-8d8d-9dc5-cda8-8fdf2716e361"),
-    Constant "TEXTURE_PLYWOOD" (KVal "89556747-24cb-43ed-920b-47caed15465f"),
-    Constant "TEXTURE_TRANSPARENT" (KVal "59facb66-4a72-40a2-815c-7d9b42c56f60"),
+    Constant "TEXTURE_BLANK" (KVal $ LSLKey "5748decc-f629-461c-9a36-a35a221fe21f"),
+    Constant "TEXTURE_DEFAULT" (KVal $ LSLKey "8b5fec65-8d8d-9dc5-cda8-8fdf2716e361"),
+    Constant "TEXTURE_PLYWOOD" (KVal $ LSLKey "89556747-24cb-43ed-920b-47caed15465f"),
+    Constant "TEXTURE_TRANSPARENT" (KVal $ LSLKey "59facb66-4a72-40a2-815c-7d9b42c56f60"),
     Constant "TOUCH_INVALID_VECTOR" (VVal 0 0 0),
     Constant "TRUE" (IVal 1),
     Constant "TWO_PI" (FVal 6.28318548),

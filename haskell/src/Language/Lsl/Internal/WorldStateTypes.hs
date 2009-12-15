@@ -22,6 +22,7 @@ import qualified Data.Set as S
 import qualified Language.Lsl.Internal.AvEvents as AvEvent
 import Language.Lsl.Internal.Breakpoint(BreakpointManager(..))
 import Language.Lsl.Internal.Evaluation(Event(..),ScriptInfo(..),EvalResult(..))
+import Language.Lsl.Internal.Key(LSLKey(..))
 import Language.Lsl.Internal.Log(LogMessage(..),LogLevel(..))
 import Language.Lsl.Syntax(Validity,LModule(..),CompiledLSLScript(..))
 import Language.Lsl.Internal.Type(LSLValue(..),LSLType(..))
@@ -37,8 +38,8 @@ type WorldEvent = (Int,WorldEventType) -- time, event
 type WorldEventQueue = [WorldEvent]
 
 data WorldEventType = 
-          CreatePrim { wePrimName :: String, wePrimKey :: String }
-        | AddScript (String,String) String Bool -- script, prim key, activate
+          CreatePrim { wePrimName :: String, wePrimKey :: LSLKey }
+        | AddScript (String,String) LSLKey Bool -- script, prim key, activate
         | ResetScript String String -- prim key, script name
         | ResetScripts String -- object name
         | WorldSimEvent {
@@ -50,34 +51,34 @@ data WorldEventType =
         | Chat { 
             chatChannel :: Int,
             chatterName :: String,
-            chatterKey :: String,
+            chatterKey :: LSLKey,
             chatMessage :: String,
             chatLocation :: ((Int,Int),(Float,Float,Float)),
             chatRange :: Maybe Float }
         | TimerEvent { 
             timerEventInterval :: Float,
-            timerAddress :: (String,String) }
+            timerAddress :: (LSLKey,String) }
         | PermissionRequestEvent {
-            permissionRequestPrim :: String,
+            permissionRequestPrim :: LSLKey,
             permissionRequestScript :: String,
-            permissionRequestAgent :: String,
+            permissionRequestAgent :: LSLKey,
             permissionRequestMask :: Int }
         | SensorEvent { 
-            sensorAddress :: (String,String),
+            sensorAddress :: (LSLKey,String),
             sensorSenseName :: String,
-            sensorSenseKey :: String,
+            sensorSenseKey :: LSLKey,
             sensorSenseType :: Int,
             sensorSenseRange :: Float,
             sensorSenseArc :: Float,
             sensorRepeat :: Maybe Float }
         | XMLRequestEvent {
             xmlRequestSource :: XMLRequestSourceType,
-            xmlRequestChannel :: String,
+            xmlRequestChannel :: LSLKey,
             xmlRequestIData :: Int,
             xmlRequestSData :: String }
         | HTTPRequestEvent {
-            httpRequestSource :: (String,String),
-            httpRequestKey :: String,
+            httpRequestSource :: (LSLKey,String),
+            httpRequestKey :: LSLKey,
             httpRequestURL :: String,
             httpRequestMethod :: String,
             httpRequestMimetype :: String,
@@ -85,41 +86,41 @@ data WorldEventType =
             httpRequestVerifyCert :: Int,
             httpRequestBody :: String }
         | XMLReplyEvent {
-            xmlRequestKey :: String,
-            xmlRequestChannel :: String,
-            xmlRequestMessageId :: String,
+            xmlRequestKey :: LSLKey,
+            xmlRequestChannel :: LSLKey,
+            xmlRequestMessageId :: LSLKey,
             xmlRequestSData :: String,
             xmlRequestIData :: Int }
         | DialogEvent {
-            dialogAgent :: String,
+            dialogAgent :: LSLKey,
             dialogMessage :: String,
             dialogButtons :: [String],
             dialogChannel :: Int,
-            dialogSourceObject :: String }
+            dialogSourceObject :: LSLKey }
         | RezObjectEvent {
             rezObjectLinkSet :: [Prim],
             rezObjectPos :: (Float,Float,Float),
             rezObjectVel :: (Float,Float,Float),
             rezObjectRot :: (Float,Float,Float,Float),
             rezObjectStartParam :: Int,
-            rezObjectRezzer :: String,
+            rezObjectRezzer :: LSLKey,
             rezObjectCopy :: Bool,
             rezObjectAtRoot :: Bool }
         | ResetScriptEvent {
-            resetScriptPrimKey :: String,
+            resetScriptPrimKey :: LSLKey,
             resetScriptScriptName :: String }
         | DetachCompleteEvent {
-            detachObject :: String,
-            detachAvatar :: String }
+            detachObject :: LSLKey,
+            detachAvatar :: LSLKey }
         | GiveAvatarInventoryEvent { 
-            giveAvatarInventoryKey :: String,
+            giveAvatarInventoryKey :: LSLKey,
             giveAvatarInventoryFolder :: String, -- null if none
             giveAvatarInventoryItems :: [InventoryItem] }
         | AvatarOutputEvent {
-            avatarOutputEventKey :: String,
+            avatarOutputEventKey :: LSLKey,
             avatarOutputEventVal :: AvEvent.AvatarOutputEvent }
         | AvatarInputEvent {
-            avatarInputEventKey :: String,
+            avatarInputEventKey :: LSLKey,
             avatarInputEventVal :: AvEvent.AvatarInputEvent }
     deriving (Show)
 
@@ -129,17 +130,17 @@ data XMLRequestSourceType = XMLRequestInternal { xmlRequestTag :: String }
 
 data DeferredScriptEventTarget = 
       -- pushes to a specific script in a prim
-      DeferredScriptEventScriptTarget (String,String)
+      DeferredScriptEventScriptTarget (LSLKey,String)
       -- pushes to all scripts in prim
-    | DeferredScriptEventPrimTarget String
+    | DeferredScriptEventPrimTarget LSLKey
       -- pushes to all scripts in all prims in object
-    | DeferredScriptEventObjectTarget String
+    | DeferredScriptEventObjectTarget LSLKey
     deriving (Show)
     
 
 data Touch = Touch {
-    touchAvatarKey :: String , 
-    touchPrimKey :: String, 
+    touchAvatarKey :: LSLKey, 
+    touchPrimKey :: LSLKey, 
     touchFace :: Int, 
     touchST :: (Float,Float), 
     touchStartTick :: Int, 
@@ -152,11 +153,11 @@ data SimEventArg = SimEventArg { simEventArgName :: String, simEventArgValue :: 
     deriving (Show)
     
 data Listener = Listener {
-    listenerPrimKey :: String,
+    listenerPrimKey :: LSLKey,
     listenerScriptName :: String,
     listenerChannel :: Int,
     listenerName :: String,
-    listenerKey :: String,
+    listenerKey :: LSLKey,
     listenerMsg :: String }
     deriving (Show)
     
@@ -201,9 +202,9 @@ data World m = World {
         _wqueue :: !WorldEventQueue,
         _wlisteners :: !(IM.IntMap (Listener,Bool)),
         _nextListenerId :: !Int,
-        _wobjects :: !(Map String LSLObject),
-        _wprims :: !(Map String Prim),
-        _worldScripts :: !(Map (String,String) Script), 
+        _wobjects :: !(Map LSLKey LSLObject),
+        _wprims :: !(Map LSLKey Prim),
+        _worldScripts :: !(Map (LSLKey,String) Script), 
         _inventory :: ![(String,LSLObject)],
         _tick :: !Int,
         _msglog :: ![LogMessage],
@@ -212,23 +213,23 @@ data World m = World {
         _wlibrary :: ![(String,Validity LModule)],
         _wscripts :: ![(String,Validity CompiledLSLScript)],
         _worldEventHandler :: !(Maybe (String, [(String,LSLValue Float)])),
-        _worldAvatars :: !(Map String Avatar),
+        _worldAvatars :: !(Map LSLKey Avatar),
         _worldBreakpointManager :: !BreakpointManager,
-        _worldSuspended :: !(Maybe (String,String)), -- prim-key, script-name, image
+        _worldSuspended :: !(Maybe (LSLKey,String)), -- prim-key, script-name, image
         _worldRegions :: !(Map (Int,Int) Region),
         _worldZeroTime :: !Int,
         _worldKeyIndex :: !Integer,
         _worldWebHandling :: !WebHandling,
         _worldOutputQueue :: ![SimEvent],
-        _worldPendingHTTPRequests :: ![String],
-        _worldOpenDataChannels :: !(Map String (String,String),Map (String,String) String),
-        _worldXMLRequestRegistry :: !(Map String XMLRequestSourceType),
+        _worldPendingHTTPRequests :: ![LSLKey],
+        _worldOpenDataChannels :: !(Map LSLKey (LSLKey,String),Map (LSLKey,String) LSLKey),
+        _worldXMLRequestRegistry :: !(Map LSLKey XMLRequestSourceType),
         _worldPhysicsTime :: !Int,
         _worldTargetCheckTime :: !Int,
-        _worldLastPositions :: !(Map String (Bool,(Float,Float,Float))),
-        _worldCollisions :: !(S.Set (String,String)),
-        _worldLandCollisions :: !(S.Set String),
-        _worldTouches :: !(Map String [Touch]),
+        _worldLastPositions :: !(Map LSLKey (Bool,(Float,Float,Float))),
+        _worldCollisions :: !(S.Set (LSLKey,LSLKey)),
+        _worldLandCollisions :: !(S.Set LSLKey),
+        _worldTouches :: !(Map LSLKey [Touch]),
         _worldTouchCheckTime :: !Int
     } deriving (Show)
 

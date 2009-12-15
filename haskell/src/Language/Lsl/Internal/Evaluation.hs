@@ -4,14 +4,15 @@ module Language.Lsl.Internal.Evaluation(
     Event(..)) where
     
 import Data.Map(Map)
+import Language.Lsl.Internal.Key(LSLKey(..))
 import Language.Lsl.Internal.Type(LSLValue)
 import Language.Lsl.Internal.Breakpoint(Breakpoint)
 
 --type ScriptInfo = (String,Int,String,String) -- (object id, prim index, script name, prim key)
-data ScriptInfo a = ScriptInfo { scriptInfoObjectKey :: String, 
+data ScriptInfo a = ScriptInfo { scriptInfoObjectKey :: LSLKey, 
                                  scriptInfoPrimIndex :: Int,
                                  scriptInfoScriptName :: String,
-                                 scriptInfoPrimKey :: String,
+                                 scriptInfoPrimKey :: LSLKey,
                                  scriptInfoCurrentEvent :: Maybe (Event a) }
     deriving (Show)
     

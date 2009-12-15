@@ -53,7 +53,7 @@ import Language.Lsl.Internal.Exec(ExecutionState(..),ScriptImage(..),hardReset,
     initLSLScript)
 import Language.Lsl.Internal.FuncSigs(funcSigs)
 import Language.Lsl.Internal.InternalLLFuncs(internalLLFuncs)
-import Language.Lsl.Internal.Key(nullKey)
+import Language.Lsl.Internal.Key(nullKey,LSLKey(..))
 import Language.Lsl.Internal.Log(LogLevel(..))
 import Language.Lsl.Internal.Physics(calcAccel,primMassApprox)
 import Language.Lsl.Syntax(Ctx(..),FuncDec(..),predefFuncs)
@@ -88,7 +88,7 @@ infixl 1 <<=
 -- some logging functions
 slog :: Monad m => ScriptInfo Float -> String -> WorldE m ()
 slog = logAMessage LogInfo . infoToLogSource
-    where infoToLogSource info = scriptInfoPrimKey info ++ ": " ++ scriptInfoScriptName info
+    where infoToLogSource info = unLslKey (scriptInfoPrimKey info) ++ ": " ++ scriptInfoScriptName info
 
 -- execute a predefined ('ll') function
 doPredef :: Monad m => String -> ScriptInfo Float -> [LSLValue Float] -> WorldE m (EvalResult,LSLValue Float)
@@ -97,7 +97,7 @@ doPredef name info@(ScriptInfo oid pid sid pkey event) args =
     where runIt (t,f) = runErrFunc info name (defaultValue t) args f
           doDefault = do
                (_,rettype,argtypes) <- findM (\ (x,y,z) -> x == name) funcSigs
-               logAMessage LogDebug (pkey ++ ":" ++ sid) 
+               logAMessage LogDebug (unLslKey pkey ++ ":" ++ sid) 
                    ("unimplemented predefined function called: " ++ 
                    renderCall name args)
                continueWith $ defaultValue rettype
@@ -168,7 +168,7 @@ llRequestAgentData info@(ScriptInfo _ _ sn pk _) [KVal ak, IVal d] =
        av <- optional $ getM $ wav ak
        dataVal <- case av of
            Nothing -> do
-               slog info ("llRequestAgentData: no such avatar - " ++ ak)
+               slog info ("llRequestAgentData: no such avatar - " ++ unLslKey ak)
                return "0"
            Just av -> case d of
                 d | d == cDataBorn -> return "2006-01-01"
@@ -227,7 +227,7 @@ llGetInventoryCreator info@(ScriptInfo _ _ _ pk _) [SVal name] =
             Nothing -> putChat sayRange pk 0 ("no item named '" ++ name ++ "'")
                >> return nullKey
             Just item -> 
-                return $ inventoryInfoCreator $ inventoryItemInfo  item
+                return $ inventoryInfoCreator $ inventoryItemInfo item
 
 llGetInventoryPermMask info@(ScriptInfo _ _ _ pk _) [SVal name, IVal mask] =
     do  all <- getPrimInventory pk
@@ -301,9 +301,9 @@ giveInventory info@(ScriptInfo _ _ _ pk _) k folder itemNames = void $ do
     unless (null items) $ case prim of
         Nothing -> do
             items' <- checkXfers srcOwner k items
-            av <- (getM $ wav k) <||> throwError ("no object or avatar found with key " ++ k)
+            av <- (getM $ wav k) <||> throwError ("no object or avatar found with key " ++ unLslKey k)
             putWorldEvent 0 (GiveAvatarInventoryEvent k "" items') >>
-               slog info ("llGiveInventory: avatar " ++ k ++ " given option of accepting inventory")
+               slog info ("llGiveInventory: avatar " ++ unLslKey k ++ " given option of accepting inventory")
         Just p -> do
             owner:*group <- getM $ (primOwner.*primGroup).wprim pk
             items' <- checkXfers srcOwner owner items
@@ -525,7 +525,7 @@ llShout = chat (Just 100.0)
 llRegionSay info params@[IVal chan, SVal message] =
     if chan == 0
        then void $ logAMessage LogWarn 
-           (scriptInfoPrimKey info ++ ": " ++ scriptInfoScriptName info)
+           (unLslKey (scriptInfoPrimKey info) ++ ": " ++ scriptInfoScriptName info)
            "attempt to llRegionSay on channel 0"
        else chat Nothing info params
        
@@ -546,7 +546,7 @@ putChat range k chan message = do
             case mav of
                 Just avatar -> putWorldEvent 0 $ 
                     Chat chan (getI avatarName avatar) k message (getI avatarRegion avatar, getI avatarPosition avatar) range
-                Nothing -> logAMessage LogWarn "sim" ("Trying to chat from unknown object/avatar with key " ++ k)
+                Nothing -> logAMessage LogWarn "sim" ("Trying to chat from unknown object/avatar with key " ++ unLslKey k)
 
 slogChat info chan msg =
     slog info $ concat ["chan = ", show chan, ", message = ", msg]
@@ -587,7 +587,7 @@ llTeleportAgentHome info@(ScriptInfo _ _ _ pk _) [KVal ak] = void $ do
     regionIndex <- getPrimRegion pk
     (_,_,parcel) <- getPrimParcel pk
     if parcelOwner parcel == owner
-        then slog info ("llTeleportAgentHome: user " ++ ak ++ " teleported home (in theory)")
+        then slog info ("llTeleportAgentHome: user " ++ unLslKey ak ++ " teleported home (in theory)")
         else slog info "llTeleportAgentHome: not permitted to teleport agents from this parcel"
         
 llEjectFromLand info@(ScriptInfo oid _ _ pk _) [KVal user] = void $ do
@@ -595,7 +595,7 @@ llEjectFromLand info@(ScriptInfo oid _ _ pk _) [KVal user] = void $ do
     regionIndex <- getPrimRegion pk
     (_,parcel) <- getParcelByPosition regionIndex =<< getObjectPosition oid
     if parcelOwner parcel == owner 
-        then slog info ("llEjectFromLand: user " ++ user ++ " ejected (in theory)")
+        then slog info ("llEjectFromLand: user " ++ unLslKey user ++ " ejected (in theory)")
         else slog info "llEjectFromLand: not permitted to eject from this parcel"
     
 llBreakLink info@(ScriptInfo oid _ sid pk _) [IVal link] = 
@@ -710,7 +710,7 @@ llGiveMoney info@(ScriptInfo _ _ sn pk _) [KVal ak, IVal amount] = do
     permKey <- maybe (throwError "no permission") return lastPerm
     perm <- mlookup permKey perms
     when (perm .&. cPermissionAttach == 0) $ throwError "no permission"
-    slog info ("llGiveMoney: pretending to give " ++ show amount ++ " to avatar with key " ++ ak)
+    slog info ("llGiveMoney: pretending to give " ++ show amount ++ " to avatar with key " ++ unLslKey ak)
     continueI 0
     
 llGetPermissionsKey (ScriptInfo _ _ sid pk _) [] =
@@ -733,7 +733,7 @@ getPermittedAvKey info@(ScriptInfo _ _ s pk _) fname perm = do
                    | otherwise -> return Nothing 
                    
 llRequestPermissions (ScriptInfo _ _ sid pk _) [KVal k, IVal mask] = void $
-    maybe (logAMessage LogInfo (pk ++ ":" ++ sid) ("Invalid permissions request: no such avatar: " ++ k))
+    maybe (logAMessage LogInfo (unLslKey pk ++ ":" ++ sid) ("Invalid permissions request: no such avatar: " ++ unLslKey k))
        (const $ putWorldEvent 0 (PermissionRequestEvent pk sid k mask)) =<< (optional $ getM $ wav k)
 
 llClearCameraParams info@(ScriptInfo _ _ sid pk _) [] = void $ 
@@ -807,8 +807,8 @@ llGetOwner info [] =
 llGetCreator info [] =
     let k = scriptInfoPrimKey info in getM (primCreator.wprim k) >>= continueK
 llSameGroup info@(ScriptInfo _ _ _ pk _) [KVal k] =
-    do  group <- avGroup <||> getM (primGroup.wprim k) <||> throwError ("no such object or avatar: " ++ k)
-        myGroup <- getM (primGroup.wprim pk) <||> throwError ("can't find " ++ pk)
+    do  group <- avGroup <||> getM (primGroup.wprim k) <||> throwError ("no such object or avatar: " ++ unLslKey k)
+        myGroup <- getM (primGroup.wprim pk) <||> throwError ("can't find " ++ unLslKey pk)
         continueI (lslBool (group == myGroup))
     where avGroup = getM $ avatarActiveGroup.wav k
 
@@ -974,7 +974,7 @@ llStopHover info@(ScriptInfo { scriptInfoObjectKey = oid }) [] = do
     continueV
     
 runFace k i action = action <||> 
-    throwError ("face " ++ show i ++ " or prim " ++ k ++ " not found")
+    throwError ("face " ++ show i ++ " or prim " ++ unLslKey k ++ " not found")
 
 llGetAlpha (ScriptInfo _ _ _ pkey _) [IVal side] =
     computeAlpha >>= continueF
@@ -1004,7 +1004,7 @@ llSetLinkAlpha (ScriptInfo oid pid _ _ _) [IVal link, FVal alpha, IVal face] = d
 
 getTargetPrimKeys oid link pid = do
     prims <-  
-        (runAndLogIfErr ("can't find object " ++ oid) [] $ getM $ primKeys.lm oid.wobjects)
+        (runAndLogIfErr ("can't find object " ++ unLslKey oid) [] $ getM $ primKeys.lm oid.wobjects)
     let targetList = targetLinks (length prims) link pid
     mapM (flip lookupByIndex prims) targetList
     
@@ -1057,7 +1057,7 @@ llGetTexture (ScriptInfo _ _ _ pkey _) [IVal face] =
             invTextures <- getPrimTextures pkey
             let tKey = getI textureKey info
             case findByInvKey tKey invTextures of
-                 Nothing -> return tKey
+                 Nothing -> return $ unLslKey tKey
                  Just item -> return $ inventoryItemName item) >>= continueS
                  
 llSetLinkTexture (ScriptInfo oid pid _ pk _) [IVal link, SVal texture,IVal face] = do
@@ -1249,7 +1249,7 @@ queryPrimColor side = queryFaceVals colorAlpha side
 queryPrimTexture side = queryFaceVals textureInfo side
     where textureInfo face = 
               let tinfo = getI faceTextureInfo face in map ($ tinfo) 
-                      [SVal . getI textureKey,vec2VVal . getI textureRepeats,
+                      [SVal . unLslKey . getI textureKey,vec2VVal . getI textureRepeats,
                        vec2VVal . getI textureOffsets,
                        FVal . getI textureRotation]
 queryPrimTexgen = queryFaceVals (return . IVal . getI faceTextureMode)
@@ -1404,7 +1404,7 @@ updatePrimTexture pk params =
             return (face,[name,repeats,offsets,rotation],rest)
         extract _ = badParms "PRIM_TEXTURE"
         update [SVal name,repeats,offsets,FVal rotation] =
-            setI faceTextureInfo (TextureInfo name (vVal2Vec repeats) (vVal2Vec offsets) rotation)
+            setI faceTextureInfo (TextureInfo (LSLKey name) (vVal2Vec repeats) (vVal2Vec offsets) rotation)
     in updatePrimFaceParams pk params extract update
 updatePrimTexgen pk params =
     let extract (IVal face:IVal mode:rest) = return (face,[IVal mode],rest)
@@ -1560,7 +1560,7 @@ whenParcelPermitted info pk action= do
         
 addToLandACLList aclType aclFromParcel aclIntoParcel info@(ScriptInfo _ _ _ pk _) [KVal ak,FVal duration] = do
     whenParcelPermitted info pk $ \ regionIndex parcelIndex parcel ->
-        runAndLogIfErr ("attempt to change " ++ aclType ++ " unknown avatar " ++ ak) parcel $ do
+        runAndLogIfErr ("attempt to change " ++ aclType ++ " unknown avatar " ++ unLslKey ak) parcel $ do
             getM $ wav ak
             when (duration < 0.0) $ slog info (aclType ++ " change attempted with invalid duration: " ++ show duration)
             t <- getM tick
@@ -1568,7 +1568,7 @@ addToLandACLList aclType aclFromParcel aclIntoParcel info@(ScriptInfo _ _ _ pk _
             let acllist = acl : ([ b | b@(k,Just expire) <- aclFromParcel parcel,expire < t, k /= ak] ++
                                  [ b | b@(k,Nothing) <- aclFromParcel parcel, k /= ak])
             let parcel' = aclIntoParcel parcel acllist
-            slog info ("added " ++ ak ++ " to " ++ aclType ++ " list for parcel in " ++ show regionIndex)
+            slog info ("added " ++ unLslKey ak ++ " to " ++ aclType ++ " list for parcel in " ++ show regionIndex)
             return parcel'
     continueV
             
@@ -1589,14 +1589,14 @@ llRemoveFromLandPassList info [KVal ak] =
     let aclFromParcel = parcelPassList
         aclIntoParcel = (\ parcel list -> parcel { parcelPassList = list})
     in do removeFromLandACLList aclFromParcel aclIntoParcel info ak
-          slog info ("llRemovFromLandPassList: removed " ++ ak)
+          slog info ("llRemovFromLandPassList: removed " ++ unLslKey ak)
           continueV
 
 llRemoveFromLandBanList info [KVal ak] =
     let aclFromParcel = parcelBanList
         aclIntoParcel = (\ parcel list -> parcel { parcelBanList = list})
     in do removeFromLandACLList aclFromParcel aclIntoParcel info ak
-          slog info ("llRemovFromLandBanList: removed " ++ ak)
+          slog info ("llRemovFromLandBanList: removed " ++ unLslKey ak)
           continueV
               
 llAddToLandPassList info args = 
@@ -1647,7 +1647,7 @@ llEmail info@(ScriptInfo _ _ _ pk _) [SVal address, SVal subject, SVal message] 
         if suffix `isSuffixOf` address
            then let potentialKey = take (length address - length suffix) address in
                do time <- getUnixTime
-                  (primPendingEmails.wprim potentialKey) `modM` 
+                  (primPendingEmails.wprim (LSLKey potentialKey)) `modM` 
                       (++[Email subject address message time])
                   logit
            else logit
@@ -1720,7 +1720,7 @@ llSetSoundQueueing info [IVal bool] =
 ------------------------------------------------------------------------------
 llCollisionSprite info@(ScriptInfo _ _ _ pk _) [SVal impactSprite] =
     do  tk <- findTexture pk impactSprite
-        slog info ("llCollisionSprite: set sprite to " ++ tk)
+        slog info ("llCollisionSprite: set sprite to " ++ unLslKey tk)
         continueV
 
 llGetKey (ScriptInfo _ _ _ pk _) [] = continueK pk
@@ -1838,9 +1838,9 @@ llGetLinkName (ScriptInfo oid _ _ _ _) [IVal linkNumber] =
         name <- if null links
            then if linkNumber == 0
                then getM $ primName.wprim oid
-               else return nullKey
+               else return $ unLslKey nullKey
            else case lookupByIndex (linkNumber - 1) links of
-                Nothing -> return nullKey
+                Nothing -> return $ unLslKey nullKey
                 Just k -> getM $ primName.wprim k
         continueS name
     
@@ -1882,7 +1882,7 @@ llGetRegionName (ScriptInfo _ _ _ pk _) [] =
 
 llGetAgentSize info@(ScriptInfo _ _ _ pk _) [KVal ak] =
     withAvatar ak notFound =<< found <$> getPrimRegion pk
-    where notFound = slog info ("llGetAgentSize: no such agent - " ++ ak) >> continueVec (0,0,0)
+    where notFound = slog info ("llGetAgentSize: no such agent - " ++ unLslKey ak) >> continueVec (0,0,0)
           found region av =  
               if getI avatarRegion av == region 
                    then continueVec (0.45,0.6,getI avatarHeight av)
@@ -1894,13 +1894,13 @@ llGetAgentInfo info@(ScriptInfo _ _ _ pk _) [KVal ak] =
               if getI avatarRegion av == region 
                   then continueI $ getI avatarState av
                   else slog info "llGetAgentInfo: agent not in sim" >> continueI 0
-          notFound = slog info ("llGetAgentInfo: no such agent - " ++ ak) >> continueI 0
+          notFound = slog info ("llGetAgentInfo: no such agent - " ++ unLslKey ak) >> continueI 0
 
 llGetAgentLanguage info@(ScriptInfo _ _ _ pk _) [KVal ak] = do
     withAvatar ak notFound =<< found <$> getPrimRegion pk
     where found region av = continueS $
               if getI avatarRegion av == region then "hu" else ""
-          notFound = slog info ("llGetAgentLanguage: no such agent - " ++ ak)
+          notFound = slog info ("llGetAgentLanguage: no such agent - " ++ unLslKey ak)
               >> continueI 0
               
 -- llDetected* functions ------------------------------------------------------
@@ -2006,14 +2006,14 @@ llGetAnimationList info@(ScriptInfo _ _ _ pk _) [KVal ak] =
                       | otherwise = do
                           now <- getM tick
                           continueL [ KVal anim | (t,anim) <- getI avatarActiveAnimations av, maybe True (<now) t]
-          notFound = slog info ("llGetAnimationList: no such avatar: " ++ ak) >> continueL []
+          notFound = slog info ("llGetAnimationList: no such avatar: " ++ unLslKey ak) >> continueL []
     
 llGetAnimation info@(ScriptInfo _ _ _ pk _) [KVal ak] =
     withAvatar ak notFound =<< found <$> getPrimRegion pk
     where found rp av | getI avatarRegion av /= rp = 
             slog info "llGetAnimationList: avatar no in sim" >> continueS ""
                       | otherwise = continueS "Standing" -- TODO: real animation state
-          notFound = slog info ("llGetAnimation: no such avatar: " ++ ak) >> continueS ""
+          notFound = slog info ("llGetAnimation: no such avatar: " ++ unLslKey ak) >> continueS ""
     
 llStartAnimation info@(ScriptInfo _ _ sid pk _) [SVal anim] = void $ do
     avKey <- getPermittedAvKey info "llStartAnimation" cPermissionTriggerAnimation
@@ -2038,7 +2038,7 @@ findAnimation pk anim = do
                 invAnimationDuration $ inventoryItemData item)
         Nothing ->
           case find (\ (name,_,_) -> name == anim) builtInAnimations of
-              Just (_,key,mduration) -> return $ Just (key,mduration)
+              Just (_,key,mduration) -> return $ Just (LSLKey key,mduration)
               Nothing -> return Nothing
                  
 llStopAnimation info@(ScriptInfo _ _ sid pk _) [SVal anim] = void $ do
@@ -2110,7 +2110,7 @@ llDialog info@(ScriptInfo _ _ _ pk _) [KVal ak, SVal message, LVal buttons, IVal
         when (any ((24 <) . length) buttons') $ 
             doErr "Button Labels cannot have more that 24 characters"
         when (any null buttons') $ doErr "all buttons must have label strings"
-        (getM $ wav ak) <||> throwError ("no such agent/avatar - " ++ ak)
+        (getM $ wav ak) <||> throwError ("no such agent/avatar - " ++ unLslKey ak)
         putWorldEvent 0 (DialogEvent ak message buttons' channel pk) -- deprecated!
         putWorldEvent 0 
             (AvatarInputEvent ak (AvatarDialog message buttons' channel pk))
@@ -2202,7 +2202,7 @@ llMapDestination info [SVal simName, (VVal x y z), (VVal _ _ _)] = do
            putIt ak
        Just (Event "touch" _ m) ->
            case M.lookup "key_0" m of
-               Just (SVal ak) -> putIt ak
+               Just (SVal ak) -> putIt $ LSLKey ak
                _ -> throwError "invalid touch event!"
        Just (Event nm _ _) -> throwError $ "invalid event for llMapDestination: " ++ nm
     continueV

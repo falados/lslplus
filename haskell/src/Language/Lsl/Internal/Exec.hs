@@ -49,7 +49,7 @@ import Language.Lsl.Internal.Type(
     lslShowVal,replaceLslValueComponent,vecMulScalar,rotMulVec,parseVector,
     parseRotation,parseInt,parseFloat,invRot,rotMul,vcross,Component(..),
     lslValueComponent)
-import Language.Lsl.Internal.Key(nullKey,nextKey)
+import Language.Lsl.Internal.Key(nullKey,nextKey,LSLKey(..))
 import Language.Lsl.Internal.Evaluation(EvalResult(..),Event(..),
     ScriptInfo(..))
 import Language.Lsl.Internal.Constants(findConstVal,llcZeroRotation,
@@ -115,10 +115,10 @@ executeLsl img oid pid sid pkey perf log qtick utick chkBp queue maxTick =
 -- The state of evaluation for a script.
 data EvalState m a = EvalState {
      scriptImage :: ScriptImage a,
-     objectId :: String,
+     objectId :: LSLKey,
      primId :: Int,
      scriptName :: String,
-     myPrimKey :: String,
+     myPrimKey :: LSLKey,
      performAction :: String -> ScriptInfo a -> [LSLValue a] -> 
         m (EvalResult,LSLValue a),
      logMessage :: String -> m (),
@@ -261,8 +261,8 @@ initVar name LLKey Nothing = (name,SVal "")
 initVar name LLList Nothing = (name,LVal [])
 initVar name LLVector Nothing = (name,VVal 0.0 0.0 0.0)
 initVar name LLRot Nothing = (name,RVal 0.0 0.0 0.0 1.0)
-initVar name LLKey (Just (SVal s)) = (name,KVal s)
-initVar name LLString (Just (KVal k)) = (name, SVal k)
+initVar name LLKey (Just (SVal s)) = (name,KVal $ LSLKey s)
+initVar name LLString (Just (KVal k)) = (name, SVal $ unLslKey k)
 initVar name LLFloat (Just (IVal i)) = (name,FVal $ fromInt i)
 initVar name LLInteger (Just (FVal f)) = (name,IVal $ floor f)
 initVar name _ (Just v) = (name,v)
@@ -296,7 +296,7 @@ evalLit globals expr =
         IntLit i        -> IVal i
         FloatLit f      -> FVal (realToFrac f)
         StringLit s     -> SVal s
-        KeyLit k        -> KVal k
+        KeyLit k        -> KVal $ LSLKey k
         ListExpr l      -> LVal $ map (evalCtxLit globals) l
         VecExpr a b c   -> VVal (litExpr2Float a) (litExpr2Float b) (litExpr2Float c)
         RotExpr a b c d -> RVal (litExpr2Float a) (litExpr2Float b) (litExpr2Float c) (litExpr2Float d)
@@ -316,8 +316,8 @@ bindParmForgiving (Var name t) lslVal =
     case (t,typeOfLSLValue lslVal) of
         (LLInteger,LLFloat) -> let FVal v = lslVal in return (name,IVal $ floor v)
         (LLFloat,LLInteger) -> let IVal v = lslVal in return (name,FVal $ fromInt v)
-        (LLKey,LLString) -> let SVal s = lslVal in return (name,KVal s)
-        (LLString,LLKey) -> let KVal k = lslVal in return (name,SVal k)
+        (LLKey,LLString) -> let SVal s = lslVal in return (name,KVal $ LSLKey s)
+        (LLString,LLKey) -> let KVal k = lslVal in return (name,SVal $ unLslKey k)
         (t0,t1) | t0 == t1 -> return (name,lslVal)
                 | otherwise -> throwError "type mismatch!"
 
@@ -418,13 +418,13 @@ getExecutionState :: Monad w => Eval a w ExecutionState
 getExecutionState = queryExState executionState
 getCurState :: Monad w => Eval a w String
 getCurState = queryExState curState
-getObjectId :: Monad w => Eval a w String
+getObjectId :: Monad w => Eval a w LSLKey
 getObjectId = queryState objectId
 getPrimId :: Monad w => Eval a w Int
 getPrimId = queryState primId
 getScriptName :: Monad w => Eval a w String
 getScriptName = queryState scriptName
-getMyPrimKey :: Monad w => Eval a w String
+getMyPrimKey :: Monad w => Eval a w LSLKey
 getMyPrimKey = queryState myPrimKey
 getStepManager :: Monad w => Eval a w StepManager
 getStepManager = queryExState stepManager
@@ -788,7 +788,7 @@ eval' =
                 EvExpr (IntLit i) -> pushVal (IVal i) >> continue
                 EvExpr (FloatLit f) -> pushVal (FVal (realToFrac f)) >> continue
                 EvExpr (StringLit s) -> pushVal (SVal s) >> continue
-                EvExpr (KeyLit k) -> pushVal (KVal k) >> continue
+                EvExpr (KeyLit k) -> pushVal (KVal $ LSLKey k) >> continue
                 EvExpr (VecExpr e1 e2 e3) ->
                    -- TODO: this is probably the WRONG order of evaluation!!!
                     pushElements [EvMkVec,EvExpr $ ctxItem e3, EvExpr $ ctxItem e2, EvExpr $ ctxItem e1]
@@ -876,8 +876,8 @@ eval' =
                     let t = typeOfLSLComponent varVal c
                     let val' = case (t,val) of
                           (LLFloat,IVal i) -> FVal (fromInt i)
-                          (LLString,KVal k) -> SVal k
-                          (LLKey,SVal s) -> KVal s
+                          (LLString,KVal k) -> SVal $ unLslKey k
+                          (LLKey,SVal s) -> KVal $ LSLKey s
                           (t, v) | t == typeOfLSLValue v -> v
                                  | otherwise -> error ("can't implicitly convert from " ++ 
                                                        (show $ typeOfLSLValue v) ++ 
@@ -973,15 +973,15 @@ eval' =
                     _ -> error ("cannot apply operator to " ++ (show val1) ++ " and " ++ (show val2))
                 EvEq -> evalBinary $ \ val1 val2 -> case (val1,val2) of
                     (LVal l1, LVal l2) -> toLslBool $ length l1 == length l2 -- special case of LSL weirdness
-                    (SVal s, KVal k) -> toLslBool $ s == k
-                    (KVal k, SVal s) -> toLslBool $ k == s
+                    (SVal s, KVal k) -> toLslBool $ s == unLslKey k
+                    (KVal k, SVal s) -> toLslBool $ unLslKey k == s
                     (FVal f1,IVal i2) -> toLslBool $ f1 == fromInt i2
                     (IVal i1,FVal f2) -> toLslBool $ fromInt i1 == f2
                     (v1,v2) -> toLslBool $ v1 == v2
                 EvNe -> evalBinary $ \ val1 val2 -> case (val1,val2) of
                     (LVal l1, LVal l2) -> IVal (length l1 - length l2) -- special case of LSL weirdness
-                    (SVal s, KVal k) -> toLslBool $ s /= k
-                    (KVal k, SVal s) -> toLslBool $ k /= s
+                    (SVal s, KVal k) -> toLslBool $ s /= unLslKey k
+                    (KVal k, SVal s) -> toLslBool $ unLslKey k /= s
                     (FVal f1,IVal i2) -> toLslBool $ f1 /= fromInt i2
                     (IVal i1,FVal f2) -> toLslBool $ fromInt i1 /= f2
                     (v1,v2) -> toLslBool $ v1 /= v2
@@ -1029,7 +1029,7 @@ eval' =
                         -- TODO: can you cast anything but a string to a key?
                         (LLVector,SVal s) -> parseVector s
                         (LLRot,SVal s) -> parseRotation s
-                        (LLKey,SVal s) -> KVal s
+                        (LLKey,SVal s) -> KVal $ LSLKey s
                         (LLKey,KVal s) -> KVal s
                         (LLVector, v@(VVal _ _ _)) -> v
                         (LLRot, v@(RVal _ _ _ _)) -> v
@@ -1053,7 +1053,7 @@ trueCondition (LVal l) = not (null l)
 trueCondition v@(VVal _ _ _) = v /= llcZeroVector
 trueCondition r@(RVal _ _ _ _) = r /= llcZeroRotation
 trueCondition (KVal k) = k /= nullKey &&
-    case map tr k of
+    case map tr $ unLslKey k of
         "ffffffff-ffff-ffff-ffff-ffffffffffff" -> True
         _ -> False
     where tr c = if c `elem` "0123456789abcdef" then 'f' else c

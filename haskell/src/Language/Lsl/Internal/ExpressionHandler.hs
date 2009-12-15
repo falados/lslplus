@@ -11,6 +11,7 @@ import Language.Lsl.Internal.Constants
 import Language.Lsl.Internal.DOMProcessing(req,tag,text,xmlAccept)
 import Language.Lsl.Parse
 import Language.Lsl.Syntax
+import Language.Lsl.Internal.Key(LSLKey(..))
 import Language.Lsl.Internal.Type
 import Language.Lsl.Internal.Util
 import Language.Lsl.Internal.XmlCreate hiding (emit)
@@ -177,8 +178,8 @@ evaluateExpression t text =
         Right expr -> 
             do v <- evalCtxExpr expr
                case (t,v) of
-                   (LLKey,SVal s) -> return $ KVal s
-                   (LLString,KVal k) -> return $ SVal k
+                   (LLKey,SVal s) -> return $ KVal (LSLKey s)
+                   (LLString,KVal k) -> return $ SVal $ unLslKey k
                    (LLFloat,IVal i) -> return $ FVal (fromInt i)
                    _ -> return v
             
@@ -206,7 +207,7 @@ evalExpr (Not expr) =
 evalExpr (IntLit i) = return (IVal i)
 evalExpr (FloatLit f) = return (FVal $ realToFrac f)
 evalExpr (StringLit s) = return (SVal s)
-evalExpr (KeyLit k) = return (KVal k)
+evalExpr (KeyLit k) = return (KVal $ LSLKey k)
 evalExpr (VecExpr xExpr yExpr zExpr) = 
     do x <- evalCtxExpr xExpr
        y <- evalCtxExpr yExpr
@@ -302,7 +303,7 @@ evalExpr (Cast t e) = do
        (LLVector,SVal s) -> return $ parseVector s
        (LLRot,SVal s) -> return $ parseRotation s
        (LLList,SVal s) -> return $ LVal [SVal s]
-       (LLKey,SVal s) -> return $ KVal s
+       (LLKey,SVal s) -> return $ KVal $ LSLKey s
        (LLKey,KVal s) -> return $ KVal s
        (LLVector, (VVal _ _ _)) -> return v
        (LLRot, (RVal _ _ _ _)) -> return v
@@ -316,8 +317,8 @@ evalEqExpr f e0 e1 =
        let b = case (v0,v1) of
                (FVal f0, IVal i1) -> f (FVal f0) (FVal $ fromInt i1)
                (IVal i0, FVal f1) -> f (FVal $ fromInt i0) (FVal f1)
-               (SVal s, KVal k) -> f (SVal s) (SVal k)
-               (KVal k, SVal s) -> f (SVal s) (SVal k)
+               (SVal s, KVal k) -> f (SVal s) (SVal $ unLslKey k)
+               (KVal k, SVal s) -> f (SVal s) (SVal $ unLslKey k)
                (x,y) -> f x y
        return $ IVal $ if b then 1 else 0
            

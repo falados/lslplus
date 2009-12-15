@@ -82,12 +82,12 @@ import Language.Lsl.Internal.DOMProcessing(req,opt,def,val,text,elist,
     xmlAcceptT)
 import Language.Lsl.Internal.Evaluation(Event(..))
 import Language.Lsl.Internal.Exec(ScriptImage,initLSLScript)
-import Language.Lsl.Internal.Key(mkKey,nullKey)
+import Language.Lsl.Internal.Key(mkKey,nullKey,LSLKey(..))
 import Language.Lsl.Internal.Type(LSLValue(..))
 import Language.Lsl.Internal.Util(
     mlookup,Permutation3(..),rotationsToQuaternion)
 
-type ScriptId = (String,String)
+type ScriptId = (LSLKey,String)
 
 data FullWorldDef = FullWorldDef {
     fullWorldDefMaxTime :: Int,
@@ -106,7 +106,7 @@ data WebHandling =
    | WebHandlingByInternet { webHandlingTimeout :: Float } deriving (Show)
                              
 data LSLObject = LSLObject { 
-    _primKeys :: [String], 
+    _primKeys :: [LSLKey], 
     _dynamics :: !ObjectDynamics } deriving (Show)
 
 data ObjectDynamics = ObjectDynamics {
@@ -158,9 +158,9 @@ data RotationTarget = RotationTarget {
     rotationTargetTau :: Float } deriving (Show)
                                        
 data Avatar = Avatar { 
-    _avatarKey :: String,
+    _avatarKey :: LSLKey,
     _avatarName :: String,
-    _avatarActiveGroup :: Maybe String,
+    _avatarActiveGroup :: Maybe LSLKey,
     _avatarRegion :: (Int,Int),
     _avatarPosition :: (Float,Float,Float),
     _avatarRotation :: (Float,Float,Float,Float),
@@ -170,15 +170,15 @@ data Avatar = Avatar {
     _avatarCameraPosition :: (Float,Float,Float),
     _avatarCameraRotation :: (Float,Float,Float,Float),
     _avatarCameraControlParams :: CameraParams,
-    _avatarActiveAnimations :: [(Maybe Int,String)],
-    _avatarAttachments :: IM.IntMap String,
+    _avatarActiveAnimations :: [(Maybe Int,LSLKey)],
+    _avatarAttachments :: IM.IntMap LSLKey,
     _avatarEventHandler :: !(Maybe (String,[(String,LSLValue Float)])),
     _avatarControls :: !Int,
     _avatarControlListener :: !(Maybe AvatarControlListener) } deriving (Show)
 
 data AvatarControlListener = AvatarControlListener { 
     avatarControlListenerMask :: !Int,
-    avatarControlListenerScript :: !(String,String) } deriving (Show)
+    avatarControlListenerScript :: !(LSLKey,String) } deriving (Show)
 
 data CameraParams = CameraParams { 
     cameraActive :: Bool,
@@ -281,9 +281,9 @@ isInvNotecardItem = isInvNotecard . inventoryItemData
 isInvObjectItem = isInvObject . inventoryItemData
                        
 newtype InventoryItemIdentification = InventoryItemIdentification {
-    inventoryItemNameKey :: (String,String) } deriving (Show)
+    inventoryItemNameKey :: (String,LSLKey) } deriving (Show)
 data InventoryInfo  = InventoryInfo {
-    inventoryInfoCreator :: String,
+    inventoryInfoCreator :: LSLKey,
     inventoryInfoPerms :: ItemPermissions } deriving (Show)
 data InventoryItem = InventoryItem {
     inventoryItemIdentification :: InventoryItemIdentification,
@@ -303,7 +303,7 @@ invnetoryItemKey = snd . inventoryItemNameKey . inventoryItemIdentification
 inventoryItemNames = map inventoryItemName
 scriptInventoryItem s k id = 
     InventoryItem (InventoryItemIdentification (s,k)) 
-        (InventoryInfo "" defaultInventoryPermissions) (InvScript id Nothing)
+        (InventoryInfo nullKey defaultInventoryPermissions) (InvScript id Nothing)
 findByInvName name = find ((== name) . inventoryItemName)
 findByInvKey key = find ((== key) . invnetoryItemKey)
 
@@ -322,13 +322,13 @@ defaultInventoryPermissions =
 
 data Prim = Prim {
     _primName :: String,
-    _primKey :: String,
-    _primParent :: Maybe String,
+    _primKey :: LSLKey,
+    _primParent :: Maybe LSLKey,
     _primDescription :: String,
     _primInventory :: [InventoryItem],
-    _primOwner :: String,
-    _primGroup :: Maybe String,
-    _primCreator :: String,
+    _primOwner :: LSLKey,
+    _primGroup :: Maybe LSLKey,
+    _primCreator :: LSLKey,
     _primPosition :: (Float, Float, Float),
     _primRotation :: (Float, Float, Float, Float),
     _primScale :: (Float, Float, Float),
@@ -343,7 +343,7 @@ data Prim = Prim {
     _primPermissions :: [Int],
     _primAllowInventoryDrop :: Bool,
     _primSitTarget :: Maybe ((Float,Float,Float),(Float,Float,Float,Float)),
-    _primSittingAvatar :: Maybe String,
+    _primSittingAvatar :: Maybe LSLKey,
     _primPendingEmails :: [Email],
     _primPassTouches :: Bool,
     _primPassCollisions :: Bool,
@@ -373,7 +373,7 @@ data PrimType =
 basicBox = PrimType 9 0 0 (0,1,0) (0,0,0) (0,0,0) (0,0,0) 0 (0,0,0) (0,1,0) 0 0 0 Nothing 0
 
 data Attachment = Attachment { 
-    _attachmentKey :: String, 
+    _attachmentKey :: LSLKey, 
     _attachmentPoint :: Int } deriving (Show)
 
 data LightInfo = LightInfo {
@@ -405,13 +405,13 @@ data PrimFace = PrimFace {
 defaultFace = PrimFace 1.0 (1.0,1.0,1.0) 0 0 False 0 defaultTextureInfo
                
 data TextureInfo = TextureInfo {
-    _textureKey :: String,
+    _textureKey :: LSLKey,
     _textureRepeats :: (Float,Float,Float),
     _textureOffsets :: (Float,Float,Float),
     _textureRotation :: Float
     } deriving (Show)
 
-defaultTextureInfo = TextureInfo "" (1.0,1.0,0.0) (0.0,0.0,0.0) 0.0
+defaultTextureInfo = TextureInfo nullKey (1.0,1.0,0.0) (0.0,0.0,0.0) 0.0
                    
 data Email = Email {
     emailSubject :: String,
@@ -425,9 +425,9 @@ emptyPrim name key = Prim {
     _primParent = Nothing,
     _primDescription = "",
     _primInventory = [],
-    _primOwner = "",
+    _primOwner = nullKey,
     _primGroup = Nothing,
-    _primCreator = "",
+    _primCreator = nullKey,
     _primPosition = (0.0,0.0,0.0),
     _primRotation = (0.0,0.0,0.0,1.0),
     _primScale = (1.0,1.0,1.0),
@@ -460,13 +460,13 @@ data Parcel = Parcel {
     parcelName :: String,
     parcelDescription :: String,
     parcelBoundaries :: (Int,Int,Int,Int), -- bottom, top, left, right aka south,north,west,east
-    parcelOwner :: String,
+    parcelOwner :: LSLKey,
     parcelFlags :: Int,
-    parcelBanList :: [(String,Maybe Int)],
-    parcelPassList :: [(String,Maybe Int)]
+    parcelBanList :: [(LSLKey,Maybe Int)],
+    parcelPassList :: [(LSLKey,Maybe Int)]
     } deriving (Show)
 
-defaultRegions :: String -> [((Int,Int),Region)]
+defaultRegions :: LSLKey -> [((Int,Int),Region)]
 defaultRegions owner =
     [(
         (0,0), 
@@ -480,17 +480,17 @@ defaultRegions owner =
 data Script = Script { 
     _scriptImage :: !(ScriptImage Float),
     _scriptActive :: Bool,
-    _scriptPermissions :: M.Map String Int,
-    _scriptLastPerm :: Maybe String,
+    _scriptPermissions :: M.Map LSLKey Int,
+    _scriptLastPerm :: Maybe LSLKey,
     _scriptStartTick :: Int,
     _scriptLastResetTick :: Int,
     _scriptEventQueue :: [Event Float],
     _scriptStartParameter :: Int,
-    _scriptCollisionFilter :: !(String,String,Bool),
+    _scriptCollisionFilter :: !(String,LSLKey,Bool),
     _scriptTargetIndex :: !Int,
     _scriptPositionTargets :: !(IM.IntMap ((Float,Float,Float), Float)),
     _scriptRotationTargets :: !(IM.IntMap ((Float,Float,Float,Float), Float)),
-    _scriptControls :: ![String] } deriving (Show)
+    _scriptControls :: ![LSLKey] } deriving (Show)
 
 mkScript img = Script { 
     _scriptImage = img,
@@ -548,7 +548,7 @@ checkObject primMap o =
         root = head (_primKeys o)
         checkPrim m k = 
             case M.lookup k m of
-                Nothing -> fail ("prim " ++ k ++ " not found in definition")
+                Nothing -> fail ("prim " ++ show k ++ " not found in definition")
                 Just prim -> 
                     return (if (k == root) 
                         then m
@@ -564,13 +564,13 @@ activateScript scripts primMap (k@(primKey,invName),(scriptID)) = do
     let script = case lookup scriptID scripts of
              Nothing -> fail "script not found"
              Just v -> v
-    prim <- (lift . fctx ("looking up prim " ++ primKey ++ " failed")) 
+    prim <- (lift . fctx ("looking up prim " ++ unLslKey primKey ++ " failed")) 
         (mlookup primKey primMap)
     when (isNothing (findByInvName invName (_primInventory prim))) $ 
-        fail (invName ++ " doesn't exist in prim " ++ primKey)
+        fail (invName ++ " doesn't exist in prim " ++ unLslKey primKey)
     case script of
         Left (CodeErrs ((_,s):_)) -> 
-            tell [("script \"" ++ invName ++ "\" in prim " ++ primKey ++ 
+            tell [("script \"" ++ invName ++ "\" in prim " ++ unLslKey primKey ++ 
                   " failed to activate because of error: " ++ s)] 
             >> return Nothing
         Right code -> return $ Just (k,mkScript $ initLSLScript code)
@@ -584,7 +584,7 @@ world = do
     FullWorldDef <$> req "maxTime" val <*> req "sliceSize" val
         <*> pure webHandling <*> pure handler <*> req "objects" objects
         <*> pure ps <*> pure avs 
-        <*> pure (defaultRegions "") <*> (snd <$> get')
+        <*> pure (defaultRegions nullKey) <*> (snd <$> get')
 
 objects = liste "object" object
 
@@ -644,9 +644,9 @@ invLandmark = curry InvLandmark <$> req "region" region <*> req "position" vec
 inventoryItem f = do
     id <- curry InventoryItemIdentification <$> req "name" text 
         <*> newKey Nothing
-    info <- InventoryInfo <$> req "creator" text 
+    info <- InventoryInfo <$> (LSLKey <$> req "creator" text)
         <*> def "perms" defaultInventoryPermissions itemPermissions -- pure defaultInventoryPermissions
-    findRealKey $ inventoryInfoCreator info
+    findRealKey $ unLslKey $ inventoryInfoCreator info
     InventoryItem id info <$> f
 
 itemPermissions = ItemPermissions <$> req "base" val
@@ -661,7 +661,7 @@ primFace = PrimFace <$> dval "alpha" 0 <*> dvec1 "color"
     <*> dval "textureMode" 0 
     <*> def "textureInfo" defaultTextureInfo textureInfo
     
-textureInfo = TextureInfo <$> def "name" "" text <*> dvec1 "repeats"
+textureInfo = TextureInfo <$> (LSLKey <$> def "name" "" text) <*> dvec1 "repeats"
     <*> dvec0 "offsets" <*> dval "rotation" 0
     
 flexibility = Flexibility <$> dval "softness" 0 <*> dval "gravity" 1
@@ -706,7 +706,7 @@ newKey xref = do
 
 worldXMLAccept s a = evalState (((xmlAcceptT . unWorldXMLAccept) a) s) (M.empty,1)
 
-newtype WorldXMLAccept a = WorldXMLAccept { unWorldXMLAccept :: AcceptT (SM.State (M.Map String String, Integer)) a }
+newtype WorldXMLAccept a = WorldXMLAccept { unWorldXMLAccept :: AcceptT (SM.State (M.Map String LSLKey, Integer)) a }
     deriving (Monad,Applicative,Functor,MonadXMLAccept)
 
 get' = WorldXMLAccept $ lift $ SM.get

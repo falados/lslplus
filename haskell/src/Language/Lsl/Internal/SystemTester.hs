@@ -11,6 +11,7 @@ import Language.Lsl.Internal.DOMProcessing(req,tagit,def,getTag,
     choice,val,liste,text,xmlAccept)
 import Language.Lsl.Internal.DOMSourceDescriptor(sources)
 import Language.Lsl.Internal.ExecInfo(emitExecutionInfo)
+import Language.Lsl.Internal.Key(LSLKey(..))
 import Language.Lsl.Internal.Log(LogMessage(..),logLevelToName)
 import Language.Lsl.Syntax(libFromAugLib)
 import Language.Lsl.Internal.Util(unescape,processLinesS)
@@ -64,11 +65,11 @@ emitPrims prims = emitList "prims" emitPrim prims
 emitAvatars avatars = emitList "avatars" emitAvatar avatars
 emitScripts scripts = emitList "scripts" emitScript scripts
 
-emitPrim (key,name) = 
+emitPrim (LSLKey key,name) = 
     emit "prim" [] [emitSimple "key" [] key, emitSimple "name" [] name]
-emitAvatar (key,name) = 
+emitAvatar (LSLKey key,name) = 
     emit "avatar" [] [emitSimple "key" [] key, emitSimple "name" [] name]
-emitScript (pk,sname) = 
+emitScript (LSLKey pk,sname) = 
     emit "script" [] [emitSimple "primKey" [] pk, emitSimple "scriptName" [] sname]
 
 testSystem :: IO ()

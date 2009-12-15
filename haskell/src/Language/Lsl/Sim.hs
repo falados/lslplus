@@ -59,7 +59,7 @@ import Language.Lsl.Internal.Exec(ExecutionState(..),
     ExecutionInfo(ExecutionInfo),ScriptImage(..),executeLsl,frameInfo,
     hasActiveHandler,initLSLScript)
 import Language.Lsl.Internal.ExpressionHandler(evaluateExpression)
-import Language.Lsl.Internal.Key(nullKey)
+import Language.Lsl.Internal.Key(nullKey,LSLKey(..))
 import Language.Lsl.Internal.Log(LogLevel(..),LogMessage(..))
 import Language.Lsl.Internal.Physics(checkIntersections,dampForce,dampTorque,
     dampZForce,gravC,kin,rotDyn,totalTorque)
@@ -111,7 +111,7 @@ pushEventToPrim e key =
 pushEventToObject e key =
     do objects <- getM wobjects
        case M.lookup key objects of
-           Nothing -> logAMessage LogWarn "sim" ("no such object: " ++ key)
+           Nothing -> logAMessage LogWarn "sim" ("no such object: " ++ unLslKey key)
            Just o ->  mapM_ (pushEventToPrim e) (getI primKeys o)
 
 newWorld slice maxt iq lib scripts avatars objs prims activeScripts regions
@@ -162,7 +162,7 @@ checkBp bp sm =
 updatePrim f key =
     do  prims <- getM wprims
         case M.lookup key prims of
-            Nothing -> logAMessage LogWarn "sim" ("prim " ++ key ++ " not found")
+            Nothing -> logAMessage LogWarn "sim" ("prim " ++ unLslKey key ++ " not found")
             Just p -> do p' <- f p
                          wprims =: (M.insert key p' prims)
 
@@ -226,7 +226,7 @@ processEvent (WorldSimEvent name args) =
         Nothing -> logAMessage LogWarn "sim" ("event " ++ name ++ " not understood")
         Just def -> handleSimInputEvent def args
 processEvent (PermissionRequestEvent pk sname ak mask) = 
-    runAndLogIfErr ("can't find prim/script: " ++ pk ++ "/" ++ sname) () $ do
+    runAndLogIfErr ("can't find prim/script: " ++ unLslKey pk ++ "/" ++ sname) () $ do
         scriptLastPerm.lscript pk sname =: Just ak
         lm ak.scriptPermissions.lscript pk sname =: mask
         pushEvent (Event "run_time_permissions" [IVal mask] M.empty) pk sname
@@ -311,9 +311,9 @@ processEvent (HTTPRequestEvent (pk,sn) key url method mimetype maxlength verify 
             WebHandlingByInternet timeout -> do
                 let event = SimEvent "http_request" [
                                 SimEventArg "url" url,
-                                SimEventArg "prim" pk,
+                                SimEventArg "prim" $ unLslKey pk,
                                 SimEventArg "script" sn,
-                                SimEventArg "requestKey" key,
+                                SimEventArg "requestKey" $ unLslKey key,
                                 SimEventArg "HTTP_METHOD" method,
                                 SimEventArg "HTTP_MIMETYPE" mimetype,
                                 SimEventArg "HTTP_BODY_MAXLENGTH" (show maxlength),
@@ -327,7 +327,7 @@ processEvent (HTTPRequestEvent (pk,sn) key url method mimetype maxlength verify 
 processEvent (XMLRequestEvent source channel idata sdata) = 
     runAndLogIfErr "invalid xml request" () $ do
         logAMessage LogInfo "sim" "processing XMLRequestEvent"
-        (pk,sn) <- lookupScriptFromChan channel <||> throwError ("no such channel" ++ channel)
+        (pk,sn) <- lookupScriptFromChan channel <||> throwError ("no such channel" ++ unLslKey channel)
         key <- newKey
         lm key.worldXMLRequestRegistry =: source
         pushEvent (Event "remote_data" [llcRemoteDataRequest, KVal channel, KVal nullKey, SVal "", IVal idata, SVal sdata]
@@ -340,7 +340,7 @@ processEvent (XMLReplyEvent key channel messageId sdata idata) =
             XMLRequestInternal tag -> do
                 (moduleName, state) <- getM worldEventHandler >>= maybe (throwError "no handler defined") return
                 lib <- getM wlibrary
-                case simFunc lib (moduleName, "xmlReply") state [SVal tag, SVal channel, SVal sdata, IVal idata] of
+                case simFunc lib (moduleName, "xmlReply") state [SVal tag, SVal $ unLslKey channel, SVal sdata, IVal idata] of
                     Left s -> throwError s
                     Right (SVal msg, results) | not (null msg) -> do
                         worldEventHandler =: (Just (moduleName, results))
@@ -352,7 +352,7 @@ processEvent (XMLReplyEvent key channel messageId sdata idata) =
             XMLRequestExternal tag -> do
                 let event = SimEvent "xml_reply" [
                         SimEventArg "tag" tag,
-                        SimEventArg "channel" channel,
+                        SimEventArg "channel" $ unLslKey channel,
                         SimEventArg "sdata" sdata,
                         SimEventArg "idata" (show idata)] 0
                 worldOutputQueue `modM_`  (event:)
@@ -498,7 +498,7 @@ processAvatarOutputEvent k (AvatarFaceTouch pk secs face st) = do
               touchEndTick = start + durationToTicks secs}
 
 avChat range msg key chan = runAndLogIfErr "problem processing chat" () $ do
-    logAMessage LogInfo ("av:" ++ key) ("chat! chan: " ++ show chan ++ ", range: " ++ show range ++ ", message: " ++ show msg)
+    logAMessage LogInfo ("av:" ++ unLslKey key) ("chat! chan: " ++ show chan ++ ", range: " ++ show range ++ ", message: " ++ show msg)
     av <- getM $ wav key
     putWorldEvent 0 $ Chat chan (getI avatarName av) key msg (getI avatarRegion av, getI avatarPosition av) (Just range)
 
@@ -517,9 +517,10 @@ processAvatarInputEvent k inputEvent = runAndLogIfErr "problem processing event 
                     mapM_ (putAvatarOutputEvent k) events
                     avatarEventHandler.wav k =: Just (moduleName,result))
 
-avEventProcCallInfo (AvatarOwnerSay key msg) avInfo = ("onOwnerSay",[SVal key, SVal msg, LVal avInfo])
-avEventProcCallInfo (AvatarHearsChat name key msg) avInfo = ("onChat",[SVal name, SVal key, SVal msg, LVal avInfo])
-avEventProcCallInfo (AvatarDialog msg buttons chan source) avInfo = ("onDialog",[SVal msg, LVal $ map SVal buttons, IVal chan, SVal source, LVal avInfo])
+avEventProcCallInfo (AvatarOwnerSay key msg) avInfo = ("onOwnerSay",[SVal $ unLslKey key, SVal msg, LVal avInfo])
+avEventProcCallInfo (AvatarHearsChat name key msg) avInfo = ("onChat",[SVal name, SVal $ unLslKey key, SVal msg, LVal avInfo])
+avEventProcCallInfo (AvatarDialog msg buttons chan source) avInfo = 
+    ("onDialog",[SVal msg, LVal $ map SVal buttons, IVal chan, SVal $ unLslKey source, LVal avInfo])
 avEventProcCallInfo (AvatarLoadURL msg url) avInfo = ("onLoadURL",[SVal msg, SVal url, LVal avInfo])
 avEventProcCallInfo (AvatarMapDestination simName position) avInfo = ("onMapDestination",[SVal simName, vec2VVal position, LVal avInfo])
 callAvatarEventProcessor k moduleName avEvent lib state avInfo = 
@@ -532,8 +533,8 @@ callAvatarEventProcessor k moduleName avEvent lib state avInfo =
 putAvatarOutputEvent k (SVal s) =
     case reads s of
        ((ev,_):_) -> putWorldEvent 0 (AvatarOutputEvent k ev)
-       [] -> logAMessage LogWarn "sim" ("avatar event handler for " ++ k ++ " returned invalid event: " ++ show s)
-putAvatarOutputEvent k v = logAMessage LogWarn "sim" ("avatar event handler for " ++ k ++ " returned invalid event: " ++ lslShowVal v)
+       [] -> logAMessage LogWarn "sim" ("avatar event handler for " ++ unLslKey k ++ " returned invalid event: " ++ show s)
+putAvatarOutputEvent k v = logAMessage LogWarn "sim" ("avatar event handler for " ++ unLslKey k ++ " returned invalid event: " ++ lslShowVal v)
  
 activateScript pk sn scriptId Nothing startParam =
     do wscripts <- getM wscripts
@@ -551,7 +552,7 @@ matchListener (Chat chan' sender' key' msg' (region,position) range) ((Listener 
     chan == chan' &&
     key' /= pkey &&
     (sender == "" || sender == sender') &&
-    (key == "" || key == nullKey || key == key') &&
+    (null (unLslKey key) || key == nullKey || key == key') &&
     (msg == "" || msg == msg') &&
     (case range of
         Nothing -> True
@@ -613,12 +614,12 @@ checkAndRunScript k@(pkey,sname) script
                   Just (parent, index, primName) -> runScript parent index pkey sname primName img q
 runScript parent index pkey sname primName img q =
     do (slice:*t) <- getM (sliceSize.*tick)
-       let img' = img { scriptImageName = sname ++ "/" ++ primName ++ "/" ++ pkey }
-       let log = logTrace (pkey ++ ":" ++ sname)
+       let img' = img { scriptImageName = sname ++ "/" ++ primName ++ "/" ++ unLslKey pkey }
+       let log = logTrace (unLslKey pkey ++ ":" ++ sname)
        --let checkBp _ sm = return (False,sm)
        result <- executeLsl img' parent index sname pkey doPredef log (getM tick) (setM tick) checkBp q (t + slice)
        case result of
-           Left s -> logAMessage LogWarn "sim" ("execution error in script " ++ "(" ++ pkey ++ "," ++ sname ++ ") ->" ++ s)
+           Left s -> logAMessage LogWarn "sim" ("execution error in script " ++ "(" ++ unLslKey pkey ++ "," ++ sname ++ ") ->" ++ s)
            Right (img'',q') -> do
                result <- optional $ getM $ lm (pkey,sname).worldScripts
                case result of
@@ -778,7 +779,7 @@ handleObjectCollisions prims = do
             mapM_ (send "collision") objCollisions')
         toObjCollisions formerCollisions "collision_end" >>= mapM_ (send "collision_end")
         worldCollisions =: curCollisions
-    where send :: Monad m => String -> (String,[(Int,String)]) -> WorldE m ()
+    where send :: Monad m => String -> (LSLKey,[(Int,LSLKey)]) -> WorldE m ()
           send hn (pk,oinfo) =  collisionScripts >>= mapM_ (sendScript hn pk oinfo)
               where collisionScripts = filtMapM validScript =<< (getPrimScripts pk)
 --                          liftM (map inventoryItemName) (getPrimScripts pk) >>= 
@@ -792,23 +793,23 @@ handleObjectCollisions prims = do
                                return $ if p then Just sn else Nothing
                            _ -> return Nothing
                     validScript _ = return Nothing
-          sendScript :: Monad m => String -> String -> [(Int,String)] -> String -> WorldE m ()
+          sendScript :: Monad m => String -> LSLKey -> [(Int,LSLKey)] -> String -> WorldE m ()
           sendScript hn pk oinfo sn = do
               filt <- getM $ scriptCollisionFilter.lscript pk sn
               case filt of
                   (name,key,accept)
-                          | null name && (null key || nullKey == key) && accept -> pushit oinfo
-                          | null name && (null key || nullKey == key) && not accept -> return ()
+                          | null name && (null (unLslKey key) || nullKey == key) && accept -> pushit oinfo
+                          | null name && (null (unLslKey key) || nullKey == key) && not accept -> return ()
                           | accept -> filterM (matchesIn name key) oinfo >>= pushit
                           | otherwise -> filterM (matchesOut name key) oinfo >>= pushit
               where matchesIn name key (_,k) = if k == key 
                                                    then return True 
-                                                   else (if null key || key == nullKey 
+                                                   else (if null (unLslKey key) || key == nullKey 
                                                              then (name==) <$> (getM $ primName.wprim k)
                                                              else return False)
                     matchesOut name key (_,k) = if k == key 
                                                     then return False 
-                                                    else (if null key || key == nullKey
+                                                    else (if null (unLslKey key) || key == nullKey
                                                               then (not . (name==)) <$> (getM $ primName.wprim k)
                                                               else return True)
                     pushit oinfo = unless (null oinfo) $ pushEvent ev pk sn
@@ -885,7 +886,7 @@ handleCollisions = runAndLogIfErr "can't handle collisions" () $ do
     handleObjectCollisions prims
     handleLandCollisions prims
     
-getNonPhantomPrims :: (Monad m) => WorldE m [(String,Prim)]
+getNonPhantomPrims :: (Monad m) => WorldE m [(LSLKey,Prim)]
 getNonPhantomPrims = liftM (filter ((==0) . (.&. cStatusPhantom) . getI primStatus . snd) . M.assocs) (getM wprims)
    
 handleTargets :: Monad m => WorldE m ()
@@ -952,9 +953,9 @@ data SimStatus = SimEnded { simStatusMessage :: String, simStatusLog :: [LogMess
 
 data SimStateInfo = SimStateInfo {
         simStateInfoTime :: Int,
-        simStateInfoPrims :: [(String,String)],
-        simStateInfoAvatars :: [(String,String)],
-        simStateInfoScripts :: [(String,String)]
+        simStateInfoPrims :: [(LSLKey,String)],
+        simStateInfoAvatars :: [(LSLKey,String)],
+        simStateInfoScripts :: [(LSLKey,String)]
     } deriving (Show)
     
 nullSimState = SimStateInfo 0 [] [] []
@@ -1045,11 +1046,11 @@ checkEventArgs def args =
     where params = simInputEventParameters def
           argList = map (\ p -> ( p , find (\ a -> simParamName p == simEventArgName a) args)) params
           
-checkEventArg (SimParam _ _ SimParamPrim) (Just arg) = return $ KVal (simEventArgValue arg)
-checkEventArg (SimParam _ _ SimParamRootPrim) (Just arg) = return $ KVal (simEventArgValue arg)
+checkEventArg (SimParam _ _ SimParamPrim) (Just arg) = return $ KVal $ LSLKey (simEventArgValue arg)
+checkEventArg (SimParam _ _ SimParamRootPrim) (Just arg) = return $ KVal $ LSLKey (simEventArgValue arg)
 checkEventArg (SimParam _ _ SimParamScript) (Just arg) = return $ SVal (simEventArgValue arg)
-checkEventArg (SimParam name _ SimParamAvatar) (Just arg) = return $ KVal (simEventArgValue arg)
-checkEventArg (SimParam name _ SimParamKey) (Just arg) = return $ KVal (simEventArgValue arg)
+checkEventArg (SimParam name _ SimParamAvatar) (Just arg) = return $ KVal $ LSLKey (simEventArgValue arg)
+checkEventArg (SimParam name _ SimParamKey) (Just arg) = return $ KVal $ LSLKey (simEventArgValue arg)
 checkEventArg (SimParam name _ (SimParamLSLValue t)) (Just arg) = 
     case evaluateExpression t (simEventArgValue arg) of
         Nothing -> throwError ("invalid " ++ lslTypeString t ++ " expression" )
@@ -1061,14 +1062,14 @@ handleSimInputEvent def args =
       Left s -> logAMessage LogWarn "sim" s
       Right argValues -> simInputEventHandler def (simInputEventName def) argValues
 
-mkTouchStartEvent pk nd ak ln = 
+mkTouchStartEvent (LSLKey pk) nd (LSLKey ak) ln = 
     WorldSimEvent "touch_start" [SimEventArg "Prim Key" pk, SimEventArg "num_detected" nd,
                                  SimEventArg "Avatar key" ak, SimEventArg "Link Number" (show ln)]
-mkTouchEvent pk nd ak ln = 
+mkTouchEvent (LSLKey pk) nd (LSLKey ak) ln = 
     WorldSimEvent "touch" [SimEventArg "Prim Key" pk, SimEventArg "num_detected" nd, 
                            SimEventArg "Avatar key" ak, SimEventArg "Grab vector" "<0.0,0.0,0.0>",
                            SimEventArg "Link Number" (show ln)]
-mkTouchEndEvent pk nd ak ln = 
+mkTouchEndEvent (LSLKey pk) nd (LSLKey ak) ln = 
     WorldSimEvent "touch_end" [SimEventArg "Prim Key" pk, SimEventArg "num_detected" nd,
                                SimEventArg "Avatar key" ak, SimEventArg "Link Number" (show ln)]
                                  
@@ -1113,7 +1114,7 @@ userChatEventDef =
             let f _ [KVal ak, SVal message, IVal chan] = do
                     mav <- optional $ getM $ wav ak
                     case mav of
-                        Nothing -> logAMessage LogWarn "sim" ("avatar with key " ++ ak ++ " not found")
+                        Nothing -> logAMessage LogWarn "sim" ("avatar with key " ++ unLslKey ak ++ " not found")
                         Just av ->
                             putWorldEvent 0 $ Chat chan (getI avatarName av) ak message (getI avatarRegion av,getI avatarPosition av) sayRange
                 f name _ = logAMessage LogWarn "sim" ("invalid event activation: " ++ name)

@@ -20,6 +20,7 @@ import Language.Lsl.Render
 import Language.Lsl.Internal.Constants(allConstants,Constant(..),findConstVal)
 import Language.Lsl.Internal.FuncSigs(funcSigs,convertArgs)
 import Language.Lsl.Internal.InternalLLFuncs(internalLLFuncs,internalLLFuncNames)
+import Language.Lsl.Internal.Key(LSLKey(..))
 import Language.Lsl.Internal.OptimizerOptions(OptimizerOption(..))
 import Language.Lsl.Syntax(CompiledLSLScript(..),Expr(..),Statement(..),Var(..),
                            Func(..),FuncDec(..),State(..),Ctx(..),Handler(..),
@@ -861,7 +862,7 @@ valToExpr :: RealFloat a => LSLValue a -> Expr
 valToExpr (IVal i) = IntLit i
 valToExpr (FVal f) = floatToLit f
 valToExpr (SVal s) = StringLit s
-valToExpr (KVal k) = KeyLit k
+valToExpr (KVal (LSLKey k)) = KeyLit k
 valToExpr (VVal x y z) = VecExpr (nullCtx $ floatToLit x) (nullCtx $ floatToLit y) (nullCtx $ floatToLit z)
 valToExpr (RVal x y z s) = RotExpr (nullCtx $ floatToLit x) (nullCtx $ floatToLit y) (nullCtx $ floatToLit z) (nullCtx $ floatToLit s)
 valToExpr (LVal l) = ListExpr (map (nullCtx . valToExpr) l)
@@ -886,7 +887,7 @@ exprsToVals es = mapM exprToVal es
           exprToVal (Ctx _ (IntLit i)) = Just (IVal i)
           exprToVal (Ctx _ (FloatLit f)) = Just (FVal f)
           exprToVal (Ctx _ (StringLit s)) = Just (SVal s)
-          exprToVal (Ctx _ (KeyLit k)) = Just (KVal k)
+          exprToVal (Ctx _ (KeyLit k)) = Just (KVal $ LSLKey k)
           exprToVal (Ctx _ (VecExpr ex ey ez)) = 
               case (exprToVal ex, exprToVal ey, exprToVal ez) of
                   (Just (FVal x),Just (FVal y),Just (FVal z)) -> Just (VVal x y z)

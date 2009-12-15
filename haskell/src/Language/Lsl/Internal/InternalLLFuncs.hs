@@ -115,6 +115,7 @@ import Language.Lsl.Internal.Util(Permutation3(..),axisAngleToRotation,cut,dist3
 import Language.Lsl.Internal.Type(LSLType(..),LSLValue(..),lslValString,parseFloat,parseInt,rot2RVal,toSVal,typeOfLSLValue,vVal2Vec)
 import Language.Lsl.Internal.Evaluation(EvalResult(..))
 import Language.Lsl.Internal.Constants(findConstVal)
+import Language.Lsl.Internal.Key(LSLKey(..))
 import Language.Lsl.Internal.SHA1(hashStoHex)
 import Data.List(elemIndex,find,foldl',intersperse,isPrefixOf,sort)
 import Data.Char(toLower,toUpper)
@@ -444,7 +445,7 @@ llList2CSV _ [LVal l] =
 lslValToString (VVal x y z) = "<" ++ (show x) ++ "," ++ (show y) ++ "," ++ (show z) ++ ">"
 lslValToString (RVal x y z s) = "<" ++ (show x) ++ "," ++ (show y) ++ "," ++ (show z) ++ "," ++ (show s) ++ ">"
 lslValToString (SVal s) = s
-lslValToString (KVal k) = k
+lslValToString (KVal k) = unLslKey k
 lslValToString (IVal i) = show i
 lslValToString (FVal f) = show f
 
@@ -534,8 +535,8 @@ llList2Integer _ [LVal l, IVal index] =
 llList2Key _ [LVal l, IVal index] =
     continueWith $ 
         case elemAtM' index l of
-            Just v -> let (SVal v') = toSVal v in KVal v'
-            _ -> let (Just (SVal v)) = findConstVal "NULL_KEY" in KVal v
+            Just v -> let (SVal v') = toSVal v in KVal $ LSLKey v'
+            _ -> let (Just (SVal v)) = findConstVal "NULL_KEY" in KVal $ LSLKey v
 llList2Rot _ [LVal l, IVal index] =
     continueWith $ case elemAtM' index l of
             Just r@(RVal _ _ _ _) -> r
