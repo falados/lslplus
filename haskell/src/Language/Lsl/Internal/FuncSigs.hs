@@ -262,7 +262,7 @@ funcSigs = [
     ("llRequestAgentData",LLKey,[LLKey,LLInteger]),
     ("llRequestInventoryData",LLKey,[LLString]),
     ("llRequestPermissions",LLVoid,[LLKey,LLInteger]),
-    ("llRequestSecureURL", LLString, []),
+    ("llRequestSecureURL", LLKey, []),
     ("llRequestURL", LLKey, []),
     ("llRequestSimulatorData",LLKey,[LLString,LLInteger]),
     ("llResetLandBanList",LLVoid,[]),

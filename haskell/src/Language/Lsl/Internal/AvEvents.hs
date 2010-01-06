@@ -9,11 +9,17 @@ data AvatarOutputEvent =
     | AvatarSay { avatarChatChannel :: Int, avatarChatMessage :: String }
     | AvatarShout { avatarChatChannel :: Int, avatarChatMessage :: String }
     | AvatarPay { avatarPayPrimKey :: LSLKey, avatarPayAmount :: Int }
-    | AvatarControl { avatarNewControlBits :: Int } 
+    | AvatarControl { avatarNewControlBits :: Int }
     | AvatarFaceTouch { avatarTouchPrimKey :: LSLKey, 
                         avatarTouchDuration :: Float,
                         avatarTouchFace :: Int, 
-                        avatarTouchST :: (Float,Float) } deriving (Read,Show)
+                        avatarTouchST :: (Float,Float) } 
+    | AvatarHTTPRequest { avatarHTTPRequestURL :: String,
+                          avatarHTTPRequestMethod :: String,
+                          avatarHTTPRequestBody :: String,
+                          avatarHTTPRequestIP :: String,
+                          avatarHTTPRequestUserAgent :: String }
+    deriving (Read,Show)
 
 data AvatarInputEvent =
       AvatarOwnerSay { avatarOwnerSayPrimKey :: LSLKey, avatarOwnerSayMsg :: String }
@@ -22,4 +28,8 @@ data AvatarInputEvent =
                           avatarDialogChannel :: Int, avatarDialogSourceObject :: LSLKey }
     | AvatarLoadURL { avatarLoadURLMessage :: String, avatarLoadURLAddress :: String }
     | AvatarMapDestination { avatarMapDestination :: String, avatarMapDestinationPosition :: (Float,Float,Float) }
+    | AvatarHTTPResponse { avatarHTTPResponseKey :: LSLKey, avatarHTTPResponseStatus :: Int, 
+        avatarHTTPResponseBody :: String }
+    | AvatarHTTPRequestKey { avatarHTTPResponseKey :: LSLKey }
+    | AvatarHTTPBadRequest
     deriving (Read,Show)

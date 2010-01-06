@@ -79,6 +79,7 @@ import Language.Lsl.WorldDef(Attachment(..),Avatar(..),
 import Language.Lsl.Internal.WorldState
 
 import System.Random(mkStdGen)
+import Text.ParserCombinators.Parsec hiding (State,(<|>),optional,many)
 
 -- this is extremely approximate....
 objRadius oid = do
@@ -151,7 +152,9 @@ newWorld slice maxt iq lib scripts avatars objs prims activeScripts regions
         _worldCollisions = S.empty,
         _worldLandCollisions = S.empty,
         _worldTouches = M.empty,
-        _worldTouchCheckTime = 0 }
+        _worldTouchCheckTime = 0,
+        _worldURLRegistry = M.empty,
+        _worldPendingHTTPResponses = M.empty }
            
 checkBp bp sm =
     do  bpm <- getM worldBreakpointManager
@@ -496,7 +499,22 @@ processAvatarOutputEvent k (AvatarFaceTouch pk secs face st) = do
           newTouch start = Touch {touchAvatarKey = k, touchPrimKey = pk,
               touchFace = face, touchST = st, touchStartTick = start, 
               touchEndTick = start + durationToTicks secs}
-
+processAvatarOutputEvent k (AvatarHTTPRequest url method body ip ua) =
+    case parseURL url of
+        Nothing -> logAMessage LogWarn "sim" ("URL " ++ url ++ " unrecognized")
+            >> putWorldEvent 0 (AvatarInputEvent k (AvatarHTTPBadRequest))
+        Just (base,path,query) -> do
+            dest <- optional $ getM (lm base.worldURLRegistry)
+            case dest of
+                Just (_,(pk,sn)) -> do
+                    expire <- (+) <$> getM tick <*> pure (durationToTicks 25.0)
+                    rk <- newKey
+                    putWorldEvent 0 (AvatarInputEvent k (AvatarHTTPRequestKey rk))
+                    lm rk.worldPendingHTTPResponses =: (PendingHTTPResponse k (pk,sn) base path query ip ua expire)
+                    pushEvent (Event "http_request" [KVal rk, SVal method, SVal body] M.empty) pk sn
+                Nothing -> logAMessage LogWarn "sim" ("URL " ++ url ++ " not registered")
+                    >> putWorldEvent 1 (AvatarInputEvent k (AvatarHTTPBadRequest))
+    
 avChat range msg key chan = runAndLogIfErr "problem processing chat" () $ do
     logAMessage LogInfo ("av:" ++ unLslKey key) ("chat! chan: " ++ show chan ++ ", range: " ++ show range ++ ", message: " ++ show msg)
     av <- getM $ wav key
@@ -523,6 +541,10 @@ avEventProcCallInfo (AvatarDialog msg buttons chan source) avInfo =
     ("onDialog",[SVal msg, LVal $ map SVal buttons, IVal chan, SVal $ unLslKey source, LVal avInfo])
 avEventProcCallInfo (AvatarLoadURL msg url) avInfo = ("onLoadURL",[SVal msg, SVal url, LVal avInfo])
 avEventProcCallInfo (AvatarMapDestination simName position) avInfo = ("onMapDestination",[SVal simName, vec2VVal position, LVal avInfo])
+avEventProcCallInfo (AvatarHTTPResponse k status body) avInfo = ("onHTTPResponse",[SVal $ unLslKey k, IVal status, SVal body, LVal avInfo])
+avEventProcCallInfo (AvatarHTTPRequestKey k) avInfo = ("onHTTPRequestKey",[SVal $ unLslKey k, LVal avInfo])
+avEventProcCallInfo (AvatarHTTPBadRequest) avInfo = ("onHTTPBadRequest",[LVal avInfo])
+
 callAvatarEventProcessor k moduleName avEvent lib state avInfo = 
     case hasFunc lib (moduleName,funcName) of
         Left s -> Just (Left s)
@@ -535,7 +557,20 @@ putAvatarOutputEvent k (SVal s) =
        ((ev,_):_) -> putWorldEvent 0 (AvatarOutputEvent k ev)
        [] -> logAMessage LogWarn "sim" ("avatar event handler for " ++ unLslKey k ++ " returned invalid event: " ++ show s)
 putAvatarOutputEvent k v = logAMessage LogWarn "sim" ("avatar event handler for " ++ unLslKey k ++ " returned invalid event: " ++ lslShowVal v)
- 
+
+parseURL :: String -> Maybe (String,String,String)
+parseURL input = case runParser p () "" input of
+    Left _ -> Nothing
+    Right pair -> Just pair
+    where p = do
+              scheme <- ((++) <$> string "http" <*> (string "s://" <|> string "://"))
+              subdomain <- many (alphaNum <|> char '-')
+              fixedPortion <- string ".example.com:12043/cap/"
+              key <- many (alphaNum <|> char '-')
+              path <- ((:) <$> char '/' <*> many (noneOf "?")) <|> return ""
+              query <- (char '?' >> many anyChar) <|> return ""
+              return (scheme ++ subdomain ++ fixedPortion ++ key, path, query)
+              
 activateScript pk sn scriptId Nothing startParam =
     do wscripts <- getM wscripts
        case lookup scriptId wscripts of

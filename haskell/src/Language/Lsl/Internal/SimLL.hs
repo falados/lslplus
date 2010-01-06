@@ -33,7 +33,7 @@ import Control.Applicative
 import Control.Monad(
     MonadPlus(..),foldM,forM_,forM,liftM,liftM2,unless,when,filterM)
 import Control.Monad.Error(MonadError(..))
-import Data.List(find,foldl',isSuffixOf)
+import Data.List(find,foldl',isSuffixOf,elemIndex)
 import Data.Bits((.&.),(.|.),bit,clearBit,complement,setBit,shiftL,testBit)
 import Data.Int()
 import Data.Map(Map)
@@ -119,9 +119,69 @@ withAvatar ak nf f = maybe nf f =<< (optional $ getM $ wav ak)
     
 pushDataserverEvent pk sn key val = 
     pushDeferredScriptEvent (Event "dataserver" [KVal key, SVal val] M.empty) pk sn 0
-   
+
 --- Web related functions ----------------------------------------------------
 
+countURLs scriptId = (length . filter ((==scriptId) . snd) . M.elems) <$> (getM worldURLRegistry)
+
+regionIndex (x,y) = base i +
+  (maybe (error "impossible!") id
+      $ elemIndex (x,y) 
+          [ (k,l) | k <- [(-ix)..ix],l <- [(-ix)..ix],isp (k,l) ])
+  where i = max (abs x) (abs y)
+        ix = el i `div` 2
+        el = (1+) . (2*)
+        base 0 = 0
+        base n = el (n - 1) ^2
+        isp (k,l) = abs k == ix || abs l == ix
+
+simName pk = (("sim" ++) . show . regionIndex) <$> getPrimRegion pk
+
+mkURL secure pk k = do
+    nm <- simName pk
+    return $ pref ++ nm ++ ".example.com:12043/cap/" ++ unLslKey k
+    where pref = if secure then "https://" else "http://"
+
+reqURL secure info@(ScriptInfo _ _ sn pk _) [] = do
+    c <- countURLs (pk,sn)
+    k <- newKey
+    if c < 10
+        then do
+            url <- mkURL secure pk k
+            pushDeferredScriptEvent (Event "http_request" [KVal k, llcUrlRequestGranted, SVal url] M.empty) pk sn 0
+            lm url.worldURLRegistry =: (k,(pk,sn))
+            continueK k
+        else do
+            slog info "url limit exceeded"
+            pushDeferredScriptEvent (Event "http_request" [KVal k, llcUrlRequestDenied, SVal ""] M.empty) pk sn 0
+            continueK k
+       
+llGetFreeURLs (ScriptInfo _ _ sn pk _) [] = 
+    ((10-) <$> countURLs (pk,sn)) >>= continueI
+    
+llReleaseURL info [SVal url] = void (worldURLRegistry `modM_` M.delete url)
+
+llHTTPResponse (ScriptInfo _ _ sn pk mevent) [KVal k, IVal status, SVal body] = void $ do
+    PendingHTTPResponse av (pk',sn') _ _ _ _ _ _ <- getM $ lm k.worldPendingHTTPResponses
+    when ((pk,sn) /= (pk',sn')) $ 
+        throwError $ "trying to repsond to a HTTP request " ++ 
+            "received by a different script!"
+    worldPendingHTTPResponses `modM_` M.delete k
+    putWorldEvent 0 (AvatarInputEvent av (AvatarHTTPResponse k status (take 2048 body)))
+  
+llGetHTTPHeader (ScriptInfo _ _ sn pk _) [KVal k, SVal header] = do
+    PendingHTTPResponse av (pk',sn') base path query ip ua _ <- getM $ lm k.worldPendingHTTPResponses
+    when ((pk,sn) /= (pk',sn')) $ 
+        throwError $ "trying to get headers for a HTTP request " ++ 
+            "received by a different script!"
+    case header of
+        "x-script-url" -> continueS base
+        "x-path-info" -> continueS path
+        "x-query-string" -> continueS query
+        "x-remote-ip" -> continueS ip
+        "user-agent" -> continueS ua
+        _ -> throwError $ "unsupported header: " ++ header
+        
 llHTTPRequest (ScriptInfo _ _ sn pk _) [SVal url, LVal params, SVal body] = do
     t <- getM tick
     -- verify the parameters
@@ -162,7 +222,11 @@ llSensorRemove info@(ScriptInfo _ _ sn pk _) [] = void $
     modM_ wqueue $ \ q -> [ qentry | qentry@(_,event) <- q, not (isSensorEvent event) || sensorAddress event /= (pk,sn)]
        
 ------------------------------------------------------------------------------
-
+llGetRegionAgentCount info@(ScriptInfo _ _ sn pk _) [] = do
+    region <- getPrimRegion pk
+    count <- (length . filter ((==region) . getI avatarRegion) . M.elems) <$> getM worldAvatars
+    continueI count
+    
 llRequestAgentData info@(ScriptInfo _ _ sn pk _) [KVal ak, IVal d] =
     do key <- newKey
        av <- optional $ getM $ wav ak
@@ -2289,8 +2353,10 @@ defaultPredefs = M.fromList $ map (\(x,y) -> (x, defaultPredef x y)) [
         ("llGetCreator",llGetCreator),
         ("llGetDate",llGetDate),
         ("llGetForce", llGetForce),
+        ("llGetFreeURLs", llGetFreeURLs),
         ("llGetGeometricCenter",llGetGeometricCenter),
         ("llGetGMTclock",llGetGMTclock),
+        ("llGetHTTPHeader",llGetHTTPHeader),
         ("llGetInventoryCreator",llGetInventoryCreator),
         ("llGetInventoryKey",llGetInventoryKey),
         ("llGetInventoryName",llGetInventoryName),
@@ -2325,6 +2391,7 @@ defaultPredefs = M.fromList $ map (\(x,y) -> (x, defaultPredef x y)) [
         ("llGetPermissionsKey",llGetPermissionsKey),
         ("llGetPos", llGetPos),
         ("llGetPrimitiveParams", llGetPrimitiveParams),
+        ("llGetRegionAgentCount", llGetRegionAgentCount),
         ("llGetRegionCorner", llGetRegionCorner),
         ("llGetRegionFlags", llGetRegionFlags),
         ("llGetRegionFPS", llGetRegionFPS),
@@ -2360,6 +2427,7 @@ defaultPredefs = M.fromList $ map (\(x,y) -> (x, defaultPredef x y)) [
         ("llGroundRepel",llGroundRepel),
         ("llGroundSlope",llGroundSlope),
         ("llHTTPRequest",llHTTPRequest),
+        ("llHTTPResponse",llHTTPResponse),
         ("llInstantMessage",llInstantMessage),
         ("llKey2Name", llKey2Name),
         ("llListRandomize",llListRandomize),
@@ -2392,6 +2460,7 @@ defaultPredefs = M.fromList $ map (\(x,y) -> (x, defaultPredef x y)) [
         ("llRegionSay", llRegionSay),
         ("llReleaseCamera", llReleaseCamera),
         ("llReleaseControls", llReleaseControls),
+        ("llReleaseURL",llReleaseURL),
         ("llRemoteDataReply", llRemoteDataReply),
         ("llRemoteDataSetRegion", llRemoteDataSetRegion),
         ("llRemoteLoadScript", llRemoteLoadScript),
@@ -2402,7 +2471,9 @@ defaultPredefs = M.fromList $ map (\(x,y) -> (x, defaultPredef x y)) [
         ("llRequestAgentData", llRequestAgentData),
         ("llRequestInventoryData",llRequestInventoryData),
         ("llRequestPermissions",llRequestPermissions),
+        ("llRequestSecureURL",reqURL True),
         ("llRequestSimulatorData",llRequestSimulatorData),
+        ("llRequestURL",reqURL False),
         ("llResetLandPassList",llResetLandPassList),
         ("llResetLandBanList",llResetLandBanList),
         ("llResetOtherScript",llResetOtherScript),

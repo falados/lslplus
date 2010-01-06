@@ -29,7 +29,7 @@ import Language.Lsl.Internal.Type(LSLValue(..),LSLType(..))
 import Language.Lsl.WorldDef(Prim(..),PrimFace(..),InventoryItem(..),
     InventoryItemIdentification(..),LSLObject(..),Script(..),Avatar(..),
     Region(..),ObjectDynamics(..),Parcel(..),WebHandling(..),PrimType(..),
-    Attachment(..),Flexibility(..),LightInfo(..),TextureInfo(..))
+    Attachment(..),Flexibility(..),LightInfo(..),TextureInfo(..),ScriptId)
 
 import System.Random(StdGen(..))
 
@@ -194,6 +194,17 @@ instance Monad m => Alternative (WorldE m) where
    empty = mzero
    (<|>) = mplus
    
+data PendingHTTPResponse = PendingHTTPResponse {
+        phrRequesterKey :: LSLKey,
+        phrResponderScript :: ScriptId,
+        phrBaseURL :: String,
+        phrPath :: String,
+        phrQuery :: String,
+        phrRemoteIP :: String,
+        phrUserAgent :: String,
+        phrExpire :: Int
+    } deriving (Show)
+    
 -- a data type that defines the state of the 'world'
 data World m = World {
         _sliceSize :: !Int,
@@ -230,7 +241,9 @@ data World m = World {
         _worldCollisions :: !(S.Set (LSLKey,LSLKey)),
         _worldLandCollisions :: !(S.Set LSLKey),
         _worldTouches :: !(Map LSLKey [Touch]),
-        _worldTouchCheckTime :: !Int
+        _worldTouchCheckTime :: !Int,
+        _worldURLRegistry :: !(Map String (LSLKey,ScriptId)),
+        _worldPendingHTTPResponses :: !(Map LSLKey PendingHTTPResponse)
     } deriving (Show)
 
 $(mkLabelsAlt [''World,''LSLObject,''ObjectDynamics,''Prim, ''PrimType,

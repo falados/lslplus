@@ -151,6 +151,9 @@ cPrimHoleTriangle = 48 :: Int
 validPrimHoleType = flip elem $ map IVal [cPrimHoleDefault,cPrimHoleSquare,
     cPrimHoleCircle,cPrimHoleTriangle]
 
+llcUrlRequestGranted = SVal "URL_REQUEST_GRANTED"
+llcUrlRequestDenied = SVal "URL_REQUEST_DENIED"
+
 allConstants :: RealFloat a => [Constant a]
 allConstants = [
     Constant "ACTIVE" llcActive,
@@ -527,6 +530,7 @@ allConstants = [
     Constant "TEXTURE_PLYWOOD" (KVal $ LSLKey "89556747-24cb-43ed-920b-47caed15465f"),
     Constant "TEXTURE_TRANSPARENT" (KVal $ LSLKey "59facb66-4a72-40a2-815c-7d9b42c56f60"),
     Constant "TOUCH_INVALID_VECTOR" (VVal 0 0 0),
+    Constant "TOUCH_INVALID_FACE" (IVal 0xffffffff),
     Constant "TRUE" (IVal 1),
     Constant "TWO_PI" (FVal 6.28318548),
     Constant "TYPE_FLOAT" (IVal 2),
@@ -536,8 +540,8 @@ allConstants = [
     Constant "TYPE_ROTATION" (IVal 6),
     Constant "TYPE_STRING" (IVal 3),
     Constant "TYPE_VECTOR" (IVal 5),
-    Constant "URL_REQUEST_DENIED" (SVal "URL_REQUEST_DENIED"),
-    Constant "URL_REQUEST_GRANTED" (SVal "URL_REQUEST_GRANTED"),
+    Constant "URL_REQUEST_DENIED" llcUrlRequestDenied,
+    Constant "URL_REQUEST_GRANTED" llcUrlRequestGranted,
     Constant "VEHICLE_ANGULAR_DEFLECTION_EFFICIENCY" (IVal 32),
     Constant "VEHICLE_ANGULAR_DEFLECTION_TIMESCALE" (IVal 33),
     Constant "VEHICLE_ANGULAR_FRICTION_TIMESCALE" (IVal 17),

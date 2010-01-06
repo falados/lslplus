@@ -305,18 +305,10 @@ allTests = TestLabel "All Tests" $ TestList [
     validScriptStr "return implicit conversion test" retconv,
     validScriptStr "casts to list" casts,
     validScriptStr "float wierdness" floatWierdness,
-    validScriptStr "more float wierdness" moreFloatWierdness ]
+    validScriptStr "more float wierdness" moreFloatWierdness,
+    validScriptStr "eq-not" eqNotScript ]
 
     
-altModule = [$here|$module ()
-
-integer bar(integer x) {
-	return   1;
-}
-
-iteger test;|]
-
-
 eqNotScript = [$here|
     default {
         state_entry() {

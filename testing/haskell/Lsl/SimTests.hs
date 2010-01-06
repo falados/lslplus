@@ -97,7 +97,8 @@ webhandler = [$lslm|
         return "";
     }|]
              
-library = libFromAugLib $ compileLibrary [avEventGen,("webhandler",webhandler),("avEventHandler",avEventHandlerModule)]
+library = libFromAugLib $ compileLibrary 
+    [avEventGen,("webhandler",webhandler),("avEventHandler",avEventHandlerModule),("handler2",avEventHandlerModule2)]
 
 abstractWorld = FullWorldDef {
     fullWorldDefMaxTime = 2000,
@@ -112,6 +113,10 @@ abstractWorld = FullWorldDef {
     }
     
 simpleWorld = abstractWorld {
+    fullWorldDefObjects = [LSLObject [LSLKey pk1] defaultDynamics { _objectPosition = (128,128,0) }],
+    fullWorldDefPrims = [prim1] }
+httpWorld = abstractWorld {
+    fullWorldDefAvatars = [(defaultAvatar $ LSLKey av) { _avatarEventHandler = Just ("handler2",[])}],
     fullWorldDefObjects = [LSLObject [LSLKey pk1] defaultDynamics { _objectPosition = (128,128,0) }],
     fullWorldDefPrims = [prim1] }
     
@@ -155,6 +160,7 @@ data TestRun = TestRun { tWorld :: FullWorldDef,
 
 chatRun :: [LSLScript] -> [String] -> TestRun
 chatRun scripts msgs = TestRun simpleWorld scripts [] (assertAllChatInLog msgs)
+logHTTPRun scripts msgs = TestRun httpWorld scripts [] (\ log -> mapM_ (flip assertInLog log) msgs)
 logRun scripts msgs = TestRun simpleWorld scripts [] (\ log -> mapM_ (flip assertInLog log) msgs)
 logRunStrict scripts msgs = TestRun simpleWorld scripts [] (assertLogIs msgs)
 logRun2 scripts msgs = TestRun lessSimpleWorld scripts [] (\ log -> mapM_ (flip assertInLog log) msgs)
@@ -1274,6 +1280,14 @@ stringTest4 = mkTest "String Test 4" $ ((chatRun [[$lsl|
     }
     |]]["-10.500000"]) { tLib = library })
 
+agentCountTest1 = mkTest "Agent Count Test 1" $ ((chatRun [[$lsl|
+    default {
+        state_entry() {
+            llSay(0,(string)llGetRegionAgentCount());
+        }
+    }
+    |]]["1"]) { tLib = library })
+
 giveTest1 = mkTest "Give Test 1" ((logRun2 [scr1,scr2] ["Owner Say: notecard"]) { tLib = library })
     where scr1 = [$lsl|
               default {
@@ -1334,6 +1348,32 @@ giveTest3 = mkTest "Give Test 3" ((logRun3 [scr1,scr2] ["chan = 2147483647, mess
               }
               |]
 
+httpRequestHandlerTest1 = mkTest "http request handler test 1" 
+    (logHTTPRun [httpRequestHandler] [
+        "chat! chan: 0, range: 20.0, message: \"status = 200, body = ok\"",
+        "chan = 0, message = x-path-info: /hello, x-query-string: x=1, x-remote-ip: 127.0.0.1, user-agent: Mozilla",
+        "chan = 0, message = free-urls: 9"]) { tLib = library }
+httpRequestHandler = [$lsl|
+    key k = NULL_KEY;
+    default {
+        state_entry() {
+            k = llRequestURL();
+        }
+        
+        http_request(key id, string method, string body) {
+            if (method == "URL_REQUEST_GRANTED") {
+                llOwnerSay(body);
+            } else if (method == "GET") {
+                llSay(0, "x-path-info: " + llGetHTTPHeader(id,"x-path-info") + 
+                    ", x-query-string: " + llGetHTTPHeader(id,"x-query-string") +
+                    ", x-remote-ip: " + llGetHTTPHeader(id,"x-remote-ip") +
+                    ", user-agent: " + llGetHTTPHeader(id,"user-agent"));
+                llSay(0,"free-urls: " + (string) llGetFreeURLs());
+                llHTTPResponse(id,200,"ok");
+            }
+        }
+    }|]
+    
 tests = TestList [
         helloWorldTest,
         forLoopTest,
@@ -1406,9 +1446,11 @@ tests = TestList [
         stringTest2,
         stringTest3,
         stringTest4,
+        agentCountTest1,
         giveTest1,
         giveTest2,
-        giveTest3
+        giveTest3,
+        httpRequestHandlerTest1
     ]
     
 ----------------------------------------------------------------------------------------------------------------------
@@ -1432,6 +1474,26 @@ avEventHandlerModule = [$lslm|
     list onLoadURL(string msg, string url, list avInfo) {
         string s = llList2CSV(avInfo);
         return [mkSay(0,s)];
+    }
+    |]
+
+avEventHandlerModule2 = [$lslm|
+    $module
+    $import $avEventGen ();
+    list onOwnerSay(string k, string msg) {
+        string url = msg;
+        return [mkHTTPRequest(url + "/hello?x=1", "GET","", "127.0.0.1","Mozilla")];
+    }
+    list onHTTPRequestKey(string k, list avInfo) {
+        return [mkSay(0,"key = " + k)];
+    }
+    
+    list onHTTPBadRequest() {
+        return [mkSay(0,"badRequest!")];
+    }
+    
+    list onHTTPResponse(string k, integer status, string body) {
+        return [mkSay(0,"status = " + (string) status + ", body = " + body)];
     }
     |]
     

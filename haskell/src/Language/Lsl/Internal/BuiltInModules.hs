@@ -33,6 +33,11 @@ avEventGenAST = [$lslm|$module
         string mkControl(integer newControlBits) {
             return "AvatarControl { avatarNewControlBits = " + (string) newControlBits + "}";
         }
+        string mkHTTPRequest(string url, string method, string body, string ip, string userAgent) {
+            return "AvatarHTTPRequest { avatarHTTPRequestURL = \"" + url + "\", avatarHTTPRequestMethod = \"" +
+                method + "\", avatarHTTPRequestBody = \"" + body + "\", avatarHTTPRequestIP = \"" + ip +
+                "\", avatarHTTPRequestUserAgent = \"" + userAgent + "\"}";
+        }
     |]
     
 avEventGen = ("$avEventGen", avEventGenAST)
