@@ -42,7 +42,7 @@
         </avatarPropertiesNode>
         <eventHandlerNode>
           <nodeName>event-handler</nodeName>
-          <value class="string">ccc.eventhandler.lslm</value>
+          <value class="string">@PREFIX@eventhandler.lslm</value>
           <childrenArray/>
         </eventHandlerNode>
       </childrenArray>
@@ -115,7 +115,7 @@
             </primPropertiesNode>
             <scriptNode>
               <nodeName>http-script</nodeName>
-              <value class="string">ccc.http_request_script.lslp</value>
+              <value class="string">@PREFIX@http_request_script.lslp</value>
               <childrenArray/>
             </scriptNode>
           </childrenArray>

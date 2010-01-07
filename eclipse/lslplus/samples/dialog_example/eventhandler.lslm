@@ -2,7 +2,7 @@ $module ()
 
 $import $avEventGen ();
 
-list onDialog(string message, list buttons, integer channel, string objectName. list av_info) {
+list onDialog(string message, list buttons, integer channel, string objectName, list av_info) {
 	integer length = llGetListLength(buttons);
 	integer i;
 	

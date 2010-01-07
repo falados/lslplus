@@ -221,6 +221,7 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 		private HashMap<String,String> scriptMap = new HashMap<String,String>();
 		private HashMap<String,String> scriptNameToPath = new HashMap<String,String>();
 		private boolean optimize;
+		private boolean modulesOnly = true;
 		
 		public SourceListBuilder(boolean addOptimizeOption) {
 		    optimize = addOptimizeOption;
@@ -260,7 +261,7 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 				if (element.isModule()) {
 				    moduleNameToPath.put(name,pp.toString());
 				    moduleMap.put(name,p.toOSString());
-				} else if (element.isScript()) {
+				} else if (element.isScript() && !modulesOnly) {
 					scriptNameToPath.put(name, pp.toString());
 					scriptMap.put(name, p.toOSString());
 				}
@@ -279,6 +280,10 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 			buf.append(SCRIPTS_END);
 			buf.append(SOURCE_LIST_END);
 			return buf.toString();
+		}
+		
+		public void setModulesOnly(boolean m) {
+			this.modulesOnly = m;
 		}
 	}
 	
@@ -669,6 +674,12 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 	 */
 	public String projectSourceList() throws CoreException {
         final SourceListBuilder builder = new SourceListBuilder(false);
+        IProject[] ps = project.getReferencedProjects();
+        
+        for (IProject p : ps) {
+        	p.accept(builder);
+        }
+        builder.setModulesOnly(false);
         project.accept(builder);
         return builder.xmlDescriptor();
 	}
