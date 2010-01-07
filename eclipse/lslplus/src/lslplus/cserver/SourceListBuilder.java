@@ -21,6 +21,7 @@ public class SourceListBuilder implements IResourceVisitor {
 	private HashMap<String,String> scriptMap = new HashMap<String,String>();
 	private HashMap<String,String> scriptNameToPath = new HashMap<String,String>();
 	private boolean optimize;
+	private boolean modulesOnly = true;
 	
 	public SourceListBuilder(boolean addOptimizeOption) {
 	    optimize = addOptimizeOption;
@@ -46,7 +47,7 @@ public class SourceListBuilder implements IResourceVisitor {
 			if (element.isModule()) {
 			    moduleNameToPath.put(name,pp.toString());
 			    moduleMap.put(name,p.toOSString());
-			} else if (element.isScript()) {
+			} else if (element.isScript() && !modulesOnly) {
 				scriptNameToPath.put(name, pp.toString());
 				scriptMap.put(name, p.toOSString());
 			}
@@ -86,5 +87,9 @@ public class SourceListBuilder implements IResourceVisitor {
 		
 		result.el3 = scripts;
 		return result;
+	}
+	
+	public void setModulesOnly(boolean val) {
+		this.modulesOnly = val;
 	}
 }

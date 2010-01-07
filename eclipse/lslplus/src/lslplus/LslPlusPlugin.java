@@ -60,8 +60,8 @@ import com.thoughtworks.xstream.io.xml.DomDriver;
  */
 public class LslPlusPlugin extends AbstractUIPlugin {
 	public static final String LSLPLUS_NATIVE_PATH = "lslplus.native_path"; //$NON-NLS-1$
-    private static final Pattern LSLPLUS_CORE_VERSION_PAT = Pattern.compile("^0\\.5(\\..*)?$"); //$NON-NLS-1$
-	private static final String LSLPLUS_CORE_VERSION = "0.5.*"; //$NON-NLS-1$
+    private static final Pattern LSLPLUS_CORE_VERSION_PAT = Pattern.compile("^0\\.6(\\..*)?$"); //$NON-NLS-1$
+	private static final String LSLPLUS_CORE_VERSION = "0.6.*"; //$NON-NLS-1$
 	private static final String LSL_EXECUTABLE = "LslPlus" + ((File.separatorChar == '\\') ? ".exe" : "");  //$NON-NLS-1$//$NON-NLS-2$ //$NON-NLS-3$
 	private static final String LSL_COMMAND = "LslPlus"; //$NON-NLS-1$
 	

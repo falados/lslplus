@@ -4,6 +4,7 @@ import java.util.Iterator;
 import java.util.List;
 
 import lslplus.LslPlusPlugin;
+import lslplus.LslProjectNature;
 import lslplus.debug.LslLineBreakpoint;
 import lslplus.generated.ErrInfo;
 import lslplus.generated.ErrInfo_ErrInfo;
@@ -45,7 +46,7 @@ import org.eclipse.ui.views.contentoutline.IContentOutlinePage;
 /**
  * LSL (plus) text editor.
  */
-public class LslPlusEditor extends TextEditor implements SourceViewerConfigurationListener {
+public class LslPlusEditor extends TextEditor implements SourceViewerConfigurationListener, LslProjectNature.RecompileListener {
     public static final String ID = "lslplus.editor.LslPlusEditor"; //$NON-NLS-1$
 
     /** The projection support */
@@ -136,7 +137,7 @@ public class LslPlusEditor extends TextEditor implements SourceViewerConfigurati
     }
 
     
-    protected void initializeEditor() {
+	protected void initializeEditor() {
         super.initializeEditor();
         
         LslSourceViewerConfiguration config = new LslSourceViewerConfiguration(this);
@@ -145,6 +146,18 @@ public class LslPlusEditor extends TextEditor implements SourceViewerConfigurati
         config.addListener(this);
     }
 
+    private LslProjectNature nature() {
+        IResource resource = (IResource) getEditorInput().getAdapter(IResource.class);
+        if (resource != null) {
+        	try {
+				return (LslProjectNature) resource.getProject().getNature(LslProjectNature.ID);
+			} catch (CoreException e) {
+				Util.error(e, "can't get project nature"); //$NON-NLS-1$
+			}
+        }
+        return null;
+    }
+    
     protected ISourceViewer createSourceViewer(Composite parent, IVerticalRuler ruler, int styles) {
         fAnnotationAccess = createAnnotationAccess();
         fOverviewRuler = createOverviewRuler(getSharedColors());
@@ -159,6 +172,8 @@ public class LslPlusEditor extends TextEditor implements SourceViewerConfigurati
     }
 
     public void dispose() {
+        LslProjectNature n = nature();
+        if (n != null) n.removeRecompileListener(this);
         ((LslSourceViewerConfiguration)this.getSourceViewerConfiguration()).dispose();
         super.dispose();
     }
@@ -173,6 +188,10 @@ public class LslPlusEditor extends TextEditor implements SourceViewerConfigurati
                 .addSummarizableAnnotationType("org.eclipse.ui.workbench.texteditor.warning"); //$NON-NLS-1$
         fProjectionSupport.install();
         viewer.doOperation(ProjectionViewer.TOGGLE);
+
+
+        LslProjectNature n = nature();
+        if (n != null) n.addRecompileListener(this);
 
         this.getVerticalRuler().getControl().addMouseListener(new MouseListener() {
 
@@ -305,5 +324,9 @@ public class LslPlusEditor extends TextEditor implements SourceViewerConfigurati
     private void asyncExec(Runnable r) {
         LslPlusPlugin.getDefault().getWorkbench().getDisplay().asyncExec(r);
     }
+
+	public void recompile() {
+		updateOutline();
+	}
 
 }

@@ -282,9 +282,16 @@
       </wizard>
       <category
             id="lslplus.lslplus.examples"
-            name="LSL Plus Examples"
-            parentCategory="lslplus.lslplus">
+            name="LSL Plus Examples">
       </category>
+      <wizard
+            category="lslplus.lslplus.examples"
+            class="lslplus.wizards.NewHttpRequestSampleWizard"
+            icon="icons/obj16/lslplus.gif"
+            id="lslplus.HttpRequestExample"
+            name="HTTP Request Example"
+            preferredPerspectives="lslplus.LslPlusPerspective">
+      </wizard>
    </extension>
    <extension
          point="org.eclipse.ui.ide.projectNatureImages">

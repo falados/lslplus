@@ -178,5 +178,9 @@ is imported in two different places, but the arguments passed when importing
 the module don't resolve to exactly the same global variables, then the instances can't be shared,
 and the only way the script will be able to be compiled is if a prefix is used somewhere to 
 give the imported symbols different names.</p>
+
+<p>Because LSL Plus takes 'source' files (.lslp scripts and .lslm modules) and transforms them
+into 'object' files (.lsl scripts) it has the opportunity to do some <a href="optimization.html">
+optimization</a>.</p>
 </body>
 </html>

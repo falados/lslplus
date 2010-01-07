@@ -24,6 +24,11 @@ events that an avatar might produce (e.g. touch events, control event, payment e
 <td>Create an event string representing the avatar touching a particular prim for a duration (in seconds).</td>
 </tr>
 <tr>
+<td>string <em>mkFaceTouch</em>(string primKey, float duration, integer face, float s, float t)</td>
+<td>Create an event string representing the avatar touch a particular face of a particular prim 
+at a particular face location for  a duration (in seconds).</td>
+</tr>
+<tr>
 <td>string <em>mkWhisper</em>(integer channel, string message)</td>
 <td>Create an even representing the avatar whispering on a particular channel.</td>
 </tr>
@@ -42,6 +47,11 @@ events that an avatar might produce (e.g. touch events, control event, payment e
 <tr>
 <td>string <em>mkControl</em>(integer newControlBits)</td>
 <td>Create an even representing the avatar/agent's control bits changing.</td>
+</tr>
+<tr>
+<td>string <em>mkHTTPRequest</em>(string url, string method, string body, string ip, string userAgent)</td>
+<td>'Send' an HTTP request to a particular (script) URL, using an HTTP method ("GET"/"POST"/etc.), with 
+the specified body, from the specified IP address and user agent (e.g. "Mozilla/5.0 (compatible)").</td>
 </tr>
 <tr>
 <th>Constant</th><th>Description</th>

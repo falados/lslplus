@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -62,6 +63,10 @@ import org.eclipse.core.runtime.Status;
 public class LslProjectNature implements IProjectNature, IResourceChangeListener {
 	public static final String OPTIMIZE = "optimize"; //$NON-NLS-1$
 
+	public static interface RecompileListener {
+		public void recompile();
+	}
+	
     private static class BetterDeltaVisitor implements IResourceDeltaVisitor {
 		private boolean recompileAll = false;
 		private LinkedList<IResource> newDerivedResources = new LinkedList<IResource>();
@@ -92,7 +97,7 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 		public boolean visit(IResourceDelta delta) throws CoreException {
 			IResource resource = delta.getResource();
 			if (resource != null) {
-				if (resource.getProject() != null && resource.getProject() != project) {
+				if (resource.getProject() != null && !isRelevant(resource.getProject())) {
 					return false; // don't continue down this branch...
 				}
 
@@ -122,11 +127,32 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 						(LslDerivedScript) resource.getAdapter(LslDerivedScript.class);
 					if (script != null && delta.getKind() == IResourceDelta.ADDED) {
 						newDerivedResources.add(resource);
+					} else if (script == null) {
+						IProject p = (IProject) resource.getAdapter(IProject.class);
+						if (p != null && delta.getKind() == IResourceDelta.CHANGED &&
+								(delta.getFlags() & IResourceDelta.DESCRIPTION) != 0)  {
+						    recompileAll = true;
+						}
 					}
 				}
 			}
 			return true;
 		}
+		
+	    @SuppressWarnings("nls")
+		private boolean isRelevant(IProject proj) {
+	    	if (proj == project) return true;
+	    	try {
+				for (IProject p : project.getReferencedProjects()) {
+					if (p == proj) return true;
+				}
+				return false;
+			} catch (CoreException e) {
+				Util.error(e,"problem getting referenced projects");
+				return false;
+			}
+
+	    }
 	}
 	
 	public static class EntryPointDefinition {
@@ -282,6 +308,7 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 
 	private static final String LSLPLUS_PROBLEM = "lslplus.problem"; //$NON-NLS-1$
 
+	private HashSet<RecompileListener> recompListeners = new HashSet<RecompileListener>();
 	private Map<String,LinkedList<EPSummary>> entryPoints;
 	private Map<String,LinkedList<GlobalSummary>> globalVariables;
 	private IProject project;
@@ -319,10 +346,19 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 			CompilationResponse response = null;
 			
 			if (recompileAll || (scriptChanges != null && scriptChanges.size() != 0)) {
+				IProject[] ps = project.getReferencedProjects();
 				boolean optimize = 
 					LslPlusPlugin.getDefault().getPreferenceStore().getBoolean(OPTIMIZE);
 				final lslplus.cserver.SourceListBuilder builder = 
 					new lslplus.cserver.SourceListBuilder(optimize);
+				
+				for (IProject p : ps) {
+			        if (p.hasNature(LslProjectNature.ID)) {
+			        	p.accept(builder);
+			        }
+				}
+				
+				builder.setModulesOnly(false);
 				project.accept(builder);
 				if (recompileAll) {
 					Tuple3<Boolean, LinkedList<Tuple2<String, String>>, 
@@ -498,7 +534,7 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
         
         synchronized (this) {
 	    	for (String name : entryPoints.keySet()) {
-	            if (name.endsWith(".lslp")) { //$NON-NLS-1$
+	            if (name.endsWith(".lslm")) { //$NON-NLS-1$
 	                l.add(name);
 	            }
 	    	}
@@ -567,21 +603,22 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
 	}
 	
 	public void resourceChanged(IResourceChangeEvent event) {
-	    Util.log("resource changed!"); //$NON-NLS-1$
+	    Util.log("resource changed in " + this.project.getName()); //$NON-NLS-1$
 		final IResourceDelta delta = event.getDelta();
 
 		//DeltaVisitor dv = new DeltaVisitor();
 		BetterDeltaVisitor dv = new BetterDeltaVisitor(this.project);
-		boolean checkErrors = false;
+		boolean recompileAll = false;
 		try {
 		    delta.accept(dv);
-		    checkErrors = dv.isRecompileAll();
+		    recompileAll = dv.isRecompileAll();
 		} catch (CoreException e) {
-			checkErrors = true;
+			recompileAll = true;
 			Util.error(e, e.getLocalizedMessage());
 		}
 		
-        scheduleBuild(checkErrors, dv.getAddsAndUpdates(), dv.getRemovals());
+		if (recompileAll) onRecompAll();
+        scheduleBuild(recompileAll, dv.getAddsAndUpdates(), dv.getRemovals());
 		
 		final List<IResource> newDerivedResources = dv.getNewDerivedResources();
 		if (newDerivedResources != null && newDerivedResources.size() > 0) {
@@ -643,5 +680,19 @@ public class LslProjectNature implements IProjectNature, IResourceChangeListener
     
     public static String resourceToLslPlusName(IResource r) {
         return r.getProjectRelativePath().toString().replace('/', '.');
+    }
+    
+    public void addRecompileListener(RecompileListener l) {
+    	this.recompListeners.add(l);
+    }
+    
+    public void removeRecompileListener(RecompileListener l) {
+    	this.recompListeners.remove(l);
+    }
+    
+    private void onRecompAll() {
+    	for (RecompileListener l : recompListeners) {
+    		l.recompile();
+    	}
     }
 }

@@ -10,6 +10,8 @@
 	<topic label="Installation" href="html/installation.html"/>
 	<topic label="Basic Usage" href="html/basic.html">
 		<topic label="Unit Tests" href="html/unit-test.html"></topic>
+  <topic href="html/project-references.html" label="Project References">
+  </topic>
 		<topic label="Sim Projects" href="html/sim-project.html">
      <topic href="html/avEventHandler.html" label="Avatar Event Handler">
      </topic>

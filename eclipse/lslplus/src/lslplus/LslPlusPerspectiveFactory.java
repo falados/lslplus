@@ -37,6 +37,7 @@ public class LslPlusPerspectiveFactory implements IPerspectiveFactory {
         layout.addNewWizardShortcut("lslplus.newAvEventHandlerWizard"); //$NON-NLS-1$
         layout.addNewWizardShortcut("lslplus.HttpRpcExample"); //$NON-NLS-1$
         layout.addNewWizardShortcut("lslplus.DialogExample"); //$NON-NLS-1$
+        layout.addNewWizardShortcut("lslplus.HttpRequestExample"); //$NON-NLS-1$
 	}
 
 }

@@ -46,6 +46,25 @@ prim has taken the controls of a particular avatar and the avatar changes its co
 <td>list <em>onMapDestination</em>(string simName, vector position, list avinfo)</td>
 <td>Triggered when <em>llMapDestination</em> is called.</td>
 </tr>
+<tr>
+<td>&quot;HTTP Request Key&quot;</td>
+<td>list <em>onHTTPRequestKey</em>(string key, list avinfo)</td>
+<td>Triggered immediately after an avatar event handler sends a valid HTTP request (to a script).
+The key argument provides to the handler the key value that will be used to identify 
+the HTTP response that should eventually be delivered to the handler.</td>
+</tr>
+<tr>
+<td>&quot;Bad HTTP Request&quot;</td>
+<td>list <em>onHTTPBadRequest</em>(list avinfo)</td>
+<td>Triggered immediately after an avatar event handler sends an invalid HTTP request (one the 
+simulator can't handle because the URL is not associated with any script).</td>
+</tr>
+<tr>
+<td>&quot;HTTP Response&quot;</td>
+<td>list <em>onHTTPResponse</em>(string key, integer status, string body, list avinfo)</td>
+<td>Triggered when a script calls llHTTPResponse in response to an http_request event
+that was triggered by avatar event handler sending an http request.</td>
+</tr>
 </table>
 
 <p>The <em>avInfo</em> parameter to the each entry point will contain a list of avatar 
